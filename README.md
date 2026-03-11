@@ -42,27 +42,19 @@ OpenNotes.in is a community-driven platform designed for students and educators 
 
 ```text
 bits-notes-exchange/
+├── client/                 # Frontend (React/Vite)
+│   ├── src/                # Components, views, contexts, etc.
+│   ├── public/             # Static assets
+│   ├── index.html
+│   ├── vite.config.ts
+│   └── package.json
 ├── server/                 # Backend (Node.js/Express)
-│   ├── src/
-│   │   ├── controllers/    # Request handlers
-│   │   ├── db/             # Database schema and initialization
-│   │   ├── routes/         # API endpoints (auth, listings, orders, etc.)
-│   │   ├── utils/          # Helper functions (email, auth guards)
-│   │   ├── env.ts          # Environment configuration
-│   │   └── index.ts        # Server entry point
+│   ├── src/                # Controllers, routes, db, etc.
 │   ├── data.db             # LibSQL database file
 │   └── package.json
-├── src/                    # Frontend (React)
-│   ├── components/         # Reusable UI components (Navbar, Footer, Modals)
-│   ├── contexts/           # State management (Auth, Cart)
-│   ├── types/              # Type definitions
-│   ├── views/              # Page views (Home, Browse, Sell, Checkout)
-│   ├── App.tsx             # Main routing and app structure
-│   └── main.tsx            # React entry point
-├── public/                 # Static assets
-├── uploads/                # Storage for note images
-├── package.json            # Root dependencies and scripts
-└── vite.config.ts          # Vite configuration
+├── uploads/                # Shared storage for note images
+├── package.json            # Root configuration and workspace scripts
+└── .gitignore
 ```
 
 ---
@@ -84,25 +76,22 @@ bits-notes-exchange/
 - Node.js (v18+)
 - npm
 
-### 1. Setup the Backend
+### 1. Installation
+Install all dependencies for root, client, and server:
 ```bash
-cd server
-npm install
-# Initialize the database
+npm run install:all
+```
+
+### 2. Setup Database
+```bash
 npm run server:init-db
 ```
 Create a `.env` file in the `server` directory and add your configurations (refer to `.env.example`).
 
-### 2. Setup the Frontend
-```bash
-# From the root directory
-npm install
-```
-
 ### 3. Run Locally
-You can run both the frontend and backend concurrently:
+You can run both the frontend and backend concurrently from the root directory:
 ```bash
-npm run dev:all
+npm run dev
 ```
 - Frontend: `http://localhost:3000`
 - API Backend: `http://localhost:5000`

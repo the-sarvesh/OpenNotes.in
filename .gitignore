@@ -139,5 +139,12 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Custom project items
+dist/
 build/
 .DS_Store
+*.db
+*.db-journal
+server/dist/
+client/dist/
+uploads/*
+!uploads/.gitkeep

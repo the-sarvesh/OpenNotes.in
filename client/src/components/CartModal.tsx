@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingCart, X, Shield, CreditCard, Check, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +26,16 @@ export const CartModal: React.FC<CartModalProps> = ({
 }) => {
   const { user, token } = useAuth();
   const [processing, setProcessing] = useState(false);
+
+  // Scroll Lock (only when mounted)
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    };
+  }, []);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [deliveryDetails, setDeliveryDetails] = useState('');

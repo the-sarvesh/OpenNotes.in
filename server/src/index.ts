@@ -341,6 +341,14 @@ app.get("/", (_req, res) => {
   res.redirect(frontendUrl);
 });
 
+// ── Error Handler ────────────────────────────────────────────────────────────
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[Error Handler]:', err);
+  res.status(err.status || 500).json({
+    error: err.message || "Internal server error",
+  });
+});
+
 // ── Start HTTP + WebSocket server ────────────────────────────────────────────
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

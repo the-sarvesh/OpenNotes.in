@@ -33,9 +33,18 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>("home");
   const [previousView, setPreviousView] = useState<View | null>(null);
 
-  const navigateTo = (view: View) => {
+  const [profileTab, setProfileTab] = useState<'listings' | 'earnings' | 'settings'>('listings');
+
+  const navigateTo = (view: View, tab?: string) => {
     setPreviousView(currentView);
     setCurrentView(view);
+    if (view === 'profile' && tab) {
+      setProfileTab(tab as any);
+    } else if (view === 'profile') {
+      // Don't reset if we are already there, but if navigating fresh, default to listings
+      // unless a tab was specified.
+    }
+    
     // Re-validate cart when entering cart or checkout pages (FE-4)
     if ((view === "cart" || view === "checkout") && token && cart.length > 0) {
       validateCart(token);
@@ -337,7 +346,11 @@ const App: React.FC = () => {
             <SellView key="sell" onGoToBrowse={() => navigateTo("browse")} />
           )}
           {currentView === "profile" && (
-            <ProfileView key="profile" onContactSeller={handleContactSeller} />
+            <ProfileView 
+              key="profile" 
+              onContactSeller={handleContactSeller} 
+              initialTab={profileTab}
+            />
           )}
           {currentView === "orders" && (
             <OrdersView key="orders" onContactSeller={handleContactSeller} />

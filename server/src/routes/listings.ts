@@ -5,12 +5,18 @@ import { v4 as uuidv4 } from "uuid";
 import db from "../db/database.js";
 import { authenticate, AuthRequest } from "../middleware/auth.js";
 
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const router = express.Router();
 
 // Configure multer for local file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(process.cwd(), "uploads"));
+    // Correctly point to the shared uploads folder at the root
+    cb(null, path.resolve(__dirname, "../../../uploads"));
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);

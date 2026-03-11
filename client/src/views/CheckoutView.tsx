@@ -218,7 +218,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-36 lg:pb-24 overflow-x-hidden">
       {/* ── Page header ── */}
       <div className="flex items-center gap-3 mb-8">
         <button
@@ -261,13 +261,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   <React.Fragment key={s.id}>
                     <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                       <div
-                        className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex-shrink-0 flex items-center justify-center font-black text-sm transition-all ${
-                          done
+                        className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex-shrink-0 flex items-center justify-center font-black text-sm transition-all ${done
                             ? "bg-accent text-accent-foreground"
                             : active
                               ? "bg-primary text-primary-foreground"
                               : "bg-surface text-text-muted"
-                        }`}
+                          }`}
                       >
                         {done ? <Check className="h-4 w-4" /> : s.icon}
                       </div>
@@ -305,7 +304,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 className="space-y-5"
               >
                 {/* Meetup Details Form */}
-                <Card className="p-6">
+                <Card className="p-4 sm:p-6">
                   <SectionHeader
                     icon={<MapPin className="h-4 w-4" />}
                     title="Meetup Details"
@@ -370,12 +369,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   </div>
                 </Card>
 
-                <button
-                  onClick={() => setStep(2)}
-                  className="w-full py-3.5 bg-[#003366] hover:bg-[#002244] text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-sm"
-                >
-                  Continue to Payment <ChevronRight className="h-4 w-4" />
-                </button>
               </motion.div>
             )}
 
@@ -388,7 +381,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: 0.2 }}
               >
-                <Card className="p-6 space-y-6">
+                <Card className="p-4 sm:p-6 space-y-5 sm:space-y-6">
                   <SectionHeader
                     icon={<CreditCard className="h-4 w-4" />}
                     title="Payment Method"
@@ -483,44 +476,44 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     <div className="space-y-2.5">
                       {/* Online payment row — adapts when fee is waived */}
                       {couponResult?.valid && couponResult.feeWaived ? (
-                        <div className="relative flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border-2 border-emerald-400 dark:border-emerald-700 overflow-hidden">
-                          <div className="absolute top-0 right-0 px-2.5 py-1 bg-emerald-500 text-white text-[8px] font-black uppercase tracking-widest rounded-bl-lg">
+                        <div className="relative flex items-center justify-between p-3 sm:p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border-2 border-emerald-400 dark:border-emerald-700 overflow-hidden">
+                          <div className="absolute top-0 right-0 px-2 py-0.5 bg-emerald-500 text-white text-[7px] sm:text-[8px] font-black uppercase tracking-widest rounded-bl-lg">
                             FREE
                           </div>
-                          <div className="flex items-center gap-3">
-                            <CheckCircle className="h-4 w-4 text-emerald-500" />
-                            <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                            <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold text-emerald-700 dark:text-emerald-400 truncate">
                               Platform Fee Waived!
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm line-through text-text-muted">
+                          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            <span className="text-xs sm:text-sm line-through text-text-muted">
                               ₹{rawPlatformFee}
                             </span>
-                            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                            <span className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400">
                               ₹0
                             </span>
                           </div>
                         </div>
                       ) : (
-                        <div className="relative flex items-center justify-between p-4 bg-surface rounded-xl border-2 border-primary overflow-hidden">
-                          <div className="absolute top-0 right-0 px-2.5 py-1 bg-primary text-black text-[8px] font-black uppercase tracking-widest rounded-bl-lg">
+                        <div className="relative flex items-center justify-between p-3 sm:p-4 bg-surface rounded-xl border-2 border-primary overflow-hidden">
+                          <div className="absolute top-0 right-0 px-2 py-0.5 bg-primary text-black text-[7px] sm:text-[8px] font-black uppercase tracking-widest rounded-bl-lg">
                             Pay now
                           </div>
-                          <div className="flex items-center gap-3">
-                            <div className="h-4 w-4 rounded-full border-[3px] border-primary" />
-                            <span className="text-sm font-bold text-text-main">
+                          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                            <div className="h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-full border-[2.5px] sm:border-[3px] border-primary shrink-0" />
+                            <span className="text-xs sm:text-sm font-bold text-text-main truncate">
                               UPI / Cards / NetBanking
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                             {couponResult?.valid &&
                               couponResult.finalFee < rawPlatformFee && (
-                                <span className="text-xs line-through text-text-muted">
+                                <span className="text-[10px] sm:text-xs line-through text-text-muted">
                                   ₹{rawPlatformFee}
                                 </span>
                               )}
-                            <span className="text-sm font-black text-primary">
+                            <span className="text-xs sm:text-sm font-black text-primary">
                               ₹{platformFee}
                             </span>
                           </div>
@@ -543,7 +536,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   </div>
 
                   {/* Agreement checkbox */}
-                  <label className="flex items-start gap-3 cursor-pointer group p-4 bg-surface/50 rounded-xl border border-border hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                  <label className="flex items-start gap-3 cursor-pointer group p-3 sm:p-4 bg-surface/50 rounded-xl border border-border hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
                     <div className="relative mt-0.5 shrink-0">
                       <input
                         type="checkbox"
@@ -570,31 +563,6 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     </span>
                   </label>
 
-                  {/* Action buttons */}
-                  <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                    <button
-                      onClick={() => setStep(1)}
-                      className="flex-1 py-3.5 bg-surface hover:bg-primary-hover hover:bg-primary-hover text-text-muted rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-[0.98]"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={handlePlaceOrder}
-                      disabled={loading || !agreedToDelivery}
-                      className="flex-[2] py-3.5 bg-[#003366] hover:bg-[#002244] text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#003366]/25 flex items-center justify-center gap-2"
-                    >
-                      {loading ? (
-                        <>
-                          <span className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                          Processing...
-                        </>
-                      ) : couponResult?.valid && couponResult.feeWaived ? (
-                        "Place Order (Free!)"
-                      ) : (
-                        `Pay ₹${platformFee} & Place Order`
-                      )}
-                    </button>
-                  </div>
                 </Card>
               </motion.div>
             )}
@@ -697,8 +665,99 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   : `₹${platformFee} paid online now · ₹${subtotal} cash at exchange`}
               </p>
             </div>
+
+            {/* Desktop CTA buttons — hidden on mobile */}
+            <div className="hidden lg:flex flex-col gap-3 mt-6 pt-5 border-t border-border">
+              {step === 1 ? (
+                <button
+                  onClick={() => setStep(2)}
+                  className="w-full py-3.5 bg-[#003366] hover:bg-[#002244] text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-sm"
+                >
+                  Continue to Payment <ChevronRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setStep(1)}
+                    className="w-full py-3 bg-surface hover:bg-primary-hover text-text-muted rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-[0.98] border border-border"
+                  >
+                    ← Back to Logistics
+                  </button>
+                  <button
+                    onClick={handlePlaceOrder}
+                    disabled={loading || !agreedToDelivery}
+                    className="w-full py-3.5 bg-[#003366] hover:bg-[#002244] text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#003366]/25 flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                        Processing...
+                      </>
+                    ) : couponResult?.valid && couponResult.feeWaived ? (
+                      "Place Order (Free!)"
+                    ) : (
+                      `Pay ₹${platformFee} & Place Order`
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
           </Card>
         </div>
+      </div>
+
+      {/* ── Mobile sticky bottom CTA bar ── */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur-xl border-t border-border px-4 py-4 shadow-2xl shadow-black/10">
+        {/* Mini price summary */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">
+              {step === 1 ? 'Order Total' : 'Pay Now'}
+            </span>
+            <span className="text-lg font-black text-text-main">
+              ₹{step === 1 ? total : platformFee}
+            </span>
+          </div>
+          {step === 2 && (
+            <span className="text-[10px] text-text-muted font-semibold">
+              + ₹{subtotal} cash at meetup
+            </span>
+          )}
+        </div>
+
+        {step === 1 ? (
+          <button
+            onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            className="w-full py-4 bg-[#003366] hover:bg-[#002244] text-white rounded-xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-[#003366]/25"
+          >
+            Continue to Payment <ChevronRight className="h-4 w-4" />
+          </button>
+        ) : (
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className="px-5 py-4 bg-surface border border-border text-text-muted rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-[0.98]"
+            >
+              ← Back
+            </button>
+            <button
+              onClick={handlePlaceOrder}
+              disabled={loading || !agreedToDelivery}
+              className="flex-1 py-4 bg-[#003366] hover:bg-[#002244] text-white rounded-xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#003366]/25 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                  Processing...
+                </>
+              ) : couponResult?.valid && couponResult.feeWaived ? (
+                <>Place Order · Free! 🎉</>
+              ) : (
+                <>Pay ₹{platformFee} &amp; Order</>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

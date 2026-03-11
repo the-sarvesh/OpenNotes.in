@@ -27,9 +27,12 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
 
   useEffect(() => {
-    const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    document.body.style.touchAction = 'none';
+    return () => { 
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    };
   }, []);
 
   const handleAdminDelete = async () => {

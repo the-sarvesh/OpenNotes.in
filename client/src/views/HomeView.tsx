@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, useScroll, useTransform, useSpring, useInView } from 'motion/react';
+import { motion, useScroll, useTransform, useInView } from 'motion/react';
 import {
   Search, ShoppingBag, BookOpen, MapPin, ArrowRight, TrendingUp, Shield, Zap,
   CheckCircle2, ShieldCheck, HelpCircle, Star, ArrowUpRight
@@ -23,13 +23,13 @@ interface HomeViewProps {
 // Reusable scroll-triggered fade-up
 const FadeUp: React.FC<{ children: React.ReactNode; delay?: number; className?: string }> = ({ children, delay = 0, className = '' }) => {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: '-80px' });
+  const inView = useInView(ref, { once: true, margin: '-60px' });
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, y: 32 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.65, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
       className={className}
     >
       {children}
@@ -40,13 +40,13 @@ const FadeUp: React.FC<{ children: React.ReactNode; delay?: number; className?: 
 // Reusable scroll-triggered fade-in from side
 const FadeIn: React.FC<{ children: React.ReactNode; delay?: number; x?: number; className?: string }> = ({ children, delay = 0, x = 0, className = '' }) => {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: '-60px' });
+  const inView = useInView(ref, { once: true, margin: '-40px' });
   return (
     <motion.div
       ref={ref}
       initial={{ opacity: 0, x }}
       animate={inView ? { opacity: 1, x: 0 } : {}}
-      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
       className={className}
     >
       {children}
@@ -60,12 +60,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Parallax hero
+  // Parallax hero — no spring wrapper to avoid lag/jitter
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
-  const heroY = useTransform(scrollYProgress, [0, 1], ['0%', '30%']);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
-  const springY = useSpring(heroY, { stiffness: 80, damping: 20 });
+  const heroY = useTransform(scrollYProgress, [0, 1], ['0%', '20%']);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0]);
 
   // Time-based greeting
   const hour = new Date().getHours();
@@ -86,7 +85,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <section ref={heroRef} className="relative min-h-[92vh] sm:min-h-screen flex items-center overflow-hidden bg-background">
 
         {/* Parallax mesh background */}
-        <motion.div style={{ y: springY }} className="absolute inset-0 pointer-events-none">
+        <motion.div style={{ y: heroY }} className="absolute inset-0 pointer-events-none will-change-transform">
           <div className="absolute inset-0 mesh-gradient opacity-60 dark:opacity-30" />
           {/* Grid lines */}
           <div
@@ -102,7 +101,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="pointer-events-none absolute top-[-20%] right-[-5%] w-[700px] h-[700px] rounded-full bg-[#003366] dark:bg-[#FFC000] blur-[180px] opacity-[0.07] dark:opacity-[0.05]" />
         <div className="pointer-events-none absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-[#FFC000] dark:bg-[#003366] blur-[160px] opacity-[0.05] dark:opacity-[0.04]" />
 
-        <motion.div style={{ opacity: heroOpacity }} className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32">
+        <motion.div style={{ opacity: heroOpacity }} className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32 will-change-transform">
           <div className="max-w-3xl">
 
             {/* Greeting pill */}
@@ -128,7 +127,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   key={li}
                   initial={{ y: '110%' }}
                   animate={{ y: 0 }}
-                  transition={{ delay: 0.1 + li * 0.1, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ delay: 0.05 + li * 0.08, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
                   className="block text-5xl sm:text-6xl md:text-7xl lg:text-[5rem] font-black text-text-main tracking-tight leading-[1.05]"
                 >
                   {line}
@@ -137,7 +136,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <motion.div
                 initial={{ y: '110%' }}
                 animate={{ y: 0 }}
-                transition={{ delay: 0.3, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ delay: 0.22, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
                 className="block text-5xl sm:text-6xl md:text-7xl lg:text-[5rem] font-black tracking-tight leading-[1.05]"
               >
                 <span className="relative inline-block text-primary">
@@ -145,7 +144,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <motion.span
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: 1 }}
-                    transition={{ delay: 0.85, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ delay: 0.6, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
                     style={{ originX: 0 }}
                     className="absolute -bottom-1 left-0 right-0 h-[5px] bg-primary/30 rounded-full block"
                   />
@@ -155,9 +154,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
             {/* Subheading */}
             <motion.p
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.55, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ delay: 0.38, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="text-lg sm:text-xl text-text-muted max-w-xl mb-10 leading-relaxed font-medium"
             >
               Buy and sell course materials with fellow students — books, notes, PPTs and more.
@@ -166,9 +165,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
             {/* CTA buttons */}
             <motion.div
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.65, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ delay: 0.48, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="flex flex-col sm:flex-row gap-3"
             >
               <button
@@ -199,7 +198,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.9 }}
+              transition={{ delay: 0.65 }}
               className="flex flex-wrap items-center gap-5 mt-12 pt-10 border-t border-border/60"
             >
               {[
@@ -211,7 +210,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   key={label}
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.95 + i * 0.07 }}
+                  transition={{ delay: 0.7 + i * 0.05 }}
                   className="flex items-center gap-2 text-sm font-semibold text-text-muted"
                 >
                   <Icon className="h-4 w-4 text-primary shrink-0" />
@@ -225,7 +224,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <motion.div
             initial={{ opacity: 0, x: 60, rotate: 6 }}
             animate={{ opacity: 1, x: 0, rotate: 3 }}
-            transition={{ delay: 0.4, duration: 1, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ delay: 0.25, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="hidden lg:block absolute top-1/2 right-[4%] -translate-y-1/2 w-[420px] xl:w-[480px] aspect-square animate-float"
           >
             <div className="w-full h-full rounded-[3rem] overflow-hidden shadow-[0_40px_80px_-20px_rgba(0,51,102,0.35)] dark:shadow-[0_40px_80px_-20px_rgba(255,192,0,0.15)] border-4 border-white/80 dark:border-slate-800 hover:rotate-0 transition-transform duration-700">
@@ -236,7 +235,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.1, duration: 0.5 }}
+              transition={{ delay: 0.8, duration: 0.4 }}
               className="absolute -left-8 top-[30%] bg-surface border border-border rounded-2xl px-4 py-3 shadow-xl flex items-center gap-2.5"
             >
               <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg">
@@ -256,7 +255,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.4 }}
+          transition={{ delay: 1.0 }}
           className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5"
         >
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Scroll</span>

@@ -91,12 +91,19 @@ const StatCard: React.FC<{
 
 export const ProfileView = ({
   onContactSeller,
+  initialTab = 'listings',
 }: {
   onContactSeller?: (sellerId: string, listingId: string, listingTitle: string) => void;
+  initialTab?: ProfileTab;
   key?: React.Key;
 }) => {
   const { user, token } = useAuth();
-  const [activeTab, setActiveTab] = useState<ProfileTab>('listings');
+  const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
+  
+  // Sync tab if prop changes externally (e.g. from navbar click)
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -352,6 +359,34 @@ export const ProfileView = ({
                     <StatCard label="Net Income" value={salesData.summary.netEarnings} color="emerald" />
                     <StatCard label="Total Sales" value={salesData.summary.totalEarnings} color="blue" />
                     <StatCard label="Platform Fees" value={salesData.summary.platformFeeTotal} color="slate" />
+                  </div>
+
+                  {/* Seller "Next Steps" Guide */}
+                  <div className="bg-[#003366]/5 border border-[#003366]/20 rounded-2xl p-5 overflow-hidden relative">
+                    <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#003366]/5 rounded-full blur-2xl pointer-events-none" />
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-[#003366] rounded-xl shadow-lg shadow-[#003366]/20">
+                        <Check className="h-4 w-4 text-white" />
+                      </div>
+                      <h3 className="text-sm font-black text-[#003366] dark:text-blue-400 uppercase tracking-widest">Sold! What's next?</h3>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-black text-[#003366]/60 dark:text-blue-400/60 uppercase">Step 1</p>
+                        <p className="text-xs font-bold text-text-main">Coordinate via Chat</p>
+                        <p className="text-[10px] text-text-muted leading-relaxed">Message the buyer to fix a meetup time at your specified campus location.</p>
+                      </div>
+                      <div className="space-y-1.5 border-t sm:border-t-0 sm:border-l border-[#003366]/10 pt-3 sm:pt-0 sm:pl-4">
+                        <p className="text-[10px] font-black text-[#003366]/60 dark:text-blue-400/60 uppercase">Step 2</p>
+                        <p className="text-xs font-bold text-text-main">Verify the PIN</p>
+                        <p className="text-[10px] text-text-muted leading-relaxed">In person, ask the buyer for their 4-digit PIN and enter it below to confirm handover.</p>
+                      </div>
+                      <div className="space-y-1.5 border-t sm:border-t-0 sm:border-l border-[#003366]/10 pt-3 sm:pt-0 sm:pl-4">
+                        <p className="text-[10px] font-black text-[#003366]/60 dark:text-blue-400/60 uppercase">Step 3</p>
+                        <p className="text-xs font-bold text-text-main">Collect your Cash</p>
+                        <p className="text-[10px] text-text-muted leading-relaxed">Once the PIN is verified, collect the full notes price in cash directly from the buyer.</p>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Transaction list */}

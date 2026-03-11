@@ -19,6 +19,21 @@ const TAB_ORDER: GuideTab[] = ['welcome', 'buying', 'selling', 'safety'];
 export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<GuideTab>('welcome');
 
+  // Scroll Lock
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    };
+  }, [isOpen]);
+
   const tabs: { id: GuideTab; label: string; icon: React.ReactNode }[] = [
     { id: 'welcome', label: 'Welcome', icon: <Compass className="h-4 w-4" /> },
     { id: 'buying', label: 'Buying', icon: <ShoppingCart className="h-4 w-4" /> },
