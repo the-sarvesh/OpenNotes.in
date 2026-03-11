@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #003366;
+  --color-primary-foreground: #ffffff;
+  --color-primary-hover: #002244;
+  --color-accent: #FFC000;
+  --color-accent-foreground: #000000;
+  --color-accent-hover: #e6ac00;
+  
+  --color-background: var(--color-slate-50);
+  --color-surface: var(--color-white);
+  --color-border: var(--color-slate-200);
+  --color-text-main: var(--color-slate-900);
+  --color-text-muted: var(--color-slate-500);
+}
+
+.dark {
+  --color-primary: #FFC000;
+  --color-primary-foreground: #003366;
+  --color-primary-hover: #e6ac00;
+  --color-accent: #003366;
+  --color-accent-foreground: #ffffff;
+  --color-accent-hover: #002244;
+  
+  --color-background: var(--color-slate-950);
+  --color-surface: var(--color-slate-900);
+  --color-border: var(--color-slate-800);
+  --color-text-main: var(--color-white);
+  --color-text-muted: var(--color-slate-400);
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .mesh-gradient {
+    background-color: hsla(0, 0%, 100%, 1);
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(210, 100%, 20%, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(45, 100%, 50%, 0.1) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsla(210, 100%, 20%, 0.1) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, hsla(45, 100%, 50%, 0.1) 0px, transparent 50%);
+  }
+
+  .dark .mesh-gradient {
+    background-color: hsla(222, 47%, 11%, 1);
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(210, 100%, 20%, 0.3) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(45, 100%, 50%, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsla(210, 100%, 20%, 0.3) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, hsla(45, 100%, 50%, 0.15) 0px, transparent 50%);
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+}
