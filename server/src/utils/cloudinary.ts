@@ -53,7 +53,7 @@ export const upload = multer({
 /**
  * Utility to get the correct public URL for an uploaded file
  */
-export const getFileUrl = (file: Express.Multer.File) => {
+export const getFileUrl = (file: any) => {
   if (isCloudinaryConfigured) {
     // In Cloudinary mode, 'path' is the full secure URL
     return file.path;
