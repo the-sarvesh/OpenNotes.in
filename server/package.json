@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "nodemon --exec tsx src/index.ts",
     "init-db": "tsx src/db/init.ts",
+    "optimize-db": "tsx src/db/optimizations.ts",
     "migrate-convos": "tsx src/db/migrate-conversations.ts",
     "start": "node dist/index.js",
     "build": "tsc"
