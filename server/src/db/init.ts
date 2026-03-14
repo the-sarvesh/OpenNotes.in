@@ -49,6 +49,15 @@ const initDb = async () => {
         PRIMARY KEY (listing_id, subject_name)
       );
 
+      CREATE TABLE IF NOT EXISTS listing_images (
+        id TEXT PRIMARY KEY,
+        listing_id TEXT NOT NULL,
+        url TEXT NOT NULL,
+        is_main BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
+      );
+
       CREATE TABLE IF NOT EXISTS orders (
         id TEXT PRIMARY KEY,
         buyer_id TEXT NOT NULL,
@@ -230,6 +239,13 @@ const initDb = async () => {
       "ALTER TABLE messages ADD COLUMN type TEXT NOT NULL DEFAULT 'text'",
       "ALTER TABLE messages ADD COLUMN metadata TEXT",
       "ALTER TABLE meetup_proposals ADD COLUMN reminder_sent BOOLEAN NOT NULL DEFAULT 0",
+      "ALTER TABLE listings ADD COLUMN description TEXT",
+      "ALTER TABLE users ADD COLUMN rating_avg REAL DEFAULT 0",
+      "ALTER TABLE users ADD COLUMN rating_count INTEGER DEFAULT 0",
+      "CREATE INDEX IF NOT EXISTS idx_messages_unread_composite ON messages(receiver_id, is_read)",
+      "CREATE INDEX IF NOT EXISTS idx_notifications_unread_composite ON notifications(user_id, is_read)",
+      "CREATE INDEX IF NOT EXISTS idx_meetup_reminders_composite ON meetup_proposals(reminder_sent, proposed_time)",
+      "CREATE INDEX IF NOT EXISTS idx_listing_subjects_name ON listing_subjects(subject_name)",
     ];
 
     for (const migration of migrations) {
@@ -239,7 +255,8 @@ const initDb = async () => {
       } catch (err: any) {
         if (
           err.message?.includes("duplicate column") ||
-          err.message?.includes("already exists")
+          err.message?.includes("already exists") ||
+          err.message?.includes("already has")
         ) {
           // Already applied — ignore silently
         } else {
@@ -248,6 +265,45 @@ const initDb = async () => {
           );
         }
       }
+    }
+
+    // ── Special Migration: Backfill listing_images ──────────────────────────
+    try {
+      const listings = await db.execute("SELECT id, image_url FROM listings");
+      for (const listing of listings.rows) {
+        const lid = String(listing.id);
+        const url = String(listing.image_url);
+        if (!url) continue;
+
+        const existing = await db.execute({
+          sql: "SELECT id FROM listing_images WHERE listing_id = ? AND url = ?",
+          args: [lid, url]
+        });
+
+        if (existing.rows.length === 0) {
+          await db.execute({
+            sql: "INSERT INTO listing_images (id, listing_id, url, is_main) VALUES (?, ?, ?, 1)",
+            args: [crypto.randomUUID ? crypto.randomUUID() : `img-${Date.now()}-${Math.random()}`, lid, url]
+          });
+        }
+      }
+      console.log("Listing images backfill checked.");
+    } catch (err: any) {
+      console.warn("Listing images backfill skipped/failed:", err.message);
+    }
+
+    // ── Special Migration: Backfill Ratings ─────────────────────────────────
+    try {
+      await db.execute(`
+        UPDATE users 
+        SET 
+          rating_avg = (SELECT COALESCE(AVG(rating), 0) FROM reviews WHERE reviews.seller_id = users.id),
+          rating_count = (SELECT COUNT(*) FROM reviews WHERE reviews.seller_id = users.id)
+        WHERE id IN (SELECT DISTINCT seller_id FROM reviews)
+      `);
+      console.log("Ratings backfill applied.");
+    } catch (err: any) {
+      console.warn("Ratings backfill skipped/failed:", err.message);
     }
 
     // Special migration: Convert password_hash to nullable (requires table recreation in SQLite)
