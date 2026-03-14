@@ -22,6 +22,7 @@ const ALLOWED_DOMAINS = [
   "hyderabad.bits-pilani.ac.in",
   "goa.bits-pilani.ac.in",
   "wilp.bits-pilani.ac.in",
+  "gmail.com",
   // Testing / dev — remove or restrict before hard launch
 ];
 
