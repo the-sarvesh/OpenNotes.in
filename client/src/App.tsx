@@ -65,9 +65,8 @@ const App: React.FC = () => {
   // ── Theme ─────────────────────────────────────────────────────────
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem("darkMode");
-    return saved !== null
-      ? saved === "true"
-      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    // Default to true (dark mode) on any system if no preference saved
+    return saved !== null ? saved === "true" : true;
   });
 
   useEffect(() => {
