@@ -7,7 +7,7 @@ const SEED_USER = {
   name: 'Seeder User'
 };
 
-const SEMESTERS = ["1-1", "1-2", "2-1", "2-2", "3-1", "3-2", "4-1", "4-2"];
+const SEMESTERS = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8"];
 const MATERIAL_TYPES = ["handwritten", "printed", "digital", "other"];
 const CONDITIONS = ["New", "Like New", "Good", "Fair", "Heavily Used"];
 const COURSE_CODES = [

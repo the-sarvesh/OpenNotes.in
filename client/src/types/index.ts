@@ -28,6 +28,10 @@ export interface Order {
   items: OrderItem[];
   delivery_details?: string;
   collection_date?: string;
+  buyer_location?: string;
+  buyer_preferred_spot?: string;
+  buyer_availability?: string;
+  buyer_meetup_details?: string;
 }
 
 export interface OrderItem {

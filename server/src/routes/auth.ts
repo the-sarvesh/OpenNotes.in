@@ -323,7 +323,7 @@ router.get("/google", (req, res, next) => {
       req.query.device === "true"
         ? process.env.GOOGLE_CALLBACK_URL || "http://192.168.1.52:5000/api/auth/google/callback"
         : process.env.GOOGLE_CALLBACK_URL ||
-          "http://localhost:5000/api/auth/google/callback",
+        "http://localhost:5000/api/auth/google/callback",
   } as any)(req, res, next);
 });
 

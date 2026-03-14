@@ -18,11 +18,22 @@ export default defineConfig(({mode}) => {
       hmr: process.env.DISABLE_HMR !== 'true',
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:5000',
+          target: 'http://localhost:5000',
           changeOrigin: true,
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, _req, _res) => {
+              console.log('[Vite Proxy] Error:', err);
+            });
+            proxy.on('proxyReq', (proxyReq, req, _res) => {
+              console.log('[Vite Proxy] Request:', req.method, req.url, '->', proxyReq.path);
+            });
+            proxy.on('proxyRes', (proxyRes, req, _res) => {
+              console.log('[Vite Proxy] Response:', proxyRes.statusCode, req.url);
+            });
+          }
         },
         '/uploads': {
-          target: 'http://127.0.0.1:5000',
+          target: 'http://localhost:5000',
           changeOrigin: true,
         }
       }

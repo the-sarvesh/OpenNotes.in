@@ -5,14 +5,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../utils/api';
 
 const SUBJECTS_BY_SEM: Record<string, string[]> = {
-  '1-1': ['BSDCH ZC111: Probability & Statistics', 'BSDCH ZC112: Electrical Science', 'BSDCH ZC151: Writing Practice', 'BSDCH ZC236: Symbolic Logic'],
-  '1-2': ['BSDCH ZC142: Computer Programming', 'BSDCH ZC222: Discrete Structures for Computer Science', 'BSDCH ZC225: Environmental Studies', 'BSDCH ZC231: Dynamics of Social Change'],
-  '2-1': ['BSDCH ZC215: Digital Design', 'BSDCH ZC226: Creative Thinking', 'BSDCH ZC234: Linear Algebra & Optimization', 'BSDCH ZC356: Data Structures'],
-  '2-2': ['BSDCH ZC242: Cultural Studies', 'BSDCH ZC312: Evolution of Design', 'BSDCH ZC313: Object Oriented Programming & Design', 'BSDCH ZC353: Computer Organization & Architecture'],
-  '3-1': ['BSDCH ZC317: Algorithm Design', 'BSDCH ZC322: Critical Analysis of Literature & Cinema', 'BSDCH ZC328: Humanities and Design', 'BSDCH ZC364: Operating Systems (Elective)'],
-  '3-2': ['BSDCH ZC316: Computing and Design', 'BSDCH ZC355: Statistical Inferences & Applications', 'BSDCH ZC412: Software Design Principles', 'BSDCH ZC413: Database Design (Elective)'],
-  '4-1': ['BSDCH ZC311: Information Security', 'BSDCH ZC365: Human Computer Interaction', 'BSDCH ZC481: Computer Networks (Elective)'],
-  '4-2': ['BSDCH ZC499T: Capstone Project'],
+  'Sem1': ['BSDCH ZC111: Probability & Statistics', 'BSDCH ZC112: Electrical Science', 'BSDCH ZC151: Writing Practice', 'BSDCH ZC236: Symbolic Logic'],
+  'Sem2': ['BSDCH ZC142: Computer Programming', 'BSDCH ZC222: Discrete Structures for Computer Science', 'BSDCH ZC225: Environmental Studies', 'BSDCH ZC231: Dynamics of Social Change'],
+  'Sem3': ['BSDCH ZC215: Digital Design', 'BSDCH ZC226: Creative Thinking', 'BSDCH ZC234: Linear Algebra & Optimization', 'BSDCH ZC356: Data Structures'],
+  'Sem4': ['BSDCH ZC242: Cultural Studies', 'BSDCH ZC312: Evolution of Design', 'BSDCH ZC313: Object Oriented Programming & Design', 'BSDCH ZC353: Computer Organization & Architecture'],
+  'Sem5': ['BSDCH ZC317: Algorithm Design', 'BSDCH ZC322: Critical Analysis of Literature & Cinema', 'BSDCH ZC328: Humanities and Design', 'BSDCH ZC364: Operating Systems (Elective)'],
+  'Sem6': ['BSDCH ZC316: Computing and Design', 'BSDCH ZC355: Statistical Inferences & Applications', 'BSDCH ZC412: Software Design Principles', 'BSDCH ZC413: Database Design (Elective)'],
+  'Sem7': ['BSDCH ZC311: Information Security', 'BSDCH ZC365: Human Computer Interaction', 'BSDCH ZC481: Computer Networks (Elective)'],
+  'Sem8': ['BSDCH ZC499T: Capstone Project'],
 };
 const STANDARD_SPOTS = ['HCL Office', 'BITS Exam Center'];
 
@@ -52,7 +52,7 @@ const INITIAL_FORM: FormData = {
   location: 'Noida / Delhi NCR',
   customLocation: '',
   deliveryMethod: 'in_person',
-  preferredMeetupSpot: '',
+  preferredMeetupSpot: STANDARD_SPOTS[0],
   meetupLocation: '',
 };
 
@@ -101,7 +101,10 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
     if (step === 3) {
       if (!form.price) return false;
       if (form.location === 'Other (Manual)' && !form.customLocation.trim()) return false;
-      if (form.deliveryMethod !== 'courier' && !form.preferredMeetupSpot) return false;
+      if (form.deliveryMethod !== 'courier') {
+        if (!form.preferredMeetupSpot) return false;
+        if (!form.meetupLocation.trim()) return false;
+      }
       return true;
     }
     return false;
@@ -322,10 +325,9 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                 <Label>Semester</Label>
                 <select value={form.semester} onChange={e => { set('semester', e.target.value); set('courseCode', ''); set('subjects', []); }} className={inputClass}>
                   <option value="">Select semester...</option>
-                  {Object.keys(SUBJECTS_BY_SEM).map(s => {
-                    const [year, sem] = s.split('-');
-                    return <option key={s} value={s}>Year {year}, Semester {sem}</option>
-                  })}
+                  {Object.keys(SUBJECTS_BY_SEM).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
               </div>
 
@@ -404,7 +406,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                 </div>
                 <div>
                   <Label>City / Region</Label>
-                  <select value={form.location} onChange={e => { set('location', e.target.value); set('preferredMeetupSpot', ''); }} className={inputClass}>
+                  <select value={form.location} onChange={e => { set('location', e.target.value); set('preferredMeetupSpot', STANDARD_SPOTS[0]); }} className={inputClass}>
                     {LOCATIONS.map(l => <option key={l}>{l}</option>)}
                   </select>
                 </div>
@@ -454,8 +456,14 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
 
               {form.deliveryMethod !== 'courier' && (
                 <div>
-                  <Label>Specific Instructions / Custom Location</Label>
-                  <input type="text" value={form.meetupLocation} onChange={e => set('meetupLocation', e.target.value)} placeholder="e.g. Near the main entrance, 3rd floor..." className={inputClass} />
+                  <Label>Specific Instructions / Custom detailed Location <span className="text-red-500 text-[10px] font-bold">(Required)</span></Label>
+                  <input 
+                    type="text" 
+                    value={form.meetupLocation} 
+                    onChange={e => set('meetupLocation', e.target.value)} 
+                    placeholder="e.g. hcl 126, cafe 3..." 
+                    className={inputClass} 
+                  />
                 </div>
               )}
 

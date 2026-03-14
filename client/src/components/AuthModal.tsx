@@ -323,7 +323,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               onSubmit={handleLoginRegister}
               className="p-6 space-y-4"
             >
-              {error && <ErrorBanner msg={error} />}
+              {error && (
+                <div className="space-y-3">
+                  <ErrorBanner msg={error} />
+                  {error === "User not found" && mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => switchMode("register")}
+                      className="w-full text-xs text-primary hover:underline font-semibold text-center py-1"
+                    >
+                      Don't have an account? Sign up instead →
+                    </button>
+                  )}
+                </div>
+              )}
 
               {mode === "register" && (
                 <TextField
@@ -559,11 +572,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     className={`w-full pl-10 pr-4 py-2.5 bg-background border rounded-xl text-sm
                                 focus:outline-none focus:ring-2 focus:ring-primary transition-all text-text-main
-                                ${
-                                  confirmPw && confirmPw !== newPassword
-                                    ? "border-red-400 focus:ring-red-400"
-                                    : "border-border focus:border-primary"
-                                }`}
+                                ${confirmPw && confirmPw !== newPassword
+                        ? "border-red-400 focus:ring-red-400"
+                        : "border-border focus:border-primary"
+                      }`}
                   />
                 </div>
                 {confirmPw && confirmPw !== newPassword && (

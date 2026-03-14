@@ -1,8 +1,13 @@
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+// In local development, always use the Vite proxy (empty base URL)
+// This prevents accidental calls to production Render URLs from a local machine
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+export const API_BASE_URL = isLocal ? '' : (import.meta as any).env.VITE_API_URL || '';
+
+console.log(`[API] Initialized with BASE_URL: "${API_BASE_URL}" (Local: ${isLocal})`);
 
 export const apiRequest = async (url: string, options: RequestInit = {}) => {
   const headers = new Headers(options.headers || {});
-  
+
   // Prepend API_BASE_URL if the url is relative (starts with /api)
   const fullUrl = url.startsWith('/api') ? `${API_BASE_URL}${url}` : url;
 
@@ -12,12 +17,12 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(fullUrl, { 
-    ...options, 
+  const response = await fetch(fullUrl, {
+    ...options,
     headers,
     credentials: 'include'
   });
-  
+
   if (response.status === 401) {
     // Session expired or invalid
     localStorage.removeItem('open_notes_user');

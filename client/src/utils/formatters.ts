@@ -11,7 +11,7 @@
  * - 4-2 -> Sem 8
  */
 export const formatSemester = (semCode: string): string => {
-  if (!semCode) return '';
+  if (semCode.startsWith('Sem')) return semCode;
   
   const parts = semCode.split('-');
   if (parts.length !== 2) return semCode; // Fallback to raw value
@@ -23,5 +23,5 @@ export const formatSemester = (semCode: string): string => {
   
   // Logic: (Year - 1) * 2 + Sem
   const totalSem = (year - 1) * 2 + sem;
-  return `Sem ${totalSem}`;
+  return `Sem${totalSem}`;
 };

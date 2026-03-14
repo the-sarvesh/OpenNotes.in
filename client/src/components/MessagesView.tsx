@@ -84,7 +84,439 @@ const Avatar: React.FC<{
   );
 };
 
-// ── Main Component ─────────────────────────────────────────────────
+// ── Sub-components (moved outside to prevent re-creation on render) ────────────
+
+const ConnectionBadge: React.FC<{ isConnected: boolean }> = ({ isConnected }) => (
+  <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${isConnected
+    ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+    : "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800"
+    }`}>
+    {isConnected ? <Wifi className="h-2.5 w-2.5" /> : <WifiOff className="h-2.5 w-2.5" />}
+    {isConnected ? "Live" : "Reconnecting"}
+  </span>
+);
+
+const TypingBubble = () => (
+  <div className="flex justify-start">
+    <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-surface border border-border flex items-center gap-1.5">
+      <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:0ms]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:150ms]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:300ms]" />
+    </div>
+  </div>
+);
+
+const MeetupBubble: React.FC<{
+  msg: Message;
+  isMe: boolean;
+  timeAgo: (d: string) => string;
+  onAccept: (id: string, mid: string) => void;
+  onDecline: (id: string, mid: string) => void;
+  onCancel: (id: string, mid: string) => void;
+}> = ({ msg, isMe, timeAgo, onAccept, onDecline, onCancel }) => {
+  const metadata = JSON.parse(msg.metadata || "{}");
+  const { location, proposedTime, proposalId } = metadata;
+  const status = metadata.status || "pending";
+  const date = new Date(proposedTime);
+  return (
+    <div className={`flex flex-col gap-1.5 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
+      <div className={`w-full rounded-2xl border overflow-hidden shadow-sm ${status === "accepted" ? "border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20" :
+        status === "declined" ? "border-red-400/30 bg-red-50/50 dark:bg-red-950/20" :
+          status === "cancelled" ? "border-border bg-surface/50 grayscale" :
+            "border-primary/20 bg-surface"
+        }`}>
+        <div className="p-4">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${status === "accepted" ? "bg-emerald-500 text-white" :
+              status === "declined" ? "bg-red-500 text-white" :
+                status === "cancelled" ? "bg-border text-text-muted" :
+                  "bg-primary text-black"
+              }`}>
+              <Clock className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-text-muted">Meetup Proposal</p>
+              <p className="text-sm font-bold text-text-main capitalize">{status}</p>
+            </div>
+          </div>
+          <div className="space-y-2 text-xs font-medium text-text-muted mb-4">
+            <div className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary shrink-0" /><span className="text-text-main">{location}</span></div>
+            <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5 text-primary shrink-0" /><span className="text-text-main">{date.toLocaleDateString()} at {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
+          </div>
+          {!isMe && status === "pending" && (
+            <div className="flex gap-2">
+              <button onClick={() => onAccept(proposalId, msg.id)} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors active:scale-95">Accept</button>
+              <button onClick={() => onDecline(proposalId, msg.id)} className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors active:scale-95">Decline</button>
+            </div>
+          )}
+          {isMe && status === "pending" && (
+            <button onClick={() => onCancel(proposalId, msg.id)} className="w-full py-2 bg-border hover:bg-border/80 text-text-muted rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Cancel</button>
+          )}
+          {status === "accepted" && (
+            <div className="flex items-center justify-center gap-2 py-2 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest">
+              <Circle className="h-1.5 w-1.5 fill-current" /> Confirmed
+            </div>
+          )}
+          {status === "cancelled" && (
+            <div className="flex items-center justify-center gap-2 py-2 bg-border/40 rounded-xl text-text-muted text-[10px] font-black uppercase tracking-widest">
+              <Circle className="h-1.5 w-1.5 fill-current" /> Withdrawn
+            </div>
+          )}
+        </div>
+      </div>
+      <span className="text-[9px] text-text-muted px-1">{timeAgo(msg.created_at)}</span>
+    </div>
+  );
+};
+
+const PurchaseNoticeBubble: React.FC<{
+  msg: Message;
+  isMe: boolean;
+  timeAgo: (d: string) => string;
+  onVerify: (id: string) => void;
+}> = ({ msg, isMe, timeAgo, onVerify }) => {
+  const metadata = JSON.parse(msg.metadata || "{}");
+  const { listingTitle, listingImage, orderItemId, meetupPin, buyerLocation, buyerAvailability, buyerNote } = metadata;
+  return (
+    <div className={`flex flex-col gap-1.5 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
+      <div className="rounded-2xl border-2 border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/10 overflow-hidden shadow-sm">
+        <div className="p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative shrink-0">
+              <img src={listingImage} alt="" className="w-11 h-11 rounded-xl object-cover border border-border shadow-sm" />
+              <div className="absolute -top-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 shadow-md">
+                <ShieldCheck className="h-2.5 w-2.5" />
+              </div>
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Order Placed</p>
+              <p className="text-sm font-bold text-text-main line-clamp-1">{listingTitle}</p>
+            </div>
+          </div>
+          <div className="space-y-1.5 mb-4 text-xs text-text-muted">
+            <p className="flex items-center gap-1.5"><MapPin className="h-3 w-3 shrink-0" /> {buyerLocation || "BITS"}</p>
+            <p className="flex items-center gap-1.5"><Clock className="h-3 w-3 shrink-0" /> {buyerAvailability}</p>
+            {buyerNote && <p className="border-l-2 border-emerald-300 dark:border-emerald-700 pl-2 italic mt-1">"{buyerNote}"</p>}
+          </div>
+          {!isMe && metadata.status !== "completed" && (
+            <button onClick={() => onVerify(orderItemId)}
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95">
+              Verify Exchange PIN
+            </button>
+          )}
+          {!isMe && metadata.status === "completed" && (
+            <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
+              <ShieldCheck className="h-3.5 w-3.5" /> Verified & Completed
+            </div>
+          )}
+          {isMe && metadata.status !== "completed" && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-full py-3 bg-emerald-500/10 rounded-xl text-center border border-emerald-500/20">
+                <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Your Exchange PIN</p>
+                <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300 tracking-[0.35em]">{meetupPin}</p>
+              </div>
+              <p className="text-[9px] text-text-muted text-center">Share this PIN with the seller at meetup.</p>
+            </div>
+          )}
+          {isMe && metadata.status === "completed" && (
+            <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
+              <ShieldCheck className="h-3.5 w-3.5" /> Exchange Completed
+            </div>
+          )}
+        </div>
+      </div>
+      <span className="text-[9px] text-text-muted px-1">{timeAgo(msg.created_at)}</span>
+    </div>
+  );
+};
+
+// ── Conversation List Panel ────────────────────────────────────────
+interface ConversationListProps {
+  conversations: Conversation[];
+  activeConvo: Conversation | null;
+  loading: boolean;
+  onSelect: (c: Conversation) => void;
+  onBack?: () => void;
+  isConnected: boolean;
+  timeAgo: (d: string) => string;
+}
+
+const ConversationList: React.FC<ConversationListProps> = ({
+  conversations, activeConvo, loading, onSelect, onBack, isConnected, timeAgo
+}) => (
+  <div className="flex flex-col h-full">
+    {/* List header */}
+    <div className="flex items-center justify-between px-4 py-4 border-b border-border shrink-0">
+      <div className="flex items-center gap-3">
+        {onBack && (
+          <button onClick={onBack} className="p-1.5 hover:bg-background rounded-xl transition-colors">
+            <ArrowLeft className="h-5 w-5 text-text-muted" />
+          </button>
+        )}
+        <div>
+          <h1 className="text-base font-black text-text-main tracking-tight">Messages</h1>
+          <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest">
+            {conversations.length} conversation{conversations.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+      </div>
+      <ConnectionBadge isConnected={isConnected} />
+    </div>
+
+    {/* Conversations */}
+    <div className="flex-1 overflow-y-auto">
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <span className="h-7 w-7 rounded-full border-[3px] border-primary border-t-transparent animate-spin" />
+        </div>
+      ) : conversations.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+            <MessageCircle className="h-7 w-7 text-primary" />
+          </div>
+          <p className="text-sm font-bold text-text-main mb-1">No conversations yet</p>
+          <p className="text-xs text-text-muted leading-relaxed">Tap "Contact Seller" on a listing to start chatting</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {conversations.map((convo) => (
+            <button
+              key={convo.conversationId}
+              onClick={() => onSelect(convo)}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-background transition-colors text-left ${activeConvo?.conversationId === convo.conversationId ? "bg-primary/5 border-l-2 border-l-primary" : ""
+                }`}
+            >
+              <Avatar
+                src={convo.otherUserProfileImage}
+                name={convo.otherUserName}
+                size="sm"
+                badge={
+                  <img
+                    src={convo.listingImages[0]}
+                    alt=""
+                    className="w-5 h-5 rounded-md border-2 border-surface object-cover"
+                  />
+                }
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <p className="text-xs font-bold text-text-main truncate">{convo.otherUserName}</p>
+                  <span className="text-[9px] text-text-muted shrink-0 ml-2">{timeAgo(convo.lastMessageAt)}</span>
+                </div>
+                <p className="text-[10px] text-primary font-bold truncate mb-0.5">
+                  {convo.listingTitles[0]}{convo.listingTitles.length > 1 && ` +${convo.listingTitles.length - 1}`}
+                </p>
+                <p className="text-[10px] text-text-muted truncate">
+                  {convo.lastMessageIsMe ? <span className="font-semibold">You: </span> : ""}{convo.lastMessage}
+                </p>
+              </div>
+              {convo.unreadCount > 0 && (
+                <span className="bg-red-500 text-white text-[9px] font-black h-4.5 w-4.5 min-w-[18px] rounded-full flex items-center justify-center shrink-0 px-1">
+                  {convo.unreadCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+// ── Chat Panel ─────────────────────────────────────────────────────
+interface ChatPanelProps {
+  activeConvo: Conversation;
+  messages: Message[];
+  user: User | null;
+  isConnected: boolean;
+  arrivedUsers: Record<string, boolean>;
+  otherUserTyping: boolean;
+  newMessage: string;
+  sending: boolean;
+  errorMsg: string;
+  scrollContainerRef: React.RefObject<HTMLDivElement>;
+  messagesEndRef: React.RefObject<HTMLDivElement>;
+  onBack: () => void;
+  onProfileClick: (uid: string) => void;
+  onMeetupModalOpen: () => void;
+  onArrived: () => void;
+  onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onInputBlur: () => void;
+  onSend: () => void;
+  timeAgo: (d: string) => string;
+  onAcceptMeetup: (id: string, mid: string) => void;
+  onDeclineMeetup: (id: string, mid: string) => void;
+  onCancelMeetup: (id: string, mid: string) => void;
+  onVerifyPin: (id: string) => void;
+}
+
+const ChatPanel: React.FC<ChatPanelProps> = ({
+  activeConvo, messages, user, isConnected, arrivedUsers,
+  otherUserTyping, newMessage, sending, errorMsg,
+  scrollContainerRef, messagesEndRef,
+  onBack, onProfileClick, onMeetupModalOpen, onArrived,
+  onInputChange, onKeyDown, onInputBlur, onSend, timeAgo,
+  onAcceptMeetup, onDeclineMeetup, onCancelMeetup, onVerifyPin
+}) => {
+  const hasPendingPin = messages.some((m) => {
+    const meta = JSON.parse(m.metadata || "{}");
+    return m.type === "meetup_proposal" && meta.status === "accepted";
+  });
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Chat header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface shrink-0">
+        <button
+          onClick={onBack}
+          className="lg:hidden p-1.5 hover:bg-background rounded-xl transition-colors shrink-0"
+        >
+          <ArrowLeft className="h-5 w-5 text-text-muted" />
+        </button>
+
+        <button
+          onClick={() => onProfileClick(activeConvo.otherUserId)}
+          className="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity text-left"
+        >
+          <Avatar src={activeConvo.otherUserProfileImage} name={activeConvo.otherUserName} size="sm" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-bold text-text-main truncate">{activeConvo.otherUserName}</p>
+              {isConnected && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
+            </div>
+            <p className="text-[10px] text-primary font-bold uppercase tracking-widest truncate max-w-[180px]">
+              {activeConvo.listingTitles[0]}
+            </p>
+          </div>
+        </button>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {user && arrivedUsers[activeConvo.otherUserId] && (
+            <div className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 animate-pulse">
+              <MapPin className="h-3 w-3 fill-current" />
+              <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Arrived</span>
+            </div>
+          )}
+
+          {hasPendingPin && (
+            <button
+              onClick={onArrived}
+              disabled={user ? arrivedUsers[user.id] : false}
+              className={`p-2 rounded-xl transition-all active:scale-95 ${user && arrivedUsers[user.id]
+                ? "bg-emerald-500 text-white"
+                : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                }`}
+              title="Signal that you've arrived"
+            >
+              <MapPin className="h-4 w-4" />
+            </button>
+          )}
+
+          <button
+            onClick={onMeetupModalOpen}
+            className="p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all active:scale-95"
+            title="Schedule meetup"
+          >
+            <Clock className="h-4 w-4" />
+          </button>
+
+          <ConnectionBadge isConnected={isConnected} />
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {messages.length === 0 && (
+          <div className="flex justify-center py-8">
+            <span className="text-[10px] text-text-muted font-bold uppercase tracking-widest px-4 py-2 bg-surface rounded-full border border-border">
+              Start of conversation
+            </span>
+          </div>
+        )}
+
+        {messages.map((msg) => {
+          const isMe = msg.sender_id === user?.id;
+          if (msg.type === "meetup_proposal") {
+            return (
+              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                <MeetupBubble msg={msg} isMe={isMe} timeAgo={timeAgo} onAccept={onAcceptMeetup} onDecline={onDeclineMeetup} onCancel={onCancelMeetup} />
+              </div>
+            );
+          }
+          if (msg.type === "purchase_notice") {
+            return (
+              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                <PurchaseNoticeBubble msg={msg} isMe={isMe} timeAgo={timeAgo} onVerify={onVerifyPin} />
+              </div>
+            );
+          }
+          return (
+            <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+              <div className={`flex flex-col gap-1 max-w-[72%] ${isMe ? "items-end" : "items-start"}`}>
+                <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${isMe
+                  ? "bg-primary text-black rounded-br-sm shadow-sm"
+                  : "bg-surface text-text-main rounded-bl-sm border border-border shadow-sm"
+                  }`}>
+                  {msg.content}
+                </div>
+                <div className={`flex items-center gap-1 px-1 ${isMe ? "flex-row-reverse" : ""}`}>
+                  <span className="text-[9px] text-text-muted font-medium">{timeAgo(msg.created_at)}</span>
+                  {isMe && (
+                    msg.is_read
+                      ? <CheckCheck className="h-3 w-3 text-primary" />
+                      : <Check className="h-3 w-3 text-text-muted" />
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {otherUserTyping && <TypingBubble />}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input bar */}
+      <div className="px-4 py-3 border-t border-border bg-surface shrink-0">
+        {errorMsg && (
+          <div className="mb-2 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 text-xs px-3 py-2 rounded-xl font-medium">
+            {errorMsg}
+          </div>
+        )}
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={onInputChange}
+            onKeyDown={onKeyDown}
+            onBlur={onInputBlur}
+            placeholder="Type a message…"
+            className="flex-1 px-4 py-3 bg-background border border-border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main transition-all"
+            disabled={sending}
+            autoComplete="off"
+          />
+          <button
+            onClick={onSend}
+            disabled={!newMessage.trim() || sending}
+            className="w-11 h-11 bg-primary text-black rounded-2xl font-bold flex items-center justify-center shadow-lg shadow-primary/20 hover:bg-primary-hover transition-all disabled:opacity-40 active:scale-95 shrink-0"
+          >
+            {sending ? (
+              <span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+
+
 export const MessagesView: React.FC<{
   initialConversationId?: string | null;
   onBack?: () => void;
@@ -363,7 +795,7 @@ export const MessagesView: React.FC<{
     setMessages([]);
   }, [activeConvo?.conversationId]);
 
-  const timeAgo = (dateStr: string) => {
+  const timeAgo = useCallback((dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "now";
@@ -371,7 +803,7 @@ export const MessagesView: React.FC<{
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h`;
     return `${Math.floor(hrs / 24)}d`;
-  };
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -487,381 +919,9 @@ export const MessagesView: React.FC<{
     }
   };
 
-  // ── Sub-components (defined inside to access handlers) ────────────
-
-  const ConnectionBadge = () => (
-    <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${isConnected
-        ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
-        : "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800"
-      }`}>
-      {isConnected ? <Wifi className="h-2.5 w-2.5" /> : <WifiOff className="h-2.5 w-2.5" />}
-      {isConnected ? "Live" : "Reconnecting"}
-    </span>
-  );
-
-  const TypingBubble = () => (
-    <div className="flex justify-start">
-      <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-surface border border-border flex items-center gap-1.5">
-        <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:0ms]" />
-        <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:150ms]" />
-        <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:300ms]" />
-      </div>
-    </div>
-  );
-
-  const MeetupBubble = ({ msg, isMe }: { msg: Message; isMe: boolean }) => {
-    const metadata = JSON.parse(msg.metadata || "{}");
-    const { location, proposedTime, proposalId } = metadata;
-    const status = metadata.status || "pending";
-    const date = new Date(proposedTime);
-    return (
-      <div className={`flex flex-col gap-1.5 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
-        <div className={`w-full rounded-2xl border overflow-hidden shadow-sm ${status === "accepted" ? "border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20" :
-            status === "declined" ? "border-red-400/30 bg-red-50/50 dark:bg-red-950/20" :
-              status === "cancelled" ? "border-border bg-surface/50 grayscale" :
-                "border-primary/20 bg-surface"
-          }`}>
-          <div className="p-4">
-            <div className="flex items-center gap-2.5 mb-3">
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${status === "accepted" ? "bg-emerald-500 text-white" :
-                  status === "declined" ? "bg-red-500 text-white" :
-                    status === "cancelled" ? "bg-border text-text-muted" :
-                      "bg-primary text-black"
-                }`}>
-                <Clock className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-text-muted">Meetup Proposal</p>
-                <p className="text-sm font-bold text-text-main capitalize">{status}</p>
-              </div>
-            </div>
-            <div className="space-y-2 text-xs font-medium text-text-muted mb-4">
-              <div className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-primary shrink-0" /><span className="text-text-main">{location}</span></div>
-              <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5 text-primary shrink-0" /><span className="text-text-main">{date.toLocaleDateString()} at {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
-            </div>
-            {!isMe && status === "pending" && (
-              <div className="flex gap-2">
-                <button onClick={() => handleAcceptMeetup(proposalId, msg.id)} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors active:scale-95">Accept</button>
-                <button onClick={() => handleDeclineMeetup(proposalId, msg.id)} className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors active:scale-95">Decline</button>
-              </div>
-            )}
-            {isMe && status === "pending" && (
-              <button onClick={() => handleCancelMeetup(proposalId, msg.id)} className="w-full py-2 bg-border hover:bg-border/80 text-text-muted rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors">Cancel</button>
-            )}
-            {status === "accepted" && (
-              <div className="flex items-center justify-center gap-2 py-2 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest">
-                <Circle className="h-1.5 w-1.5 fill-current" /> Confirmed
-              </div>
-            )}
-            {status === "cancelled" && (
-              <div className="flex items-center justify-center gap-2 py-2 bg-border/40 rounded-xl text-text-muted text-[10px] font-black uppercase tracking-widest">
-                <Circle className="h-1.5 w-1.5 fill-current" /> Withdrawn
-              </div>
-            )}
-          </div>
-        </div>
-        <span className="text-[9px] text-text-muted px-1">{timeAgo(msg.created_at)}</span>
-      </div>
-    );
-  };
-
-  const PurchaseNoticeBubble = ({ msg, isMe }: { msg: Message; isMe: boolean }) => {
-    const metadata = JSON.parse(msg.metadata || "{}");
-    const { listingTitle, listingImage, orderItemId, meetupPin, buyerLocation, buyerAvailability, buyerNote } = metadata;
-    return (
-      <div className={`flex flex-col gap-1.5 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
-        <div className="rounded-2xl border-2 border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/10 overflow-hidden shadow-sm">
-          <div className="p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="relative shrink-0">
-                <img src={listingImage} alt="" className="w-11 h-11 rounded-xl object-cover border border-border shadow-sm" />
-                <div className="absolute -top-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 shadow-md">
-                  <ShieldCheck className="h-2.5 w-2.5" />
-                </div>
-              </div>
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Order Placed</p>
-                <p className="text-sm font-bold text-text-main line-clamp-1">{listingTitle}</p>
-              </div>
-            </div>
-            <div className="space-y-1.5 mb-4 text-xs text-text-muted">
-              <p className="flex items-center gap-1.5"><MapPin className="h-3 w-3 shrink-0" /> {buyerLocation || "BITS"}</p>
-              <p className="flex items-center gap-1.5"><Clock className="h-3 w-3 shrink-0" /> {buyerAvailability}</p>
-              {buyerNote && <p className="border-l-2 border-emerald-300 dark:border-emerald-700 pl-2 italic mt-1">"{buyerNote}"</p>}
-            </div>
-            {!isMe && metadata.status !== "completed" && (
-              <button onClick={() => { setActiveOrderItemId(orderItemId); setShowPinModal(true); }}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95">
-                Verify Exchange PIN
-              </button>
-            )}
-            {!isMe && metadata.status === "completed" && (
-              <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
-                <ShieldCheck className="h-3.5 w-3.5" /> Verified & Completed
-              </div>
-            )}
-            {isMe && metadata.status !== "completed" && (
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-full py-3 bg-emerald-500/10 rounded-xl text-center border border-emerald-500/20">
-                  <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Your Exchange PIN</p>
-                  <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300 tracking-[0.35em]">{meetupPin}</p>
-                </div>
-                <p className="text-[9px] text-text-muted text-center">Share this PIN with the seller at meetup.</p>
-              </div>
-            )}
-            {isMe && metadata.status === "completed" && (
-              <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
-                <ShieldCheck className="h-3.5 w-3.5" /> Exchange Completed
-              </div>
-            )}
-          </div>
-        </div>
-        <span className="text-[9px] text-text-muted px-1">{timeAgo(msg.created_at)}</span>
-      </div>
-    );
-  };
-
-  // ── Conversation List Panel ────────────────────────────────────────
-  const ConversationList = () => (
-    <div className="flex flex-col h-full">
-      {/* List header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-border shrink-0">
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <button onClick={onBack} className="p-1.5 hover:bg-background rounded-xl transition-colors">
-              <ArrowLeft className="h-5 w-5 text-text-muted" />
-            </button>
-          )}
-          <div>
-            <h1 className="text-base font-black text-text-main tracking-tight">Messages</h1>
-            <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest">
-              {conversations.length} conversation{conversations.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </div>
-        <ConnectionBadge />
-      </div>
-
-      {/* Conversations */}
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <span className="h-7 w-7 rounded-full border-[3px] border-primary border-t-transparent animate-spin" />
-          </div>
-        ) : conversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-              <MessageCircle className="h-7 w-7 text-primary" />
-            </div>
-            <p className="text-sm font-bold text-text-main mb-1">No conversations yet</p>
-            <p className="text-xs text-text-muted leading-relaxed">Tap "Contact Seller" on a listing to start chatting</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {conversations.map((convo) => (
-              <button
-                key={convo.conversationId}
-                onClick={() => setActiveConvo(convo)}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-background transition-colors text-left ${activeConvo?.conversationId === convo.conversationId ? "bg-primary/5 border-l-2 border-l-primary" : ""
-                  }`}
-              >
-                <Avatar
-                  src={convo.otherUserProfileImage}
-                  name={convo.otherUserName}
-                  size="sm"
-                  badge={
-                    <img
-                      src={convo.listingImages[0]}
-                      alt=""
-                      className="w-5 h-5 rounded-md border-2 border-surface object-cover"
-                    />
-                  }
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <p className="text-xs font-bold text-text-main truncate">{convo.otherUserName}</p>
-                    <span className="text-[9px] text-text-muted shrink-0 ml-2">{timeAgo(convo.lastMessageAt)}</span>
-                  </div>
-                  <p className="text-[10px] text-primary font-bold truncate mb-0.5">
-                    {convo.listingTitles[0]}{convo.listingTitles.length > 1 && ` +${convo.listingTitles.length - 1}`}
-                  </p>
-                  <p className="text-[10px] text-text-muted truncate">
-                    {convo.lastMessageIsMe ? <span className="font-semibold">You: </span> : ""}{convo.lastMessage}
-                  </p>
-                </div>
-                {convo.unreadCount > 0 && (
-                  <span className="bg-red-500 text-white text-[9px] font-black h-4.5 w-4.5 min-w-[18px] rounded-full flex items-center justify-center shrink-0 px-1">
-                    {convo.unreadCount}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // ── Chat Panel ─────────────────────────────────────────────────────
-  const ChatPanel = () => {
-    if (!activeConvo) return null;
-    const hasPendingPin = messages.some((m) => {
-      const meta = JSON.parse(m.metadata || "{}");
-      return m.type === "meetup_proposal" && meta.status === "accepted";
-    });
-
-    return (
-      <div className="flex flex-col h-full">
-        {/* Chat header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface shrink-0">
-          {/* Back arrow — visible on mobile only */}
-          <button
-            onClick={() => {
-              if (initialConversationId && conversations.length <= 1) onBack?.();
-              else { setActiveConvo(null); fetchConversations(); }
-            }}
-            className="lg:hidden p-1.5 hover:bg-background rounded-xl transition-colors shrink-0"
-          >
-            <ArrowLeft className="h-5 w-5 text-text-muted" />
-          </button>
-
-          <button
-            onClick={() => fetchUserProfile(activeConvo.otherUserId)}
-            className="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity text-left"
-          >
-            <Avatar src={activeConvo.otherUserProfileImage} name={activeConvo.otherUserName} size="sm" />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <p className="text-sm font-bold text-text-main truncate">{activeConvo.otherUserName}</p>
-                {isConnected && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
-              </div>
-              <p className="text-[10px] text-primary font-bold uppercase tracking-widest truncate max-w-[180px]">
-                {activeConvo.listingTitles[0]}
-              </p>
-            </div>
-          </button>
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {user && arrivedUsers[activeConvo.otherUserId] && (
-              <div className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 animate-pulse">
-                <MapPin className="h-3 w-3 fill-current" />
-                <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Arrived</span>
-              </div>
-            )}
-
-            {hasPendingPin && (
-              <button
-                onClick={handleArrived}
-                disabled={user ? arrivedUsers[user.id] : false}
-                className={`p-2 rounded-xl transition-all active:scale-95 ${user && arrivedUsers[user.id]
-                    ? "bg-emerald-500 text-white"
-                    : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400"
-                  }`}
-                title="Signal that you've arrived"
-              >
-                <MapPin className="h-4 w-4" />
-              </button>
-            )}
-
-            <button
-              onClick={() => setShowMeetupModal(true)}
-              className="p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all active:scale-95"
-              title="Schedule meetup"
-            >
-              <Clock className="h-4 w-4" />
-            </button>
-
-            <ConnectionBadge />
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {messages.length === 0 && (
-            <div className="flex justify-center py-8">
-              <span className="text-[10px] text-text-muted font-bold uppercase tracking-widest px-4 py-2 bg-surface rounded-full border border-border">
-                Start of conversation
-              </span>
-            </div>
-          )}
-
-          {messages.map((msg) => {
-            const isMe = msg.sender_id === user?.id;
-            if (msg.type === "meetup_proposal") {
-              return (
-                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                  <MeetupBubble msg={msg} isMe={isMe} />
-                </div>
-              );
-            }
-            if (msg.type === "purchase_notice") {
-              return (
-                <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                  <PurchaseNoticeBubble msg={msg} isMe={isMe} />
-                </div>
-              );
-            }
-            return (
-              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                <div className={`flex flex-col gap-1 max-w-[72%] ${isMe ? "items-end" : "items-start"}`}>
-                  <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${isMe
-                      ? "bg-primary text-black rounded-br-sm shadow-sm"
-                      : "bg-surface text-text-main rounded-bl-sm border border-border shadow-sm"
-                    }`}>
-                    {msg.content}
-                  </div>
-                  <div className={`flex items-center gap-1 px-1 ${isMe ? "flex-row-reverse" : ""}`}>
-                    <span className="text-[9px] text-text-muted font-medium">{timeAgo(msg.created_at)}</span>
-                    {isMe && (
-                      msg.is_read
-                        ? <CheckCheck className="h-3 w-3 text-primary" />
-                        : <Check className="h-3 w-3 text-text-muted" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {otherUserTyping && <TypingBubble />}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input bar */}
-        <div className="px-4 py-3 border-t border-border bg-surface shrink-0">
-          {errorMsg && (
-            <div className="mb-2 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 text-xs px-3 py-2 rounded-xl font-medium">
-              {errorMsg}
-            </div>
-          )}
-          <div className="flex gap-2 items-center">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onBlur={emitTypingStop}
-              placeholder="Type a message…"
-              className="flex-1 px-4 py-3 bg-background border border-border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main transition-all"
-              disabled={sending}
-              autoComplete="off"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!newMessage.trim() || sending}
-              className="w-11 h-11 bg-primary text-black rounded-2xl font-bold flex items-center justify-center shadow-lg shadow-primary/20 hover:bg-primary-hover transition-all disabled:opacity-40 active:scale-95 shrink-0"
-            >
-              {sending ? (
-                <span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  const handleChatBack = () => {
+    if (initialConversationId && conversations.length <= 1) onBack?.();
+    else { setActiveConvo(null); fetchConversations(); }
   };
 
   // ── Render ─────────────────────────────────────────────────────────
@@ -877,13 +937,45 @@ export const MessagesView: React.FC<{
         style={{ height: "calc(100vh - 160px)", minHeight: "560px" }}>
         {/* Left: conversation list */}
         <div className="w-72 xl:w-80 border-r border-border flex-shrink-0 flex flex-col">
-          <ConversationList />
+          <ConversationList
+            conversations={conversations}
+            activeConvo={activeConvo}
+            loading={loading}
+            onSelect={setActiveConvo}
+            isConnected={isConnected}
+            timeAgo={timeAgo}
+          />
         </div>
 
         {/* Right: chat area or empty state */}
         <div className="flex-1 flex flex-col">
           {activeConvo ? (
-            <ChatPanel />
+            <ChatPanel
+              activeConvo={activeConvo}
+              messages={messages}
+              user={user}
+              isConnected={isConnected}
+              arrivedUsers={arrivedUsers}
+              otherUserTyping={otherUserTyping}
+              newMessage={newMessage}
+              sending={sending}
+              errorMsg={errorMsg}
+              scrollContainerRef={scrollContainerRef}
+              messagesEndRef={messagesEndRef}
+              onBack={handleChatBack}
+              onProfileClick={fetchUserProfile}
+              onMeetupModalOpen={() => setShowMeetupModal(true)}
+              onArrived={handleArrived}
+              onInputChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onInputBlur={emitTypingStop}
+              onSend={sendMessage}
+              timeAgo={timeAgo}
+              onAcceptMeetup={handleAcceptMeetup}
+              onDeclineMeetup={handleDeclineMeetup}
+              onCancelMeetup={handleCancelMeetup}
+              onVerifyPin={(id) => { setActiveOrderItemId(id); setShowPinModal(true); }}
+            />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
@@ -909,7 +1001,15 @@ export const MessagesView: React.FC<{
               transition={{ duration: 0.18 }}
               className="h-full flex flex-col"
             >
-              <ConversationList />
+              <ConversationList
+                conversations={conversations}
+                activeConvo={activeConvo}
+                loading={loading}
+                onSelect={setActiveConvo}
+                onBack={onBack}
+                isConnected={isConnected}
+                timeAgo={timeAgo}
+              />
             </motion.div>
           ) : (
             <motion.div
@@ -920,7 +1020,32 @@ export const MessagesView: React.FC<{
               transition={{ duration: 0.18 }}
               className="h-full flex flex-col"
             >
-              <ChatPanel />
+              <ChatPanel
+                activeConvo={activeConvo}
+                messages={messages}
+                user={user}
+                isConnected={isConnected}
+                arrivedUsers={arrivedUsers}
+                otherUserTyping={otherUserTyping}
+                newMessage={newMessage}
+                sending={sending}
+                errorMsg={errorMsg}
+                scrollContainerRef={scrollContainerRef}
+                messagesEndRef={messagesEndRef}
+                onBack={handleChatBack}
+                onProfileClick={fetchUserProfile}
+                onMeetupModalOpen={() => setShowMeetupModal(true)}
+                onArrived={handleArrived}
+                onInputChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                onInputBlur={emitTypingStop}
+                onSend={sendMessage}
+                timeAgo={timeAgo}
+                onAcceptMeetup={handleAcceptMeetup}
+                onDeclineMeetup={handleDeclineMeetup}
+                onCancelMeetup={handleCancelMeetup}
+                onVerifyPin={(id) => { setActiveOrderItemId(id); setShowPinModal(true); }}
+              />
             </motion.div>
           )}
         </AnimatePresence>

@@ -292,8 +292,8 @@ const App: React.FC = () => {
   // No longer needed: Redirect logic handled by ProtectedRoute or similar if needed
   // For now, simple redirect in main Routes is better.
   const isProtected = (path: string) => {
-    const protected_ = ["/profile", "/sell", "/admin", "/messages", "/orders"];
-    return protected_.includes(path);
+    const public_ = ["/", "/auth/callback", "/reset-password"];
+    return !public_.includes(path);
   };
 
   useEffect(() => {
@@ -452,7 +452,7 @@ const App: React.FC = () => {
                   setCart((c) => c.filter((i) => i.note.id !== id))
                 }
                 onCheckout={() => navigate("/checkout")}
-                onBack={() => navigate("/browse")}
+                onBack={() => navigate("/browse", { replace: true })}
               />
             } />
             <Route path="/checkout" element={
@@ -464,7 +464,7 @@ const App: React.FC = () => {
                   setOrderSuccessData(data);
                   navigate("/order-success");
                 }}
-                onBack={() => navigate("/cart")}
+                onBack={() => navigate("/cart", { replace: true })}
               />
             } />
             <Route path="/order-success" element={

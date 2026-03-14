@@ -26,6 +26,9 @@ interface CheckoutViewProps {
   onBack?: () => void;
 }
 
+const LOCATIONS = ['Noida / Delhi NCR', 'Bengaluru', 'Hyderabad', 'Chennai', 'Pune', 'Other (Manual)'];
+const STANDARD_SPOTS = ['HCL Office', 'BITS Exam Center'];
+
 // ── Reusable section card ──────────────────────────────────────────
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({
   children,
@@ -89,7 +92,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
   const activeCart = cart || contextCart;
 
-  const [address, setAddress] = useState("");
+  const [buyerLocation, setBuyerLocation] = useState("Noida / Delhi NCR");
+  const [customBuyerLocation, setCustomBuyerLocation] = useState("");
+  const [buyerPreferredSpot, setBuyerPreferredSpot] = useState("HCL Office");
+  const [buyerMeetupDetails, setBuyerMeetupDetails] = useState("");
   const [collectionDate, setCollectionDate] = useState("");
   const [userNote, setUserNote] = useState("");
   const [agreedToDelivery, setAgreedToDelivery] = useState(false);
@@ -108,9 +114,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
 
   const total = activeCart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
-  const rawPlatformFee = Math.round(total * 0.1);
-  const platformFee = couponResult?.valid ? couponResult.finalFee : rawPlatformFee;
-  const subtotal = total - rawPlatformFee;
+  const rawPlatformFee = 0; // Temporarily 0 for launch promo
+  const platformFee = 0;
+  const subtotal = total;
 
   const needsDelivery = activeCart.some(
     (i) => i.note.deliveryMethod === "courier" || i.note.deliveryMethod === "both" || i.note.deliveryMethod === "Delivery",
@@ -153,7 +159,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
   const handlePlaceOrder = async () => {
     if (!user) return;
-    if (needsDelivery && !address) { toast.error("Please enter delivery address"); return; }
+    if (needsDelivery && buyerLocation === 'Other (Manual)' && !customBuyerLocation) { toast.error("Please specify your city/region"); return; }
     if (needsMeetup && !collectionDate) { toast.error("Please select a collection date"); return; }
     if (!agreedToDelivery) { toast.error("You must agree to the delivery methods"); return; }
 
@@ -163,9 +169,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
         method: "POST",
         body: JSON.stringify({
           items: activeCart.map((item) => ({ listing_id: item.note.id, quantity: item.quantity })),
-          buyer_location: address || null,
+          buyer_location: buyerLocation === 'Other (Manual)' ? customBuyerLocation : buyerLocation,
+          buyer_preferred_spot: buyerPreferredSpot,
           buyer_availability: collectionDate || null,
           buyer_note: userNote || null,
+          buyer_meetup_details: buyerMeetupDetails || null,
           agreed_to_delivery: agreedToDelivery,
           coupon_code: appliedCoupon || null,
         }),
@@ -248,22 +256,79 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                 transition={{ duration: 0.2 }}
                 className="space-y-4"
               >
+                {/* Launch Promo Banner */}
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-500/20">
+                    <CheckCircle className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Launch Promo Active! 🎉</h3>
+                    <p className="text-xs text-emerald-800/70 font-medium">Platform fees are waived for all BITSians for a limited time.</p>
+                  </div>
+                </div>
+
                 {/* Payment split — shown upfront so user isn't surprised */}
-                <PaymentSplitBanner platformFee={platformFee} cashAmount={subtotal} />
+                <PaymentSplitBanner platformFee={0} cashAmount={total} />
 
                 <Card className="p-4 sm:p-6">
                   <SectionHeader icon={<MapPin className="h-4 w-4" />} title="Where & When to Meet" />
 
-                  <div className="space-y-5">
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">
+                          Your Region / City
+                        </label>
+                        <select
+                          value={buyerLocation}
+                          onChange={(e) => setBuyerLocation(e.target.value)}
+                          className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                        >
+                          {LOCATIONS.map(l => <option key={l}>{l}</option>)}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">
+                          Preferred Hand-over Spot
+                        </label>
+                        <select
+                          value={buyerPreferredSpot}
+                          onChange={(e) => setBuyerPreferredSpot(e.target.value)}
+                          className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                        >
+                          {STANDARD_SPOTS.map(spot => (
+                            <option key={spot} value={spot}>{spot}</option>
+                          ))}
+                          <option value="Other">Other (Specify below)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {buyerLocation === 'Other (Manual)' && (
+                      <div>
+                        <label className="block text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">
+                          Specify Your City / Region <span className="text-red-500 text-[9px] font-bold">(Required)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={customBuyerLocation}
+                          onChange={(e) => setCustomBuyerLocation(e.target.value)}
+                          placeholder="e.g. Mumbai, Kolkata, Pilani..."
+                          className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm text-text-main placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">
-                        Your Location / Campus Area
+                        Specific Instructions / Meetup Details
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g., Pilani Campus, Krishna Bhawan"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
+                        value={buyerMeetupDetails}
+                        onChange={(e) => setBuyerMeetupDetails(e.target.value)}
+                        placeholder="e.g. hcl 126, cafe 3..."
                         className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm text-text-main placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
                       />
                     </div>
@@ -297,7 +362,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                         Note to seller <span className="normal-case text-[9px] text-text-muted font-medium">(optional)</span>
                       </label>
                       <textarea
-                        placeholder="Any specific time or place you prefer?"
+                        placeholder="Anything else you'd like to mention?"
                         value={userNote}
                         onChange={(e) => setUserNote(e.target.value)}
                         rows={2}
@@ -409,7 +474,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                       </svg>
                     </div>
                     <span className="text-xs font-medium text-text-muted leading-relaxed">
-                      I agree: I'll pay <strong className="text-text-main">₹{platformFee} online now</strong> as the platform fee, and <strong className="text-text-main">₹{subtotal} cash</strong> to the seller at the meetup after inspecting the notes.
+                      I agree: I'll pay <strong className="text-text-main">₹0 online (Waived)</strong> as the platform fee, and <strong className="text-text-main">₹{total} cash</strong> to the seller at the meetup after inspecting the notes.
                     </span>
                   </label>
                 </Card>

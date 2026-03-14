@@ -147,13 +147,16 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                 </div>
 
                 <div className="p-4 sm:p-6 space-y-4">
-                  {/* Delivery / collection banner */}
-                  {(selectedOrder.delivery_details || selectedOrder.collection_date) && (
-                    <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/40 rounded-2xl px-4 py-3.5">
+                  {/* Delivery / collection / meetup banner */}
+                  {(selectedOrder.delivery_details || selectedOrder.collection_date || selectedOrder.buyer_preferred_spot) && (
+                    <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/40 rounded-2xl px-4 py-3.5 shadow-sm shadow-blue-500/5">
                       <Truck className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-                      <div className="text-xs font-medium text-blue-800 dark:text-blue-200 space-y-0.5">
-                        {selectedOrder.delivery_details && <p><span className="font-black">Delivery:</span> {selectedOrder.delivery_details}</p>}
-                        {selectedOrder.collection_date && <p><span className="font-black">Collection:</span> {selectedOrder.collection_date}</p>}
+                      <div className="text-xs font-medium text-blue-800 dark:text-blue-200 space-y-1">
+                        {selectedOrder.delivery_details && <p><span className="font-black">Delivery Details:</span> {selectedOrder.delivery_details}</p>}
+                        {selectedOrder.collection_date && <p><span className="font-black">Your Availability:</span> {selectedOrder.collection_date}</p>}
+                        {selectedOrder.buyer_location && <p><span className="font-black">Your Region:</span> {selectedOrder.buyer_location}</p>}
+                        {selectedOrder.buyer_preferred_spot && <p><span className="font-black uppercase tracking-wider text-[9px]">Your Preferred Spot:</span> {selectedOrder.buyer_preferred_spot}</p>}
+                        {selectedOrder.buyer_meetup_details && <p className="text-[11px] italic opacity-80 mt-1 mt-0.5">"{selectedOrder.buyer_meetup_details}"</p>}
                       </div>
                     </div>
                   )}
@@ -253,7 +256,9 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                           <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Online Platform Fee</p>
                           <p className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">Paid successfully</p>
                         </div>
-                        <p className="text-xl font-black text-emerald-800 dark:text-emerald-300">₹{selectedOrder.platform_fee}</p>
+                        <p className="text-xl font-black text-emerald-800 dark:text-emerald-300">
+                          {selectedOrder.platform_fee === 0 ? '₹0 (Waived)' : `₹${selectedOrder.platform_fee}`}
+                        </p>
                       </div>
                       
                       <div className="pt-3 border-t border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between">

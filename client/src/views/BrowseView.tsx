@@ -17,7 +17,7 @@ interface BrowseViewProps {
   refreshKey?: number;
 }
 
-const SEMESTERS = ['All', '1-1', '1-2', '2-1', '2-2', '3-1', '3-2', '4-1', '4-2'];
+const SEMESTERS = ['All', 'Sem1', 'Sem2', 'Sem3', 'Sem4', 'Sem5', 'Sem6', 'Sem7', 'Sem8'];
 const MATERIAL_TYPES = [
   { label: 'All', icon: Layers },
   { label: 'PPT', icon: FileText },

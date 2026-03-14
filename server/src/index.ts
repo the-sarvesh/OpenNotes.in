@@ -60,7 +60,7 @@ if (process.env.NODE_ENV === "production") {
   ) {
     console.error(
       "[FATAL] SESSION_SECRET is not set or is using the default value in production. " +
-        "Server startup aborted.",
+      "Server startup aborted.",
     );
     process.exit(1);
   }
@@ -70,7 +70,7 @@ if (process.env.NODE_ENV === "production") {
   ) {
     console.error(
       "[FATAL] JWT_SECRET is not set or is using the default value in production. " +
-        "Server startup aborted.",
+      "Server startup aborted.",
     );
     process.exit(1);
   }

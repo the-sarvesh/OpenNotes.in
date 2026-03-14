@@ -62,8 +62,10 @@ const initDb = async () => {
         meetup_pin TEXT,
         platform_fee_paid BOOLEAN NOT NULL DEFAULT 0,
         buyer_location TEXT,
+        buyer_preferred_spot TEXT,
         buyer_availability TEXT,
         buyer_note TEXT,
+        buyer_meetup_details TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (buyer_id) REFERENCES users(id)
       );
@@ -198,8 +200,10 @@ const initDb = async () => {
       "ALTER TABLE orders ADD COLUMN meetup_pin TEXT",
       "ALTER TABLE orders ADD COLUMN platform_fee_paid BOOLEAN NOT NULL DEFAULT 0",
       "ALTER TABLE orders ADD COLUMN buyer_location TEXT",
+      "ALTER TABLE orders ADD COLUMN buyer_preferred_spot TEXT",
       "ALTER TABLE orders ADD COLUMN buyer_availability TEXT",
       "ALTER TABLE orders ADD COLUMN buyer_note TEXT",
+      "ALTER TABLE orders ADD COLUMN buyer_meetup_details TEXT",
       "ALTER TABLE order_items ADD COLUMN meetup_pin TEXT",
       // ── Coupon / fee-waiver migrations ────────────────────────────────────
       "ALTER TABLE orders ADD COLUMN platform_fee_waived INTEGER NOT NULL DEFAULT 0",

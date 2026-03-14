@@ -51,7 +51,7 @@ export const CartView: React.FC<CartViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 pb-32">
       <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-primary-hover hover:bg-primary-hover rounded-xl transition-colors">
+        <button onClick={() => navigate('/browse')} className="p-2 hover:bg-primary-hover hover:bg-primary-hover rounded-xl transition-colors">
           <ArrowLeft className="h-6 w-6 text-text-muted" />
         </button>
         <h1 className="text-3xl font-black text-text-main tracking-tight">Shopping Cart</h1>

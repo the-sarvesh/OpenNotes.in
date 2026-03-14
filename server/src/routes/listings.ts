@@ -138,7 +138,7 @@ router.post(
         return res.status(400).json({ error: "Quantity must be a positive number" });
       }
 
-      const validSemesters = ["1-1", "1-2", "2-1", "2-2", "3-1", "3-2", "4-1", "4-2"];
+      const validSemesters = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8"];
       if (!validSemesters.includes(semester)) {
         return res.status(400).json({ error: "Invalid semester" });
       }

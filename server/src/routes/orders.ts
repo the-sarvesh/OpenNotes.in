@@ -10,7 +10,7 @@ import { io } from "../socket.js";
 
 const router = express.Router();
 
-const PLATFORM_FEE_PERCENTAGE = 10;
+const PLATFORM_FEE_PERCENTAGE = 0;
 
 /** Generate a cryptographically secure 4-digit PIN */
 const generateSecurePin = () =>
@@ -68,8 +68,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
     const {
       items,
       buyer_location,
+      buyer_preferred_spot,
       buyer_availability,
       buyer_note,
+      buyer_meetup_details,
       coupon_code,
     } = req.body;
 
@@ -181,9 +183,9 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       await tx.execute({
         sql: `INSERT INTO orders
                 (id, buyer_id, total_amount, platform_fee, platform_fee_waived,
-                 coupon_code, status, buyer_location, buyer_availability,
-                 buyer_note, platform_fee_paid)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 coupon_code, status, buyer_location, buyer_preferred_spot,
+                 buyer_availability, buyer_note, buyer_meetup_details, platform_fee_paid)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           orderId,
           buyerId,
@@ -193,8 +195,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           appliedCouponCode,
           "pending_meetup",
           buyer_location || null,
+          buyer_preferred_spot || null,
           buyer_availability,
           buyer_note || null,
+          buyer_meetup_details || null,
           1,
         ],
       });
@@ -237,7 +241,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         const messageId = uuidv4();
         
         // Structured purchase message
-        const initialMessage = `Hi! I just purchased your "${orderItem.title}".\n\nI'm based in ${buyer_location || "BITS"} and available on: ${buyer_availability}.`;
+        const initialMessage = `Hi! I just purchased your "${orderItem.title}".\n\nI'm based in ${buyer_location || "BITS"}${buyer_preferred_spot ? ` and prefer meeting at ${buyer_preferred_spot}` : ""}.\n\nAvailability: ${buyer_availability}${buyer_meetup_details ? `\nDetails: ${buyer_meetup_details}` : ""}`;
         const metadata = JSON.stringify({
           type: 'purchase_notice',
           listingId: orderItem.listing_id,
@@ -246,8 +250,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           orderItemId: orderItem.id,
           meetupPin: orderItem.meetup_pin,
           buyerLocation: buyer_location,
+          buyerPreferredSpot: buyer_preferred_spot,
           buyerAvailability: buyer_availability,
-          buyerNote: buyer_note
+          buyerNote: buyer_note,
+          buyerMeetupDetails: buyer_meetup_details
         });
 
         await tx.execute({
@@ -336,8 +342,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             orderItemId: orderItem.id,
             meetupPin: orderItem.meetup_pin,
             buyerLocation: buyer_location,
+            buyerPreferredSpot: buyer_preferred_spot,
             buyerAvailability: buyer_availability,
-            buyerNote: buyer_note
+            buyerNote: buyer_note,
+            buyerMeetupDetails: buyer_meetup_details
           }),
 
           is_read: false,
@@ -433,6 +441,7 @@ router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
         SELECT oi.*, o.status as order_status, o.created_at as order_date, o.buyer_id,
                o.delivery_details, o.collection_date, o.platform_fee,
                o.platform_fee_waived, o.coupon_code,
+               o.buyer_location, o.buyer_preferred_spot, o.buyer_availability, o.buyer_meetup_details,
                l.title, l.course_code, l.image_url, l.price as listing_price,
                l.meetup_location,
                u.name as buyer_name, u.email as buyer_email

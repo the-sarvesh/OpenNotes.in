@@ -614,7 +614,7 @@ export const AdminView: React.FC = () => {
                         <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
                           <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-4">Order Summary</p>
                           <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Total Amount" value={<span className="text-[#FFC000] font-black text-base">₹{selectedOrder.total_amount}</span>} />
-                          <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Platform Fee" value={`₹${selectedOrder.platform_fee}`} />
+                          <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Platform Fee" value={selectedOrder.platform_fee === 0 ? '₹0 (Waived)' : `₹${selectedOrder.platform_fee}`} />
                           <InfoRow icon={<Tag className="h-3.5 w-3.5" />} label="Status" value={
                             <div className="flex items-center gap-2">
                               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${statusColors[selectedOrder.status] || 'bg-white/10 text-white'}`}>
@@ -698,7 +698,7 @@ export const AdminView: React.FC = () => {
                               </div>
                               <div className="text-right shrink-0">
                                 <p className="text-sm font-black text-[#FFC000]">₹{o.total_amount}</p>
-                                <p className="text-[10px] text-slate-500">fee ₹{o.platform_fee}</p>
+                                <p className="text-[10px] text-slate-500">fee {o.platform_fee === 0 ? 'Waived' : `₹${o.platform_fee}`}</p>
                               </div>
                               <ChevronRight className="h-4 w-4 text-slate-600 group-hover:text-[#FFC000] transition-colors shrink-0" />
                             </div>

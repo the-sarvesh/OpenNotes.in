@@ -123,7 +123,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             </div>
 
             {/* Logistics */}
-            <div className="p-4 bg-background border border-border rounded-2xl mb-6">
+            <div className="p-4 bg-background border border-border rounded-2xl mb-4">
               <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 px-1">Exchange Details</p>
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-primary/10 rounded-xl">
@@ -139,6 +139,14 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Launch Promo Badge */}
+            <div className="mb-6 px-4 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-2.5 shadow-sm">
+              <div className="p-1 bg-emerald-500 rounded-lg text-white">
+                <ShieldCheck className="h-3.5 w-3.5" />
+              </div>
+              <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-[0.1em]">Limited Time: ₹0 Platform Fee! 🚀</p>
             </div>
 
             {/* Info Grid */}

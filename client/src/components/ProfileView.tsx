@@ -6,7 +6,7 @@ import {
   TrendingUp, Star, MessageCircle,
   AlertCircle, Users, Check, X,
   ChevronRight, ShieldAlert, LayoutDashboard,
-  PlusCircle, ShoppingBag
+  PlusCircle, ShoppingBag, CheckCircle2, Info
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
@@ -617,7 +617,12 @@ export const ProfileView = ({
                                 )}
                                 {sale.meetup_location && (
                                   <span className="text-[9px] text-primary font-semibold flex items-center gap-1">
-                                    <MapPin className="h-2.5 w-2.5" /> {sale.meetup_location}
+                                    <MapPin className="h-2.5 w-2.5" /> {sale.meetup_location} (Yours)
+                                  </span>
+                                )}
+                                {sale.buyer_preferred_spot && (
+                                  <span className="text-[9px] text-emerald-600 font-bold flex items-center gap-1">
+                                    <CheckCircle2 className="h-2.5 w-2.5" /> {sale.buyer_preferred_spot} (Buyer)
                                   </span>
                                 )}
                               </div>
@@ -955,28 +960,59 @@ export const ProfileView = ({
                 {/* Logistics */}
                 <div>
                   <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">Logistics & Location</p>
-                  <div className="bg-surface/50 border border-border rounded-xl p-4 space-y-3">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-surface border border-border rounded-lg shrink-0">
-                        <MapPin className="h-3.5 w-3.5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-0.5">Location</p>
-                        <p className="text-sm font-bold text-text-main italic">
-                          "{selectedListing?.location || selectedSale?.location || 'Not specified'}"
-                        </p>
-                      </div>
-                    </div>
-                    {(selectedListing?.meetup_location || selectedSale?.meetup_location) && (
-                      <div className="flex items-start gap-3 pt-3 border-t border-border">
-                        <div className="p-2 bg-surface dark:bg-amber-950/30 border border-border rounded-lg shrink-0">
-                          <Eye className="h-3.5 w-3.5 text-primary" />
+                  <div className="bg-surface/50 border border-border rounded-xl p-4 space-y-4">
+                    
+                    {/* Seller Side (You) */}
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-surface border border-border rounded-lg shrink-0">
+                          <MapPin className="h-3.5 w-3.5 text-primary" />
                         </div>
                         <div>
-                          <p className="text-[9px] font-black text-primary text-primary uppercase tracking-widest mb-0.5">Hand-over Instructions</p>
-                          <p className="text-sm font-bold text-text-main italic leading-snug">
-                            "{selectedListing?.meetup_location || selectedSale?.meetup_location}"
+                          <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-0.5">Your Location</p>
+                          <p className="text-sm font-bold text-text-main">
+                            {selectedListing?.location || selectedSale?.location || 'Not specified'}
                           </p>
+                        </div>
+                      </div>
+                      {(selectedListing?.meetup_location || selectedSale?.meetup_location) && (
+                        <div className="flex items-start gap-3 pl-11">
+                          <div>
+                            <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-0.5">Your Hand-over Instructions</p>
+                            <p className="text-xs font-semibold text-text-main italic leading-snug">
+                              "{selectedListing?.meetup_location || selectedSale?.meetup_location}"
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Buyer Side — ONLY FOR SALES */}
+                    {selectedSale && selectedSale.buyer_preferred_spot && (
+                      <div className="pt-4 border-t border-border space-y-3">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg shrink-0">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Buyer's Preferred Spot</p>
+                            <p className="text-sm font-bold text-text-main">
+                              {selectedSale.buyer_preferred_spot}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 pl-11">
+                          <div className="flex-1">
+                            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Buyer's Availability & Notes</p>
+                            <p className="text-xs font-semibold text-text-main leading-snug">
+                              {selectedSale.collection_date}
+                            </p>
+                            {selectedSale.buyer_meetup_details && (
+                              <p className="text-xs text-text-muted italic mt-1.5 p-2 bg-background rounded-lg border border-border/50">
+                                "{selectedSale.buyer_meetup_details}"
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
