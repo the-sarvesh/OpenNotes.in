@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package, Tag, Layers, Eye, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package,
+  Tag, Layers, Eye, ShieldCheck, ChevronLeft, ChevronRight,
+  Share2, Maximize2, Calendar, Check, Banknote, CreditCard, Info,
+} from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
 import { formatSemester } from '../utils/formatters';
@@ -16,11 +21,28 @@ interface ProductDetailsModalProps {
   onContactSeller: (sellerId: string, listingId: string, listingTitle: string) => void;
 }
 
-const conditionColor: Record<string, string> = {
-  'Like New': 'text-emerald-700 bg-emerald-50 border-emerald-100',
-  'Good': 'text-blue-700 bg-blue-50 border-blue-100',
-  'Heavily Annotated': 'text-amber-700 bg-amber-50 border-amber-100',
+// ── condition pill colours ────────────────────────────────────────
+const conditionStyle: Record<string, string> = {
+  'Like New': 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800',
+  'Good': 'text-blue-700    dark:text-blue-300    bg-blue-50    dark:bg-blue-950/40    border-blue-200    dark:border-blue-800',
+  'Fair': 'text-amber-700   dark:text-amber-300   bg-amber-50   dark:bg-amber-950/40   border-amber-200   dark:border-amber-800',
+  'Heavily Annotated': 'text-orange-700  dark:text-orange-300  bg-orange-50  dark:bg-orange-950/40  border-orange-200  dark:border-orange-800',
 };
+
+// ── tiny reusable pill ────────────────────────────────────────────
+const Pill: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider ${className}`}>
+    {children}
+  </span>
+);
+
+// ── info grid tile ────────────────────────────────────────────────
+const Tile: React.FC<{ label: string; value: string; className?: string }> = ({ label, value, className = '' }) => (
+  <div className={`p-3.5 rounded-2xl bg-background border border-border ${className}`}>
+    <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">{label}</p>
+    <p className="text-sm font-bold text-text-main leading-tight">{value}</p>
+  </div>
+);
 
 export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   note, onClose, onAddToCart, onBuyNow, isInCart, cart, onContactSeller,
@@ -28,44 +50,48 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showLightbox, setShowLightbox] = useState(false);
+  const [copied, setCopied] = useState(false);
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
   const hasTrackedView = React.useRef(false);
 
   const images = note.images && note.images.length > 0 ? note.images : [note.image];
 
-  const nextImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentImageIndex((prev) => (prev + 1) % images.length);
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    toast.success('Link copied!');
+    setTimeout(() => setCopied(false), 2000);
   };
 
+  const nextImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImageIndex(p => (p + 1) % images.length);
+  };
   const prevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+    setCurrentImageIndex(p => (p - 1 + images.length) % images.length);
   };
 
   useEffect(() => {
-    // Increment view count on mount
     if (!hasTrackedView.current) {
-      apiRequest(`/api/listings/${note.id}/view`, { method: 'POST' }).catch(() => {});
+      apiRequest(`/api/listings/${note.id}/view`, { method: 'POST' }).catch(() => { });
       hasTrackedView.current = true;
     }
-
     document.body.style.overflow = 'hidden';
     document.body.style.touchAction = 'none';
-    return () => { 
+    return () => {
       document.body.style.overflow = '';
       document.body.style.touchAction = '';
     };
   }, [note.id]);
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this listing?')) return;
+    if (!confirm('Delete this listing?')) return;
     setDeleting(true);
     try {
-      const res = await apiRequest(`/api/admin/listings/${note.id}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) { alert('Deleted successfully'); onClose(); window.location.reload(); }
+      const res = await apiRequest(`/api/admin/listings/${note.id}`, { method: 'DELETE' });
+      if (res.ok) { alert('Deleted'); onClose(); window.location.reload(); }
     } finally {
       setDeleting(false);
     }
@@ -73,207 +99,349 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 
   const cartItem = cart.find(i => i.note.id === note.id);
   const currentQtyInCart = cartItem?.quantity || 0;
+  const platformFee = Math.round(note.price * 0.1);
+  const cashToSeller = note.price - platformFee;
+
+  const deliveryLabel =
+    note.deliveryMethod === 'in_person' ? 'In-person meetup' :
+      note.deliveryMethod === 'Hand-to-Hand' ? 'In-person meetup' :
+        note.deliveryMethod === 'courier' ? 'Courier / Shipping' :
+          note.deliveryMethod === 'Delivery' ? 'Courier / Shipping' :
+            'In-person or Courier';
 
   return (
     <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
       <motion.div
-        initial={{ opacity: 0, y: 100, scale: 0.98 }}
+        initial={{ opacity: 0, y: 48, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 100, scale: 0.98 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-        className="bg-surface w-full max-w-3xl sm:rounded-[2.5rem] shadow-2xl flex flex-col sm:flex-row max-h-[92vh] sm:max-h-[85vh] overflow-hidden border border-border"
+        exit={{ opacity: 0, y: 32, scale: 0.97 }}
+        transition={{ type: 'spring', damping: 32, stiffness: 480, mass: 0.7 }}
+        className="bg-surface w-full max-w-3xl sm:rounded-[2rem] shadow-2xl flex flex-col sm:flex-row max-h-[92vh] sm:max-h-[86vh] overflow-hidden border border-border"
       >
-        {/* Close Button Mobile */}
-        <button onClick={onClose} className="sm:hidden absolute top-4 right-4 z-10 p-2 bg-black/20 backdrop-blur-md rounded-full text-white active:scale-90">
+        {/* ── Mobile close pill ──────────────────────────────────── */}
+        <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/30 z-10" />
+        <button
+          onClick={onClose}
+          className="sm:hidden absolute top-4 right-4 z-10 p-2 bg-black/25 backdrop-blur-md rounded-full text-white active:scale-90 transition-all"
+        >
           <X className="h-5 w-5" />
         </button>
 
-        {/* Left: Image Section */}
-        <div className="relative w-full sm:w-[45%] h-72 sm:h-auto shrink-0 bg-slate-100 group/carousel">
+        {/* ══════════════════════════════════════════════════════════
+            LEFT — Image carousel
+        ══════════════════════════════════════════════════════════ */}
+        <div
+          className="relative w-full sm:w-[44%] h-64 sm:h-auto shrink-0 bg-slate-100 dark:bg-slate-800 group/carousel cursor-zoom-in overflow-hidden"
+          onClick={() => setShowLightbox(true)}
+        >
+          {/* Image */}
           <AnimatePresence mode="wait">
             <motion.img
               key={currentImageIndex}
               src={images[currentImageIndex]}
-              alt={`${note.title} - ${currentImageIndex + 1}`}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
+              alt={`${note.title} — ${currentImageIndex + 1}`}
+              initial={{ opacity: 0, scale: 1.02 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.15 }}
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
           </AnimatePresence>
 
+          {/* Top-left action buttons */}
+          <div className="absolute top-3 left-3 flex gap-1.5 z-20">
+            <button
+              onClick={e => { e.stopPropagation(); handleShare(); }}
+              className="p-2 bg-black/25 hover:bg-black/45 backdrop-blur-md rounded-xl text-white transition-all active:scale-90"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Share2 className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); setShowLightbox(true); }}
+              className="p-2 bg-black/25 hover:bg-black/45 backdrop-blur-md rounded-xl text-white transition-all active:scale-90"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Carousel controls */}
           {images.length > 1 && (
             <>
               <button
                 onClick={prevImage}
-                className="absolute left-3 top-1/2 -translate-y-1/2 p-2 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all sm:opacity-0 group-hover/carousel:opacity-100 active:scale-90 z-10"
+                className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/25 hover:bg-black/45 backdrop-blur-md rounded-full text-white transition-all sm:opacity-0 group-hover/carousel:opacity-100 active:scale-90 z-10"
               >
-                <ChevronLeft className="h-5 w-5" />
+                <ChevronLeft className="h-4 w-4" />
               </button>
               <button
                 onClick={nextImage}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all sm:opacity-0 group-hover/carousel:opacity-100 active:scale-90 z-10"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/25 hover:bg-black/45 backdrop-blur-md rounded-full text-white transition-all sm:opacity-0 group-hover/carousel:opacity-100 active:scale-90 z-10"
               >
-                <ChevronRight className="h-5 w-5" />
+                <ChevronRight className="h-4 w-4" />
               </button>
-              
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 px-3 py-1.5 bg-black/20 backdrop-blur-md rounded-full z-10">
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 px-3 py-1.5 bg-black/25 backdrop-blur-md rounded-full z-10">
                 {images.map((_, i) => (
                   <div
                     key={i}
-                    className={`h-1.5 w-1.5 rounded-full transition-all ${
-                      i === currentImageIndex ? 'bg-white w-3' : 'bg-white/40'
-                    }`}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${i === currentImageIndex ? 'bg-white w-4' : 'bg-white/40 w-1.5'}`}
                   />
                 ))}
               </div>
             </>
           )}
 
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent sm:hidden" />
-          
-          {/* Badges on image */}
-          <div className="absolute bottom-4 left-5 flex flex-col gap-2">
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary text-black text-[10px] font-black rounded-lg uppercase tracking-wider shadow-md">
-              <Tag className="h-2.5 w-2.5" />{note.courseCode}
+          {/* Bottom gradient (mobile) */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent sm:hidden pointer-events-none" />
+
+          {/* Course code badge */}
+          <div className="absolute bottom-4 left-4 z-10">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-black text-[10px] font-black rounded-xl uppercase tracking-wider shadow-lg">
+              <Tag className="h-3 w-3" />{note.courseCode}
             </span>
           </div>
         </div>
 
-        {/* Right: Content Section */}
-        <div className="flex-1 flex flex-col min-w-0 bg-surface">
-          <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-6 scrollbar-hide">
-            <div className="hidden sm:flex justify-end mb-2">
-              <button onClick={onClose} className="p-2 hover:bg-background rounded-xl transition-all active:scale-90 text-text-muted">
+        {/* ══════════════════════════════════════════════════════════
+            RIGHT — Details & actions
+        ══════════════════════════════════════════════════════════ */}
+        <div className="flex-1 flex flex-col min-w-0 bg-surface overflow-hidden">
+
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-5 sm:pt-6 pb-4 scrollbar-hide space-y-4">
+
+            {/* Desktop close */}
+            <div className="hidden sm:flex justify-end -mt-1 -mr-1">
+              <button
+                onClick={onClose}
+                className="p-1.5 hover:bg-background rounded-xl transition-all active:scale-90 text-text-muted"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <h2 className="text-xl font-black text-text-main leading-tight">{note.title}</h2>
-              <div className="flex gap-2 shrink-0">
-                {note.views !== undefined && (
-                  <div className="flex items-center gap-1 px-2 py-1 bg-primary/10 rounded-lg">
-                    <Eye className="h-3 w-3 text-primary" />
-                    <span className="text-xs font-bold text-primary">{note.views}</span>
-                  </div>
-                )}
-                {note.rating > 0 && (
-                  <div className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
-                    <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
-                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300">{note.rating}</span>
-                  </div>
-                )}
+            {/* Title + meta badges */}
+            <div>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <h2 className="text-xl font-black text-text-main leading-tight tracking-tight">{note.title}</h2>
+                <div className="flex gap-1.5 shrink-0 mt-0.5">
+                  {note.views !== undefined && (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-primary/10 rounded-lg">
+                      <Eye className="h-3 w-3 text-primary" />
+                      <span className="text-[10px] font-bold text-primary">{note.views}</span>
+                    </span>
+                  )}
+                  {note.rating > 0 && (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
+                      <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">{note.rating}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Seller pill */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-full">
+                <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center text-black text-[9px] font-black shrink-0">
+                  {note.seller.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-xs font-bold text-text-muted">{note.seller}</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-fit px-3 py-1.5 bg-background border border-border rounded-full mb-6">
-              <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center text-black text-[9px] font-black">
-                {note.seller.charAt(0).toUpperCase()}
+            {/* ── Payment split strip ─────────────────────────────── */}
+            <div className="rounded-2xl border border-border overflow-hidden">
+              <div className="grid grid-cols-2 divide-x divide-border">
+                <div className="p-3 flex flex-col gap-0.5 bg-primary/5">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <CreditCard className="h-3 w-3 text-primary shrink-0" />
+                    <span className="text-[9px] font-black text-primary uppercase tracking-widest">Pay Online</span>
+                  </div>
+                  <p className="text-xl font-black text-text-main">₹{platformFee}</p>
+                  <p className="text-[9px] text-text-muted">Platform fee</p>
+                </div>
+                <div className="p-3 flex flex-col gap-0.5 bg-surface">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <Banknote className="h-3 w-3 text-text-muted shrink-0" />
+                    <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">Cash at Meetup</span>
+                  </div>
+                  <p className="text-xl font-black text-text-main">₹{cashToSeller}</p>
+                  <p className="text-[9px] text-text-muted">To seller</p>
+                </div>
               </div>
-              <span className="text-xs font-bold text-text-muted">{note.seller}</span>
+              <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-t border-amber-200/50 dark:border-amber-800/40 flex items-center gap-2">
+                <Info className="h-3 w-3 text-amber-600 shrink-0" />
+                <p className="text-[9px] text-amber-700 dark:text-amber-400 font-medium">
+                  Share your <strong>4-digit PIN</strong> with seller only after inspecting notes.
+                </p>
+              </div>
             </div>
 
-            {/* Logistics */}
-            <div className="p-4 bg-background border border-border rounded-2xl mb-4">
-              <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 px-1">Exchange Details</p>
+            {/* ── Exchange details ─────────────────────────────────── */}
+            <div className="p-4 bg-background border border-border rounded-2xl">
+              <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-3">Exchange Details</p>
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-primary/10 rounded-xl">
+                <div className="p-2 bg-primary/10 rounded-xl shrink-0">
                   <MapPin className="h-4 w-4 text-primary" />
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-text-main">
-                    {note.deliveryMethod === 'in_person' ? 'In-person meetup' : note.deliveryMethod === 'courier' ? 'Courier / Shipping' : 'In-person or Courier'}
-                  </p>
-                  <p className="text-xs font-medium text-text-muted mt-0.5">{note.location}</p>
+                <div className="space-y-0.5">
+                  <p className="text-sm font-bold text-text-main">{deliveryLabel}</p>
+                  <p className="text-xs text-text-muted">{note.location}</p>
                   {note.preferredMeetupSpot && (
-                    <p className="text-xs font-black text-primary mt-2">Spot: {note.preferredMeetupSpot}</p>
+                    <p className="text-xs font-black text-primary mt-1">
+                      📍 {note.preferredMeetupSpot}
+                    </p>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Launch Promo Badge */}
-            <div className="mb-6 px-4 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-2.5 shadow-sm">
-              <div className="p-1 bg-emerald-500 rounded-lg text-white">
-                <ShieldCheck className="h-3.5 w-3.5" />
+            {/* ── Description ──────────────────────────────────────── */}
+            {note.description && (
+              <div className="p-4 bg-background border border-border rounded-2xl">
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-2">About this material</p>
+                <p className="text-xs text-text-muted leading-relaxed italic">"{note.description}"</p>
               </div>
-              <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-[0.1em]">Limited Time: ₹0 Platform Fee! 🚀</p>
+            )}
+
+            {/* ── Urgency + promo ──────────────────────────────────── */}
+            <div className="space-y-2">
+              {note.quantity === 1 && (
+                <div className="px-4 py-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200/60 dark:border-red-800/40 rounded-xl flex items-center gap-2">
+                  <Package className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                  <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-wider">Only 1 left!</p>
+                </div>
+              )}
+              <div className="px-4 py-2.5 bg-emerald-500/8 border border-emerald-500/20 rounded-xl flex items-center gap-2">
+                <div className="p-1 bg-emerald-500 rounded-lg text-white shrink-0">
+                  <ShieldCheck className="h-3 w-3" />
+                </div>
+                <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-[0.1em]">
+                  Limited Time: ₹0 Platform Fee! 🚀
+                </p>
+              </div>
             </div>
 
-            {/* Info Grid */}
-            <div className="grid grid-cols-2 gap-3 mb-8">
-              <div className="p-4 rounded-2xl bg-background border border-border">
-                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Semester</p>
-                <p className="text-sm font-bold text-text-main">{formatSemester(note.semester)}</p>
+            {/* ── Info grid ────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <Tile label="Semester" value={formatSemester(note.semester)} />
+              <div className={`p-3.5 rounded-2xl border ${conditionStyle[note.condition] || 'bg-background border-border'}`}>
+                <p className="text-[9px] font-black uppercase tracking-widest mb-1 opacity-70">Condition</p>
+                <p className="text-sm font-bold leading-tight">{note.condition}</p>
               </div>
-              <div className="p-4 rounded-2xl bg-background border border-border">
-                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Condition</p>
-                <p className="text-sm font-bold text-text-main">{note.condition}</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-background border border-border">
-                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Material</p>
-                <p className="text-sm font-bold text-text-main">{note.materialType}</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-background border border-border">
-                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Availability</p>
-                <p className="text-sm font-bold text-text-main">{note.quantity} left</p>
-              </div>
+              <Tile label="Material" value={note.materialType} />
+              <Tile label="Availability" value={`${note.quantity} left`} />
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="p-5 sm:p-8 bg-background border-t border-border space-y-4">
-            <div className="flex items-baseline justify-between mb-1">
-              <span className="text-xs font-black text-text-muted uppercase tracking-widest">Total Price</span>
-              <span className="text-3xl font-black text-text-main">₹{note.price}</span>
+          {/* ── Footer actions ───────────────────────────────────────── */}
+          <div className="px-5 sm:px-7 py-4 bg-background border-t border-border space-y-3 shrink-0">
+            {/* Price line */}
+            <div className="flex items-baseline justify-between">
+              <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Total Price</span>
+              <span className="text-3xl font-black text-text-main tracking-tight">₹{note.price}</span>
             </div>
 
-            <div className="flex gap-3">
+            {/* Action buttons — single row on both mobile and desktop */}
+            <div className="flex gap-2">
               {user?.role === 'admin' && (
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
-                  className="p-4 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-90"
+                  className="p-3 sm:p-3.5 bg-red-500/10 text-red-500 rounded-xl sm:rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-90 shrink-0"
                 >
-                  <Trash2 className="h-5 w-5" />
+                  <Trash2 className="h-4 w-4" />
                 </button>
               )}
-              
+
               <button
                 onClick={() => onContactSeller(note.sellerId || '', note.id, note.title)}
-                className="p-4 bg-surface border border-border rounded-2xl text-text-muted hover:text-primary hover:border-primary transition-all active:scale-90"
+                className="p-3 sm:p-3.5 bg-surface border border-border rounded-xl sm:rounded-2xl text-text-muted hover:text-primary hover:border-primary transition-all active:scale-90 shrink-0"
+                title="Message seller"
               >
-                <MessageCircle className="h-5 w-5" />
+                <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
 
+              {/* Add to Cart */}
               <button
                 onClick={() => onAddToCart(note)}
                 disabled={note.quantity === 0 || currentQtyInCart >= note.quantity}
-                className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-lg active:scale-95 disabled:opacity-40 ${
-                  isInCart 
-                    ? 'bg-emerald-500 text-white shadow-emerald-500/20' 
-                    : 'bg-primary text-black shadow-primary/20'
-                }`}
+                className={`flex-1 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-[0.15em] transition-all shadow-lg active:scale-95 disabled:opacity-40 flex items-center justify-center gap-1.5 ${isInCart
+                    ? 'bg-emerald-500 text-white shadow-emerald-500/20'
+                    : 'bg-primary text-black shadow-primary/20 hover:bg-primary-hover'
+                  }`}
               >
-                {isInCart ? 'In Cart ✓' : 'Add to Cart'}
+                {isInCart
+                  ? <><Check className="h-3.5 w-3.5" /><span>In Cart</span></>
+                  : <><ShoppingCart className="h-3.5 w-3.5" /><span>Add to Cart</span></>
+                }
               </button>
 
-              {!isMobile && (
-                <button
-                  onClick={() => onBuyNow(note)}
-                  disabled={note.quantity === 0}
-                  className="flex-1 py-4 bg-primary text-black rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-lg shadow-primary/20 active:scale-95 disabled:opacity-40"
-                >
-                  Buy Now
-                </button>
-              )}
+              {/* Buy Now — always in the same row */}
+              <button
+                onClick={() => onBuyNow(note)}
+                disabled={note.quantity === 0}
+                className="flex-1 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-[0.15em] transition-all active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-1.5"
+                style={{ background: '#fb641b', color: '#fff', boxShadow: '0 3px 14px rgba(251,100,27,0.3)' }}
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                <span>Buy Now</span>
+              </button>
             </div>
           </div>
         </div>
       </motion.div>
+
+      {/* ── Lightbox ────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showLightbox && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] bg-black/96 flex flex-col items-center justify-center p-4 sm:p-10"
+            onClick={() => setShowLightbox(false)}
+          >
+            <button
+              onClick={() => setShowLightbox(false)}
+              className="absolute top-5 right-5 p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all z-[160]"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <motion.div
+              className="relative w-full max-w-5xl h-full flex items-center justify-center"
+              initial={{ scale: 0.94, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.94, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              {images.length > 1 && (
+                <>
+                  <button onClick={prevImage} className="absolute left-0 top-1/2 -translate-y-1/2 p-3.5 bg-white/8 hover:bg-white/15 rounded-full text-white transition-all active:scale-90 z-10">
+                    <ChevronLeft className="h-7 w-7" />
+                  </button>
+                  <button onClick={nextImage} className="absolute right-0 top-1/2 -translate-y-1/2 p-3.5 bg-white/8 hover:bg-white/15 rounded-full text-white transition-all active:scale-90 z-10">
+                    <ChevronRight className="h-7 w-7" />
+                  </button>
+                </>
+              )}
+
+              <img
+                src={images[currentImageIndex]}
+                alt="Full preview"
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                onClick={e => e.stopPropagation()}
+                referrerPolicy="no-referrer"
+              />
+
+              <p className="absolute bottom-0 left-0 right-0 text-center py-5 text-white/50 text-xs font-medium tracking-widest uppercase">
+                {currentImageIndex + 1} / {images.length}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -122,6 +122,7 @@ router.post(
       const sellerId = req.user!.id;
       const {
         title,
+        description,
         course_code,
         semester,
         condition,
@@ -143,6 +144,8 @@ router.post(
       if (imageUrls.length === 0) {
         imageUrls.push("https://images.unsplash.com/photo-1517842645767-c639042777db?q=80&w=800&auto=format&fit=crop");
       }
+
+      const mainImageUrl = imageUrls[0];
 
       if (
         !title ||
@@ -182,32 +185,28 @@ router.post(
         is_multiple_subjects === "true" || is_multiple_subjects === true;
       const deliveryMethod = delivery_method || "in_person";
       const meetupLoc = meetup_location || null;
-
-      // Primary image for legacy support
-      const mainImageUrl = imageUrls[0];
-
-      await db.execute({
-        sql: `INSERT INTO listings (id, seller_id, title, course_code, semester, condition, price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-        args: [
-          listingId,
-          sellerId,
-          title,
-          course_code,
-          semester,
-          condition,
-          parsedPrice,
-          location,
-          mainImageUrl,
-          parsedQuantity,
-          material_type,
-          isMultiple ? 1 : 0,
-          deliveryMethod,
-          preferred_meetup_spot || null,
-          meetupLoc,
-        ],
-      });
-
+await db.execute({
+  sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+  args: [
+    listingId,
+    sellerId,
+    title,
+    description || null,
+    course_code,
+    semester,
+    condition,
+    parsedPrice,
+    location,
+    mainImageUrl,
+    parsedQuantity,
+    material_type,
+    isMultiple ? 1 : 0,
+    deliveryMethod,
+    preferred_meetup_spot || null,
+    meetupLoc,
+  ],
+});
       // Insert all images into listing_images table
       for (let i = 0; i < imageUrls.length; i++) {
         await db.execute({

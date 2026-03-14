@@ -28,6 +28,7 @@ interface FormData {
   isMultipleSubjects: boolean;
   subjects: string[];
   title: string;
+  description: string;
   price: string;
   quantity: string;
   condition: string;
@@ -47,6 +48,7 @@ const INITIAL_FORM: FormData = {
   isMultipleSubjects: false,
   subjects: [],
   title: '',
+  description: '',
   price: '',
   quantity: '1',
   condition: 'Good',
@@ -146,6 +148,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       
       const fd = new FormData();
       fd.append('title', form.title);
+      fd.append('description', form.description);
       fd.append('course_code', form.isMultipleSubjects ? 'Multiple' : form.courseCode);
       fd.append('semester', form.semester);
       fd.append('condition', form.condition);
@@ -421,6 +424,16 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
               <div>
                 <Label>Listing Title</Label>
                 <input type="text" value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g., Complete annotated OS slides" className={inputClass} />
+              </div>
+
+              <div>
+                <Label>Description <span className="text-[10px] text-text-muted font-normal">(Optional)</span></Label>
+                <textarea 
+                  value={form.description} 
+                  onChange={e => set('description', e.target.value)} 
+                  placeholder="What's included? (e.g. Handwritten notes + 5 years of PYQs + colored diagrams)" 
+                  className={`${inputClass} min-h-[100px] resize-none py-4`}
+                />
               </div>
             </motion.div>
           )}

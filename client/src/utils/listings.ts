@@ -7,6 +7,7 @@ export function mapListing(item: any): Note {
   return {
     id: item.id || item.listing_id,
     title: item.title,
+    description: item.description || '',
     price: Number(item.price || item.listing_price || 0),
     quantity: Number(item.quantity ?? 0),
     seller: item.seller_name || item.seller_email || 'User',

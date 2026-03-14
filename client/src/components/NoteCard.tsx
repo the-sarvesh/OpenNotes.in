@@ -14,6 +14,7 @@ export interface Note {
   location: string;
   image: string;
   images?: string[];
+  description?: string;
   rating: number;
   quantity: number;
   materialType?: string;
