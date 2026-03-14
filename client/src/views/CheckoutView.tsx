@@ -424,26 +424,50 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
             <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] mb-5">Order Summary</p>
 
             {/* Cart items */}
-            <div className="space-y-4 max-h-72 overflow-y-auto pr-1 mb-5 scrollbar-hide">
+            <div className="space-y-4 max-h-80 overflow-y-auto pr-1 mb-5 scrollbar-hide">
               {activeCart.map((item) => (
-                <div key={item.note.id} className="flex gap-3">
-                  <div className="relative shrink-0">
-                    <img src={item.note.image} className="h-16 w-16 rounded-xl object-cover border border-border" />
-                    {item.quantity > 1 && (
-                      <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary text-black rounded-full flex items-center justify-center text-[9px] font-black border-2 border-surface shadow-sm">
-                        {item.quantity}
+                <div key={item.note.id} className="p-3 bg-background rounded-2xl border border-border/50">
+                  <div className="flex gap-3 mb-3">
+                    <div className="relative shrink-0">
+                      <img src={item.note.image} className="h-16 w-16 rounded-xl object-cover border border-border" />
+                      {item.quantity > 1 && (
+                        <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary text-black rounded-full flex items-center justify-center text-[9px] font-black border-2 border-surface shadow-sm">
+                          {item.quantity}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[9px] font-black text-primary uppercase tracking-wider mb-0.5">{item.note.courseCode}</p>
+                      <p className="text-xs font-bold text-text-main leading-snug line-clamp-2 mb-1">{item.note.title}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-text-main">₹{item.note.price * item.quantity}</span>
+                        <div className="flex gap-1.5">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.semester}</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.condition}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Seller Preferred Location & Details */}
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-3 w-3 text-primary mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[9px] font-black text-text-muted uppercase tracking-wider">Seller's Preferred Spot</p>
+                        <p className="text-[11px] font-semibold text-text-main leading-tight">
+                          {item.note.preferredMeetupSpot || item.note.location || "BITS Pilani Campus"}
+                        </p>
+                      </div>
+                    </div>
+                    {item.note.materialType && (
+                      <div className="flex items-center gap-2">
+                        <Info className="h-3 w-3 text-text-muted shrink-0" />
+                        <span className="text-[10px] font-medium text-text-muted italic capitalize">
+                          {item.note.materialType} material
+                        </span>
                       </div>
                     )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[9px] font-black text-primary uppercase tracking-wider mb-0.5">{item.note.courseCode}</p>
-                    <p className="text-xs font-bold text-text-main leading-snug line-clamp-2 mb-1.5">{item.note.title}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-text-muted flex items-center gap-1">
-                        <MapPin className="h-2.5 w-2.5" /> {item.note.location}
-                      </span>
-                      <span className="text-sm font-black text-text-main">₹{item.note.price * item.quantity}</span>
-                    </div>
                   </div>
                 </div>
               ))}

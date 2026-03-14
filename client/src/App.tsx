@@ -400,6 +400,10 @@ const App: React.FC = () => {
         onShowGuide={() => setShowUserGuide(true)}
         unreadNotificationCount={unreadNotifs}
         unreadMessageCount={unreadMessages}
+        onMessagesClick={() => {
+          setSelectedConversationId(null);
+          navigate("/messages");
+        }}
       />
       <main className="flex-1">
         <AnimatePresence mode="wait">

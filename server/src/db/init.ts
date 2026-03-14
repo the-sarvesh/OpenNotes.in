@@ -225,6 +225,7 @@ const initDb = async () => {
       "CREATE INDEX IF NOT EXISTS idx_push_subs_user_id ON push_subscriptions(user_id)",
       "ALTER TABLE messages ADD COLUMN type TEXT NOT NULL DEFAULT 'text'",
       "ALTER TABLE messages ADD COLUMN metadata TEXT",
+      "ALTER TABLE meetup_proposals ADD COLUMN reminder_sent BOOLEAN NOT NULL DEFAULT 0",
     ];
 
     for (const migration of migrations) {

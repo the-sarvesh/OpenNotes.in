@@ -11,33 +11,7 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-// Configure multer for local file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Correctly point to the shared uploads folder at the root
-    cb(null, path.resolve(__dirname, "../../../uploads"));
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      "profile-" + uniqueSuffix + path.extname(file.originalname),
-    );
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max for profile pics
-  fileFilter: (_req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only JPEG, PNG, and WebP images are allowed"));
-    }
-  },
-});
+import { upload, getFileUrl } from "../utils/cloudinary.js";
 
 // Get my profile
 router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
@@ -90,7 +64,7 @@ router.put('/me', authenticate, upload.single('profile_image') as any, async (re
     }
 
     if (req.file) {
-      const imageUrl = `/uploads/${req.file.filename}`;
+      const imageUrl = getFileUrl(req.file);
       updates.push('profile_image_url = ?');
       args.push(imageUrl);
     }

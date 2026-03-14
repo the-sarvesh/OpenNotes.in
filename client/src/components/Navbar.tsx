@@ -25,13 +25,14 @@ interface NavbarProps {
   unreadMessageCount?: number;
   unreadNotificationCount?: number;
   onShowGuide?: () => void;
+  onMessagesClick?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   isDark, toggleDark,
   cartCount, setShowAuth,
   unreadMessageCount = 0, unreadNotificationCount = 0,
-  onShowGuide,
+  onShowGuide, onMessagesClick,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -270,7 +271,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {iconBtn(toggleDark, isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />, undefined, 'Toggle theme')}
               </div>
 
-              {user && iconBtn(() => navigate('/messages'), <MessageCircle className="h-4 w-4" />, unreadMessageCount, 'Messages')}
+              {user && (
+                <button
+                  onClick={() => {
+                    if (onMessagesClick) {
+                      onMessagesClick();
+                    } else {
+                      navigate('/messages');
+                    }
+                  }}
+                  title="Messages"
+                  className={`relative p-2 rounded-xl transition-all duration-150 ${
+                    location.pathname === '/messages' 
+                      ? 'text-[#FFC000] bg-white/10' 
+                      : 'text-slate-400 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  {unreadMessageCount > 0 && (
+                    <span className="absolute top-1 right-1 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[9px] font-black rounded-full px-0.5 border-2 border-slate-900 overflow-hidden">
+                      {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {/* Bell — always visible */}
               {user && (
@@ -457,7 +481,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                     { icon: UserIcon, label: 'Dashboard', path: '/profile' },
                     { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
                     { icon: Bell, label: 'Notifications', path: null, onClick: () => toggleNotifications(), badge: unreadNotificationCount },
-                    { icon: MessageCircle, label: 'Messages', path: '/messages', badge: unreadMessageCount },
+                    { 
+                      icon: MessageCircle, 
+                      label: 'Messages', 
+                      path: '/messages', 
+                      badge: unreadMessageCount,
+                      onClick: () => {
+                        if (onMessagesClick) onMessagesClick();
+                        else navigate('/messages');
+                        setIsMenuOpen(false);
+                      }
+                    },
                   ] : []),
                   { icon: isDark ? Sun : Moon, label: `${isDark ? 'Light' : 'Dark'} Mode`, path: null, onClick: () => toggleDark() },
                   { icon: HelpCircle, label: 'How it Works', path: null, onClick: () => { onShowGuide?.(); setIsMenuOpen(false); } },

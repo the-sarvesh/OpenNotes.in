@@ -12,33 +12,7 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-// Configure multer for local file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Correctly point to the shared uploads folder at the root
-    cb(null, path.resolve(__dirname, "../../../uploads"));
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
-    );
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
-  fileFilter: (_req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only JPEG, PNG, and WebP images are allowed"));
-    }
-  },
-});
+import { upload, getFileUrl } from "../utils/cloudinary.js";
 
 // Get all listings (with filtering)
 router.get("/", async (req, res, next) => {
@@ -136,9 +110,9 @@ router.post(
         meetup_location,
       } = req.body;
 
-      // Using local storage for demo, real app would use Cloudinary/S3
+      // Use helper to get either the Cloudinary URL or the local path
       const imageUrl = req.file
-        ? `/uploads/${req.file.filename}`
+        ? getFileUrl(req.file)
         : "https://images.unsplash.com/photo-1517842645767-c639042777db?q=80&w=800&auto=format&fit=crop";
 
       if (
