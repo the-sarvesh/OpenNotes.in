@@ -41,7 +41,7 @@ const upload = multer({
 });
 
 // Get all listings (with filtering)
-router.get("/", async (req, res) => {
+router.get("/", async (req, res, next) => {
   try {
     const { semester, search, material_type } = req.query;
     let query = `
@@ -55,40 +55,60 @@ router.get("/", async (req, res) => {
 
     if (semester) {
       query += " AND l.semester = ?";
-      args.push(semester);
+      args.push(semester as string);
     }
 
-    if (search) {
+    const searchStr = typeof search === 'string' ? search : '';
+    const materialTypeStr = typeof material_type === 'string' ? material_type : '';
+
+    if (searchStr) {
       query += " AND (l.course_code LIKE ? OR l.title LIKE ?)";
-      args.push(`%${search}%`, `%${search}%`);
+      args.push(`%${searchStr}%`, `%${searchStr}%`);
     }
 
-    if (material_type) {
+    if (materialTypeStr) {
       query += " AND l.material_type = ?";
-      args.push(material_type);
+      args.push(materialTypeStr);
     }
 
-    query += " GROUP BY l.id ORDER BY l.created_at DESC";
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = (page - 1) * limit;
+
+    query += " GROUP BY l.id ORDER BY l.created_at DESC LIMIT ? OFFSET ?";
+    args.push(limit, offset);
 
     const listings = await db.execute({ sql: query, args });
 
-    // Fetch subjects for each listing if it has multiple subjects
-    for (const listing of listings.rows) {
-      if (listing.is_multiple_subjects) {
-        const subjects = await db.execute({
-          sql: "SELECT subject_name FROM listing_subjects WHERE listing_id = ?",
-          args: [listing.id],
-        });
-        (listing as any).subjects = subjects.rows.map(
-          (row) => row.subject_name,
-        );
-      }
+    // Fetch subjects for filtered listings in batch (N+1 fix)
+    const multiSubjectIds = listings.rows
+      .filter((l: any) => l.is_multiple_subjects)
+      .map((l: any) => l.id);
+
+    if (multiSubjectIds.length > 0) {
+      const placeholders = multiSubjectIds.map(() => "?").join(",");
+      const subjectsRes = await db.execute({
+        sql: `SELECT listing_id, subject_name FROM listing_subjects WHERE listing_id IN (${placeholders})`,
+        args: multiSubjectIds,
+      });
+
+      const subjectsByListing = subjectsRes.rows.reduce((acc: any, row: any) => {
+        const lid = String(row.listing_id);
+        if (!acc[lid]) acc[lid] = [];
+        acc[lid].push(row.subject_name);
+        return acc;
+      }, {});
+
+      listings.rows.forEach((l: any) => {
+        if (l.is_multiple_subjects) {
+          l.subjects = subjectsByListing[String(l.id)] || [];
+        }
+      });
     }
 
     res.json(listings.rows);
   } catch (error) {
-    console.error("Error fetching listings:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 });
 
@@ -97,7 +117,7 @@ router.post(
   "/",
   authenticate as any,
   upload.single("image") as any,
-  async (req: AuthRequest, res) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const sellerId = req.user!.id;
       const {
@@ -132,6 +152,27 @@ router.post(
         return res.status(400).json({ error: "Missing required fields" });
       }
 
+      // Input Validation
+      const parsedPrice = parseInt(price);
+      const parsedQuantity = quantity !== undefined ? parseInt(quantity) : 1;
+
+      if (isNaN(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({ error: "Price must be a positive number" });
+      }
+      if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
+        return res.status(400).json({ error: "Quantity must be a positive number" });
+      }
+
+      const validSemesters = ["1-1", "1-2", "2-1", "2-2", "3-1", "3-2", "4-1", "4-2"];
+      if (!validSemesters.includes(semester)) {
+        return res.status(400).json({ error: "Invalid semester" });
+      }
+
+      const validMaterialTypes = ["handwritten", "printed", "digital", "other"];
+      if (!validMaterialTypes.includes(material_type)) {
+        return res.status(400).json({ error: "Invalid material type" });
+      }
+
       const listingId = uuidv4();
       const isMultiple =
         is_multiple_subjects === "true" || is_multiple_subjects === true;
@@ -148,10 +189,10 @@ router.post(
           course_code,
           semester,
           condition,
-          parseInt(price),
+          parsedPrice,
           location,
           imageUrl,
-          parseInt(quantity) || 1,
+          parsedQuantity,
           material_type,
           isMultiple ? 1 : 0,
           deliveryMethod,
@@ -160,12 +201,19 @@ router.post(
       });
 
       if (isMultiple && subjects) {
-        const subjectList = JSON.parse(subjects);
-        for (const subject of subjectList) {
-          await db.execute({
-            sql: "INSERT INTO listing_subjects (listing_id, subject_name) VALUES (?, ?)",
-            args: [listingId, subject],
-          });
+        try {
+          const subjectList = JSON.parse(subjects);
+          if (!Array.isArray(subjectList)) {
+            throw new Error("Subjects must be an array");
+          }
+          for (const subject of subjectList) {
+            await db.execute({
+              sql: "INSERT INTO listing_subjects (listing_id, subject_name) VALUES (?, ?)",
+              args: [listingId, subject],
+            });
+          }
+        } catch (e) {
+          return res.status(400).json({ error: "Invalid subjects format" });
         }
       }
 
@@ -173,14 +221,13 @@ router.post(
         .status(201)
         .json({ message: "Listing created successfully", id: listingId });
     } catch (error) {
-      console.error("Error creating listing:", error);
-      res.status(500).json({ error: "Internal server error" });
+      next(error);
     }
   },
 );
 
 // Get my listings
-router.get("/me", authenticate, async (req: AuthRequest, res) => {
+router.get("/me", authenticate, async (req: AuthRequest, res, next) => {
   try {
     const listings = await db.execute({
       sql: `
@@ -193,14 +240,14 @@ router.get("/me", authenticate, async (req: AuthRequest, res) => {
     });
     res.json(listings.rows);
   } catch (error) {
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 });
 
 // POST /api/listings/validate-cart
 // Accepts { ids: string[] } — returns availability status for each listing.
 // Used by the frontend CartContext to purge stale items on load.
-router.post("/validate-cart", authenticate, async (req: AuthRequest, res) => {
+router.post("/validate-cart", authenticate, async (req: AuthRequest, res, next) => {
   try {
     const { ids } = req.body as { ids: string[] };
 
@@ -241,8 +288,7 @@ router.post("/validate-cart", authenticate, async (req: AuthRequest, res) => {
 
     res.json(validation);
   } catch (error) {
-    console.error("validate-cart error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 });
 

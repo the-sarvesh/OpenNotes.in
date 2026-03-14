@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Camera, MapPin, ChevronRight, ChevronLeft, Check, PlusCircle, Upload, Info, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { apiRequest } from '../utils/api';
 
 const SUBJECTS_BY_SEM: Record<string, string[]> = {
-  'Semester 1': ['BSDCH ZC111: Probability & Statistics', 'BSDCH ZC112: Electrical Science', 'BSDCH ZC151: Writing Practice', 'BSDCH ZC236: Symbolic Logic'],
-  'Semester 2': ['BSDCH ZC142: Computer Programming', 'BSDCH ZC222: Discrete Structures for Computer Science', 'BSDCH ZC225: Environmental Studies', 'BSDCH ZC231: Dynamics of Social Change'],
-  'Semester 3': ['BSDCH ZC215: Digital Design', 'BSDCH ZC226: Creative Thinking', 'BSDCH ZC234: Linear Algebra & Optimization', 'BSDCH ZC356: Data Structures'],
-  'Semester 4': ['BSDCH ZC242: Cultural Studies', 'BSDCH ZC312: Evolution of Design', 'BSDCH ZC313: Object Oriented Programming & Design', 'BSDCH ZC353: Computer Organization & Architecture'],
-  'Semester 5': ['BSDCH ZC317: Algorithm Design', 'BSDCH ZC322: Critical Analysis of Literature & Cinema', 'BSDCH ZC328: Humanities and Design', 'BSDCH ZC364: Operating Systems (Elective)'],
-  'Semester 6': ['BSDCH ZC316: Computing and Design', 'BSDCH ZC355: Statistical Inferences & Applications', 'BSDCH ZC412: Software Design Principles', 'BSDCH ZC413: Database Design (Elective)'],
-  'Semester 7': ['BSDCH ZC311: Information Security', 'BSDCH ZC365: Human Computer Interaction', 'BSDCH ZC481: Computer Networks (Elective)'],
-  'Semester 8': ['BSDCH ZC499T: Capstone Project'],
+  '1-1': ['BSDCH ZC111: Probability & Statistics', 'BSDCH ZC112: Electrical Science', 'BSDCH ZC151: Writing Practice', 'BSDCH ZC236: Symbolic Logic'],
+  '1-2': ['BSDCH ZC142: Computer Programming', 'BSDCH ZC222: Discrete Structures for Computer Science', 'BSDCH ZC225: Environmental Studies', 'BSDCH ZC231: Dynamics of Social Change'],
+  '2-1': ['BSDCH ZC215: Digital Design', 'BSDCH ZC226: Creative Thinking', 'BSDCH ZC234: Linear Algebra & Optimization', 'BSDCH ZC356: Data Structures'],
+  '2-2': ['BSDCH ZC242: Cultural Studies', 'BSDCH ZC312: Evolution of Design', 'BSDCH ZC313: Object Oriented Programming & Design', 'BSDCH ZC353: Computer Organization & Architecture'],
+  '3-1': ['BSDCH ZC317: Algorithm Design', 'BSDCH ZC322: Critical Analysis of Literature & Cinema', 'BSDCH ZC328: Humanities and Design', 'BSDCH ZC364: Operating Systems (Elective)'],
+  '3-2': ['BSDCH ZC316: Computing and Design', 'BSDCH ZC355: Statistical Inferences & Applications', 'BSDCH ZC412: Software Design Principles', 'BSDCH ZC413: Database Design (Elective)'],
+  '4-1': ['BSDCH ZC311: Information Security', 'BSDCH ZC365: Human Computer Interaction', 'BSDCH ZC481: Computer Networks (Elective)'],
+  '4-2': ['BSDCH ZC499T: Capstone Project'],
 };
 
 const LOCATIONS = ['Noida', 'Chennai', 'Bengaluru', 'Hyderabad', 'Pune', 'Lucknow', 'Nagpur', 'Vijayawada'];
@@ -63,7 +64,7 @@ const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 const inputClass = "w-full px-4 py-3 bg-surface/80 border border-border rounded-xl text-sm text-text-main placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-1 focus:ring-primary focus:border-primary transition-all";
 
 export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse }) => {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -98,7 +99,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
   };
 
   const handleSubmit = async () => {
-    if (!user || !token) { setError('Please sign in to sell notes.'); return; }
+    if (!user) { setError('Please sign in to sell notes.'); return; }
     setIsSubmitting(true);
     setError('');
     try {
@@ -110,16 +111,23 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       fd.append('price', form.price);
       fd.append('location', form.location);
       fd.append('quantity', form.quantity);
-      fd.append('material_type', form.materialType);
-      fd.append('is_multiple_subjects', String(form.isMultipleSubjects));
+      
+      // Map material type labels to backend-expected keys
+      const typeMap: Record<string, string> = {
+        'Handwritten Notes': 'handwritten',
+        'PPT': 'printed',
+        'Book': 'printed'
+      };
+      fd.append('material_type', typeMap[form.materialType] || 'other');
+      
+      fd.append('is_multiple_subjects', String(form.is_multiple_subjects));
       fd.append('image', form.imageFile!);
       fd.append('delivery_method', form.deliveryMethod);
       if (form.deliveryMethod !== 'courier') fd.append('meetup_location', form.meetupLocation);
       if (form.isMultipleSubjects) fd.append('subjects', JSON.stringify(form.subjects));
 
-      const res = await fetch('/api/listings', {
+      const res = await apiRequest('/api/listings', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
       const data = await res.json();
@@ -299,7 +307,10 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                 <Label>Semester</Label>
                 <select value={form.semester} onChange={e => { set('semester', e.target.value); set('courseCode', ''); set('subjects', []); }} className={inputClass}>
                   <option value="">Select semester...</option>
-                  {Object.keys(SUBJECTS_BY_SEM).map(s => <option key={s}>{s}</option>)}
+                  {Object.keys(SUBJECTS_BY_SEM).map(s => {
+                    const [year, sem] = s.split('-');
+                    return <option key={s} value={s}>Year {year}, Semester {sem}</option>
+                  })}
                 </select>
               </div>
 

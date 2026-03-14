@@ -8,13 +8,7 @@ export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const result = await db.execute({
-      sql: 'SELECT role FROM users WHERE id = ?',
-      args: [req.user.id]
-    });
-
-    const user = result.rows[0];
-    if (!user || user.role !== 'admin') {
+    if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Admin access required' });
     }
 

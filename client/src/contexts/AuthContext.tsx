@@ -10,9 +10,9 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  login: (token: string, user: User) => void;
+  login: (user: User) => void;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   isLoading: boolean;
 }
 
@@ -20,19 +20,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const checkStatus = async () => {
-      const storedToken = localStorage.getItem('open_notes_token');
       const storedUser = localStorage.getItem('open_notes_user');
 
-      if (storedToken && storedUser) {
+      if (storedUser) {
         try {
-          // Quick health check/profile check to verify status
+          // Verify session via API
           const res = await fetch('/api/users/me', {
-            headers: { Authorization: `Bearer ${storedToken}` }
+            credentials: 'include'
           });
           
           if (res.status === 403) {
@@ -44,15 +42,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
 
           if (res.ok) {
-            setToken(storedToken);
             setUser(JSON.parse(storedUser));
-          } else if (res.status === 401) {
-            logout(); // Token expired or invalid
+          } else {
+            logout(); // Session expired
           }
         } catch (error) {
           console.error('Initial auth check failed:', error);
-          // Don't logout on network error, keep offline state
-          setToken(storedToken);
           setUser(JSON.parse(storedUser));
         }
       }
@@ -62,25 +57,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     checkStatus();
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
-    setToken(newToken);
+  const login = (newUser: User) => {
     setUser(newUser);
-    localStorage.setItem('open_notes_token', newToken);
     localStorage.setItem('open_notes_user', JSON.stringify(newUser));
   };
 
-  const logout = () => {
-    setToken(null);
+  const logout = async () => {
     setUser(null);
-    localStorage.removeItem('open_notes_token');
     localStorage.removeItem('open_notes_user');
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
+  };
+
+  const refreshUser = async () => {
+    try {
+      const res = await fetch('/api/users/me', {
+        credentials: 'include'
+      });
+      if (res.ok) {
+        const updatedUser = await res.json();
+        setUser(updatedUser);
+        localStorage.setItem('open_notes_user', JSON.stringify(updatedUser));
+      }
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
+
 };
 
 export const useAuth = () => {

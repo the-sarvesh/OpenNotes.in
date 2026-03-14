@@ -2,6 +2,9 @@
 
 OpenNotes.in is a community-driven platform designed for students and educators to exchange study materials, notes, and academic resources. Built with a modern tech stack, it provides a seamless experience for buying, selling, and discovering high-quality academic content.
 
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
 ---
 
@@ -90,10 +93,29 @@ You can run both the frontend and backend concurrently from the root directory:
 ```bash
 npm run dev
 ```
-- Frontend: `http://localhost:3000`
+- Frontend: `http://localhost:3001`
 - API Backend: `http://localhost:5000`
 
 ---
+100: 
+101: ## 🚢 Deployment
+102: 
+103: ### Backend (Render.com)
+104: 1. Create a new **Web Service** on Render.
+105: 2. Connect your GitHub repository.
+106: 3. Use the following build/start commands:
+107:    - Build: `npm install && npm run build --workspace=server`
+108:    - Start: `npm start --workspace=server`
+109: 4. Add all environment variables from `server/.env` to Render Dashboard.
+110: 
+111: ### Frontend (Vercel)
+112: 1. Import your project into Vercel.
+113: 2. Root Directory: `client`
+114: 3. Add the following Environment Variables:
+115:    - `VITE_BACKEND_URL`: Your Render backend URL (e.g., `https://your-api.onrender.com`)
+116: 4. Vercel will use `vercel.json` for proxying `/api` and `/uploads` requests.
+117: 
+118: ---
 
 ## 📄 License
 

@@ -23,7 +23,6 @@ const ALLOWED_DOMAINS = [
   "goa.bits-pilani.ac.in",
   "wilp.bits-pilani.ac.in",
   // Testing / dev — remove or restrict before hard launch
-  "gmail.com",
 ];
 
 const TESTING_EMAILS: string[] = [
@@ -32,6 +31,10 @@ const TESTING_EMAILS: string[] = [
 ];
 
 const isAllowedEmail = (email: string): boolean => {
+  // ── Development Mode Toggle ────────────────────────────────────────────────
+  // Allow all email domains in development
+  if (process.env.NODE_ENV === "development") return true;
+
   const lower = email.toLowerCase().trim();
   if (TESTING_EMAILS.includes(lower)) return true;
   const domain = lower.split("@")[1];
@@ -143,7 +146,7 @@ passport.use(
           }
         }
 
-        return done(null, user);
+        return done(null, user as any);
       } catch (err: any) {
         console.error("Google Strategy Error:", err);
         return done(err);
@@ -153,7 +156,7 @@ passport.use(
 );
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
-router.post("/login", authLimiter as any, async (req, res) => {
+router.post("/login", authLimiter as any, async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -197,9 +200,15 @@ router.post("/login", authLimiter as any, async (req, res) => {
       expiresIn: JWT_EXPIRES_IN,
     });
 
+    res.cookie("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     res.json({
       message: "Login successful",
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -209,13 +218,12 @@ router.post("/login", authLimiter as any, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 });
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────
-router.post("/register", authLimiter as any, async (req, res) => {
+router.post("/register", authLimiter as any, async (req, res, next) => {
   try {
     const { email, password, name, upi_id } = req.body;
 
@@ -260,9 +268,15 @@ router.post("/register", authLimiter as any, async (req, res) => {
       expiresIn: JWT_EXPIRES_IN,
     });
 
+    res.cookie("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     res.status(201).json({
       message: "User registered successfully",
-      token,
       user: {
         id: userId,
         email,
@@ -272,8 +286,7 @@ router.post("/register", authLimiter as any, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Registration error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 });
 
@@ -281,7 +294,7 @@ router.post("/register", authLimiter as any, async (req, res) => {
 const getUrls = (req: any) => {
   const origin = req.get("origin") || req.get("referer");
 
-  let frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  let frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
   const host = req.get("host");
   const protocol = req.protocol;
   let callbackUrl =
@@ -307,7 +320,7 @@ router.get("/google", (req, res, next) => {
     scope: ["profile", "email"],
     callbackURL:
       req.query.device === "true"
-        ? "http://192.168.1.52:5000/api/auth/google/callback"
+        ? process.env.GOOGLE_CALLBACK_URL || "http://192.168.1.52:5000/api/auth/google/callback"
         : process.env.GOOGLE_CALLBACK_URL ||
           "http://localhost:5000/api/auth/google/callback",
   } as any)(req, res, next);
@@ -324,9 +337,14 @@ router.get("/google/callback", (req, res, next) => {
       callbackURL: callbackUrl,
     } as any,
     (err: any, user: any, info: any) => {
-      if (err) return next(err);
+      console.log("[Auth Callback] Start", { hasUser: !!user, hasErr: !!err, info });
+      if (err) {
+        console.error("[Auth Callback] Error:", err);
+        return next(err);
+      }
 
       if (!user) {
+        console.warn("[Auth Callback] No user found", info);
         if (info?.message === "Your account has been blocked.") {
           return res.redirect(`${frontendUrl}/?error=blocked`);
         }
@@ -336,12 +354,19 @@ router.get("/google/callback", (req, res, next) => {
         return res.redirect(`${frontendUrl}/?error=auth_failed&reason=${msg}`);
       }
 
+      console.log("[Auth Callback] Success for user:", user.email);
       const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
         expiresIn: JWT_EXPIRES_IN,
       });
 
+      res.cookie("auth_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
       const params = new URLSearchParams({
-        token,
         userId: user.id,
         email: user.email,
         name: user.name,
@@ -355,7 +380,7 @@ router.get("/google/callback", (req, res, next) => {
 
 // ── POST /api/auth/forgot-password ───────────────────────────────────────────
 // Accepts { email }. Always responds 200 to prevent user enumeration.
-router.post("/forgot-password", resetLimiter as any, async (req, res) => {
+router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
   const GENERIC_OK = {
     message:
       "If an account with that email exists, a reset link has been sent.",
@@ -398,7 +423,7 @@ router.post("/forgot-password", resetLimiter as any, async (req, res) => {
       args: [tokenId, user.id, rawToken, expiresAt],
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
     const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}`;
 
     const mailOpts = passwordResetEmail(
@@ -411,14 +436,13 @@ router.post("/forgot-password", resetLimiter as any, async (req, res) => {
 
     return res.json(GENERIC_OK);
   } catch (error) {
-    console.error("Forgot password error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
 });
 
 // ── POST /api/auth/reset-password ────────────────────────────────────────────
 // Accepts { token, new_password }. Verifies token and updates the password.
-router.post("/reset-password", resetLimiter as any, async (req, res) => {
+router.post("/reset-password", resetLimiter as any, async (req, res, next) => {
   try {
     const { token, new_password } = req.body;
 
@@ -467,9 +491,14 @@ router.post("/reset-password", resetLimiter as any, async (req, res) => {
 
     res.json({ message: "Password updated successfully. You can now log in." });
   } catch (error) {
-    console.error("Reset password error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    next(error);
   }
+});
+
+// ── POST /api/auth/logout ────────────────────────────────────────────────────
+router.post("/logout", (req, res) => {
+  res.clearCookie("auth_token");
+  res.json({ message: "Logged out successfully" });
 });
 
 export default router;

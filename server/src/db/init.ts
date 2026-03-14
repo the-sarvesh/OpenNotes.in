@@ -84,6 +84,8 @@ const initDb = async () => {
         receiver_id TEXT NOT NULL,
         listing_id TEXT,
         content TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'text',
+        metadata TEXT,
         is_read BOOLEAN NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (sender_id) REFERENCES users(id),
@@ -140,6 +142,32 @@ const initDb = async () => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS meetup_proposals (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        receiver_id TEXT NOT NULL,
+        listing_id TEXT NOT NULL,
+        proposed_time DATETIME NOT NULL,
+        location TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reminder_sent BOOLEAN NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sender_id) REFERENCES users(id),
+        FOREIGN KEY (receiver_id) REFERENCES users(id),
+        FOREIGN KEY (listing_id) REFERENCES listings(id)
+      );
     `);
 
     console.log("Core tables created or verified.");
@@ -183,6 +211,10 @@ const initDb = async () => {
       "CREATE INDEX IF NOT EXISTS idx_coupon_codes_code ON coupon_codes(code)",
       "CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token)",
       "CREATE INDEX IF NOT EXISTS idx_reset_tokens_user_id ON password_reset_tokens(user_id)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_duplicate_prevent ON reviews(reviewer_id, order_id, listing_id)",
+      "CREATE INDEX IF NOT EXISTS idx_push_subs_user_id ON push_subscriptions(user_id)",
+      "ALTER TABLE messages ADD COLUMN type TEXT NOT NULL DEFAULT 'text'",
+      "ALTER TABLE messages ADD COLUMN metadata TEXT",
     ];
 
     for (const migration of migrations) {

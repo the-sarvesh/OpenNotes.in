@@ -7,53 +7,30 @@ import {
   AlertCircle, Users, Check, X,
   ChevronRight, ShieldAlert
 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext.js';
+import { apiRequest } from '../utils/api.js';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { statusColors, formatStatus } from '../utils/status';
+import { formatSemester } from '../utils/formatters';
+import { View, Listing, Order, OrderItem } from '../types';
+
 
 type ProfileTab = 'listings' | 'earnings' | 'settings';
 
-interface OrderItem {
-  id: string;
-  title: string;
-  course_code: string;
-  image_url: string;
-  quantity: number;
-  price_at_purchase: number;
-  status: string;
-  seller_id: string;
-  listing_id: string;
-}
 
-interface Order {
-  id: string;
-  total_amount: number;
-  platform_fee: number;
-  status: string;
-  created_at: string;
-  delivery_details?: string;
-  collection_date?: string;
-  items: OrderItem[];
-}
-
-interface Listing {
-  id: string;
-  title: string;
-  course_code: string;
-  semester: string;
-  price: number;
-  quantity: number;
-  status: string;
-  image_url: string;
-  delivery_method: string;
-  created_at: string;
-  condition?: string;
-  location?: string;
-  meetup_location?: string;
-}
 
 interface SalesData {
-  sales: any[];
+  sales: (OrderItem & {
+    order_status: string;
+    order_date: string;
+    buyer_id: string;
+    delivery_details?: string;
+    collection_date?: string;
+    buyer_name: string;
+    buyer_email: string;
+    listing_price: number;
+  })[];
   summary: {
     totalEarnings: number;
     platformFeeTotal: number;
@@ -61,6 +38,8 @@ interface SalesData {
     totalSales: number;
   };
 }
+
+
 
 // ── Small reusable pieces ─────────────────────────────────────────
 
@@ -89,6 +68,19 @@ const StatCard: React.FC<{
   );
 };
 
+const BuggyButton = () => {
+  const [shouldCrash, setShouldCrash] = React.useState(false);
+  if (shouldCrash) throw new Error('Test crash triggered from settings');
+  return (
+    <button
+      onClick={() => setShouldCrash(true)}
+      className="px-6 py-3 bg-red-600/10 hover:bg-red-600 text-red-600 hover:text-white border border-red-600/20 rounded-xl font-black text-xs uppercase tracking-wider transition-all"
+    >
+      Trigger Test Crash
+    </button>
+  );
+};
+
 export const ProfileView = ({
   onContactSeller,
   initialTab = 'listings',
@@ -97,7 +89,8 @@ export const ProfileView = ({
   initialTab?: ProfileTab;
   key?: React.Key;
 }) => {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
   
   // Sync tab if prop changes externally (e.g. from navbar click)
@@ -131,12 +124,11 @@ export const ProfileView = ({
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
     setLoading(true);
-    const h = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch('/api/listings/me', { headers: h }).then(r => r.json()),
-      fetch('/api/orders/my-sales', { headers: h }).then(r => r.json()),
+      apiRequest('/api/listings/me').then(r => r.json()),
+      apiRequest('/api/orders/my-sales').then(r => r.json()),
     ])
       .then(([listingsData, sales]) => {
         if (Array.isArray(listingsData)) setListings(listingsData);
@@ -144,13 +136,28 @@ export const ProfileView = ({
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [user]);
+
+  const handleInstallApp = async () => {
+    const prompt = (window as any).deferredPrompt;
+    if (prompt) {
+      prompt.prompt();
+      const { outcome } = await prompt.userChoice;
+      if (outcome === 'accepted') {
+        (window as any).deferredPrompt = null;
+      }
+    } else {
+      toast("To install on mobile, use your browser menu and select 'Add to Home Screen'.", {
+        duration: 5000,
+        icon: '📱'
+      });
+    }
+  };
 
   const handleProfileUpdate = async () => {
     try {
-      const res = await fetch('/api/users/me', {
+      const res = await apiRequest('/api/users/me', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name: editName, upi_id: editUpi }),
       });
       const data = await res.json();
@@ -160,9 +167,8 @@ export const ProfileView = ({
 
   const handlePasswordChange = async () => {
     try {
-      const res = await fetch('/api/users/me/password', {
+      const res = await apiRequest('/api/users/me/password', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });
       const data = await res.json();
@@ -174,7 +180,7 @@ export const ProfileView = ({
   };
 
   const handleVerifyPin = async (itemId: string) => {
-    if (!token) return;
+    if (!user) return;
     const pin = pinInputs[itemId];
     if (!pin || pin.length !== 4) {
       setPinErrors(p => ({ ...p, [itemId]: 'Please enter a 4-digit PIN' }));
@@ -183,9 +189,8 @@ export const ProfileView = ({
     setVerifyingOrderId(itemId);
     setPinErrors(p => ({ ...p, [itemId]: '' }));
     try {
-      const res = await fetch(`/api/orders/items/${itemId}/verify-pin`, {
+      const res = await apiRequest(`/api/orders/items/${itemId}/verify-pin`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin }),
       });
       const data = await res.json();
@@ -195,7 +200,7 @@ export const ProfileView = ({
           : 'Item verified! Waiting for remaining items.');
         setPinInputs(p => { const n = { ...p }; delete n[itemId]; return n; });
         setPinErrors(p => { const n = { ...p }; delete n[itemId]; return n; });
-        const sRes = await fetch('/api/orders/my-sales', { headers: { Authorization: `Bearer ${token}` } });
+        const sRes = await apiRequest('/api/orders/my-sales');
         const sData = await sRes.json();
         if (sRes.ok) setSalesData(sData);
       } else {
@@ -213,9 +218,8 @@ export const ProfileView = ({
     if (!reviewOrder || !reviewItem || submittingReview) return;
     setSubmittingReview(true);
     try {
-      const res = await fetch('/api/reviews', {
+      const res = await apiRequest('/api/reviews', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           seller_id: reviewItem.seller_id,
           order_id: reviewOrder.id,
@@ -555,11 +559,42 @@ export const ProfileView = ({
                 </button>
               </div>
 
+              {/* PWA Install */}
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="p-2 bg-primary rounded-xl">
+                    <Package className="h-4 w-4 text-primary-foreground" />
+                  </div>
+                  <h3 className="text-sm font-black text-text-main uppercase tracking-wider">Install App</h3>
+                </div>
+                <p className="text-xs text-text-muted mb-5 leading-relaxed">
+                  Install OpenNotes on your home screen for a better experience, offline access, and faster notifications.
+                </p>
+                <button
+                  onClick={handleInstallApp}
+                  className="px-6 py-3 bg-primary hover:bg-primary-hover text-primary-foreground rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-md"
+                >
+                  Add to Home Screen
+                </button>
+              </div>
+
               {/* Account info */}
               <div className="p-5 bg-surface/50 border border-border rounded-2xl">
-                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">Account Info</p>
-                <p className="text-xs text-text-muted font-semibold">{user?.email}</p>
                 <p className="text-[10px] text-text-muted font-mono mt-1">{user?.id}</p>
+              </div>
+
+              {/* Debug Tools */}
+              <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="p-2 bg-red-500/10 rounded-xl">
+                    <ShieldAlert className="h-4 w-4 text-red-500" />
+                  </div>
+                  <h3 className="text-sm font-black text-red-500 uppercase tracking-wider">Developer Debug Tools</h3>
+                </div>
+                <p className="text-xs text-text-muted mb-5 leading-relaxed">
+                  Use this to verify the Global Error Boundary is working. This will force the application to crash and show the fallback UI.
+                </p>
+                <BuggyButton />
               </div>
             </motion.div>
           )}
@@ -740,7 +775,7 @@ export const ProfileView = ({
                   {[
                     { label: 'Price', value: `₹${selectedListing?.price || selectedSale?.price_at_purchase}` },
                     { label: 'Stock', value: `${selectedListing?.quantity || selectedSale?.quantity} unit${(selectedListing?.quantity || selectedSale?.quantity) > 1 ? 's' : ''}` },
-                    { label: 'Semester', value: selectedListing?.semester || 'N/A' },
+                    { label: 'Semester', value: selectedListing?.semester ? formatSemester(selectedListing.semester) : 'N/A' },
                     { label: 'Condition', value: selectedListing?.condition || 'Good' },
                   ].map(({ label, value }) => (
                     <div key={label} className="p-3 bg-surface/50 border border-border rounded-xl">

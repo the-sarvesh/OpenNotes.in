@@ -11,15 +11,17 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { Note } from "../types";
 import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
 import toast from "react-hot-toast";
+import { apiRequest } from "../utils/api";
 
 interface CheckoutViewProps {
-  onBack: () => void;
-  cart?: any[]; // Keep optional for backwards compatibility
-  onSuccess?: (data: any) => void;
+  cart?: any[];
+  onSuccess?: (orderData: any) => void;
+  onBack?: () => void;
 }
 
 // ── Reusable section card ──────────────────────────────────────────
@@ -62,11 +64,12 @@ const ShieldCheck = ({ className }: { className?: string }) => (
 
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
   cart,
-  onBack,
   onSuccess,
+  onBack,
 }) => {
+  const navigate = useNavigate();
   const { cart: contextCart, clearCart } = useCart();
-  const { token } = useAuth();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -128,12 +131,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setCouponLoading(true);
     setCouponResult(null);
     try {
-      const res = await fetch("/api/orders/validate-coupon", {
+      const res = await apiRequest("/api/orders/validate-coupon", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           coupon_code: couponInput.trim(),
           order_total: total,
@@ -162,7 +161,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     } finally {
       setCouponLoading(false);
     }
-  }, [couponInput, token, total, rawPlatformFee]);
+  }, [couponInput, total, rawPlatformFee]);
 
   const removeCoupon = () => {
     setCouponInput("");
@@ -171,7 +170,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   };
 
   const handlePlaceOrder = async () => {
-    if (!token) return;
+    if (!user) return;
     if (needsDelivery && !address) {
       toast.error("Please enter delivery address");
       return;
@@ -187,12 +186,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
     setLoading(true);
     try {
-      const res = await fetch("/api/orders", {
+      const res = await apiRequest("/api/orders", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           items: activeCart.map((item) => ({
             listing_id: item.note.id,
@@ -207,8 +202,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       });
       const data = await res.json();
       if (res.ok) {
-        clearCart();
-        onSuccess?.(data);
+        if (onSuccess) {
+          onSuccess(data);
+        } else {
+          clearCart();
+          toast.success("Order placed successfully!");
+        }
       } else toast.error(data.error || "Failed to place order");
     } catch {
       toast.error("Network error. Please try again.");
@@ -222,7 +221,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       {/* ── Page header ── */}
       <div className="flex items-center gap-3 mb-8">
         <button
-          onClick={onBack}
+          onClick={() => (onBack ? onBack() : navigate(-1))}
           className="p-2 rounded-xl hover:bg-primary-hover hover:bg-primary-hover text-text-muted transition-colors shrink-0"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -262,10 +261,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                       <div
                         className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex-shrink-0 flex items-center justify-center font-black text-sm transition-all ${done
-                            ? "bg-accent text-accent-foreground"
-                            : active
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-surface text-text-muted"
+                          ? "bg-accent text-accent-foreground"
+                          : active
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-surface text-text-muted"
                           }`}
                       >
                         {done ? <Check className="h-4 w-4" /> : s.icon}
@@ -578,7 +577,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
             {/* Cart items */}
             <div className="space-y-5 max-h-80 overflow-y-auto pr-1 mb-5">
-              {cart.map((item) => (
+              {activeCart.map((item) => (
                 <div key={item.note.id} className="flex gap-3">
                   <div className="relative shrink-0">
                     <img

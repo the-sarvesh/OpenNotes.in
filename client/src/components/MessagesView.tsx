@@ -8,9 +8,13 @@ import {
   Wifi,
   WifiOff,
   Circle,
+  MapPin,
+  ShieldCheck,
 } from "lucide-react";
-import { io, Socket } from "socket.io-client";
+import { getSocket } from "../utils/socket.js";
+import { Socket } from "socket.io-client";
 import { useAuth } from "../contexts/AuthContext.js";
+import { apiRequest } from "../utils/api.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +31,8 @@ interface Conversation {
   lastMessageAt: string;
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────
+
 interface Message {
   id: string;
   conversation_id: string;
@@ -34,36 +40,10 @@ interface Message {
   receiver_id: string;
   sender_name: string;
   content: string;
+  type?: 'text' | 'meetup_proposal';
+  metadata?: string;
   is_read: boolean;
   created_at: string;
-}
-
-// ── Socket singleton (module-level so it persists across re-renders) ──────────
-
-let socketInstance: Socket | null = null;
-
-function getSocket(token: string): Socket {
-  if (socketInstance && socketInstance.connected) return socketInstance;
-
-  // Disconnect stale instance if it exists
-  if (socketInstance) {
-    socketInstance.disconnect();
-  }
-
-  const SOCKET_URL =
-    typeof window !== "undefined"
-      ? `${window.location.protocol}//${window.location.hostname}:5000`
-      : "http://localhost:5000";
-
-  socketInstance = io(SOCKET_URL, {
-    auth: { token },
-    transports: ["websocket", "polling"],
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1500,
-    timeout: 10_000,
-  });
-
-  return socketInstance;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -72,7 +52,7 @@ export const MessagesView: React.FC<{
   initialConversationId?: string | null;
   onBack?: () => void;
 }> = ({ initialConversationId, onBack }) => {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
@@ -81,6 +61,11 @@ export const MessagesView: React.FC<{
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Meetup Proposal State
+  const [showMeetupModal, setShowMeetupModal] = useState(false);
+  const [meetupTime, setMeetupTime] = useState("");
+  const [meetupLocation, setMeetupLocation] = useState("");
 
   // Socket state
   const [isConnected, setIsConnected] = useState(false);
@@ -92,18 +77,11 @@ export const MessagesView: React.FC<{
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeConvoRef = useRef<Conversation | null>(null);
+  const hasHandledInitialId = useRef(false);
 
-  // Keep ref in sync so socket callbacks can read current activeConvo
   useEffect(() => {
     activeConvoRef.current = activeConvo;
   }, [activeConvo]);
-
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  };
-
-  // ── Scroll to bottom ──────────────────────────────────────────────────────
 
   const scrollToBottom = useCallback((smooth = false) => {
     if (scrollContainerRef.current) {
@@ -118,39 +96,41 @@ export const MessagesView: React.FC<{
     scrollToBottom();
   }, [messages, otherUserTyping, scrollToBottom]);
 
-  // ── REST: fetch conversations list ────────────────────────────────────────
-
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await fetch("/api/messages/conversations", { headers });
+      const res = await apiRequest("/api/messages/conversations");
       if (res.ok) {
         const data: Conversation[] = await res.json();
         setConversations(data);
 
-        if (initialConversationId) {
+        if (initialConversationId && !hasHandledInitialId.current) {
           const target = data.find(
             (c) => c.conversationId === initialConversationId,
           );
-          if (target) setActiveConvo(target);
+          if (target) {
+            setActiveConvo(target);
+            hasHandledInitialId.current = true;
+          }
         }
       }
     } catch (err) {
       console.error("[Messages] fetchConversations error:", err);
     }
     setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConversationId]);
+
+  useEffect(() => {
+    hasHandledInitialId.current = false;
   }, [initialConversationId]);
 
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
 
-  // ── REST: fetch full message history (called once when entering a convo) ──
-
   const fetchMessages = useCallback(
     async (convoId: string) => {
       try {
-        const res = await fetch(`/api/messages/${convoId}`, { headers });
+        const res = await apiRequest(`/api/messages/${convoId}`);
         if (res.ok) {
           const data: Message[] = await res.json();
           setMessages(data);
@@ -158,24 +138,18 @@ export const MessagesView: React.FC<{
       } catch (err) {
         console.error("[Messages] fetchMessages error:", err);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [token],
+    [],
   );
 
-  // ── Socket.IO lifecycle ───────────────────────────────────────────────────
-
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
 
-    const socket = getSocket(token);
+    const socket = getSocket();
     socketRef.current = socket;
 
-    // ── Connection events ────────────────────────────────────────────────────
     const onConnect = () => {
       setIsConnected(true);
-      console.log("[Socket] Connected:", socket.id);
-      // Re-join active conversation room if we had one when reconnecting
       if (activeConvoRef.current) {
         socket.emit("join_conversation", {
           conversationId: activeConvoRef.current.conversationId,
@@ -183,55 +157,34 @@ export const MessagesView: React.FC<{
       }
     };
 
-    const onDisconnect = (reason: string) => {
-      setIsConnected(false);
-      console.log("[Socket] Disconnected:", reason);
-    };
+    const onDisconnect = () => setIsConnected(false);
+    const onConnectError = () => setIsConnected(false);
 
-    const onConnectError = (err: Error) => {
-      setIsConnected(false);
-      console.warn("[Socket] Connection error:", err.message);
-    };
-
-    // ── Incoming message ─────────────────────────────────────────────────────
     const onNewMessage = (msg: Message) => {
       const currentConvo = activeConvoRef.current;
       if (currentConvo && msg.conversation_id === currentConvo.conversationId) {
         setMessages((prev) => {
-          // Deduplicate by ID
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
-        // Tell the server we've seen it
         socket.emit("mark_read", {
           conversationId: currentConvo.conversationId,
         });
-        setOtherUserTyping(false); // clear typing indicator on new message
+        setOtherUserTyping(false);
       }
-      // Refresh conversation list so last-message preview + unread badge update
       fetchConversations();
     };
 
-    // ── Unread count changed (we're in a different view) ─────────────────────
-    const onUnreadCountChanged = () => {
-      fetchConversations();
+    const onUnreadCountChanged = () => fetchConversations();
+
+    const onUserTyping = ({ userId: id }: { userId: string }) => {
+      if (id !== user?.id) setOtherUserTyping(true);
     };
 
-    // ── Typing indicators ────────────────────────────────────────────────────
-    const onUserTyping = ({
-      userId,
-    }: {
-      userId: string;
-      conversationId: string;
-    }) => {
-      if (userId !== user?.id) setOtherUserTyping(true);
+    const onUserStoppedTyping = ({ userId: id }: { userId: string }) => {
+      if (id !== user?.id) setOtherUserTyping(false);
     };
 
-    const onUserStoppedTyping = ({ userId }: { userId: string }) => {
-      if (userId !== user?.id) setOtherUserTyping(false);
-    };
-
-    // ── Read receipts ─────────────────────────────────────────────────────────
     const onMessagesRead = ({ conversationId }: { conversationId: string }) => {
       const currentConvo = activeConvoRef.current;
       if (currentConvo?.conversationId === conversationId) {
@@ -243,6 +196,16 @@ export const MessagesView: React.FC<{
       }
     };
 
+    const onMeetupStatusChanged = ({ proposalId, status, messageId }: { proposalId: string, status: string, messageId: string }) => {
+      setMessages(prev => prev.map(m => {
+        if (m.id === messageId) {
+          const metadata = JSON.parse(m.metadata || '{}');
+          return { ...m, metadata: JSON.stringify({ ...metadata, status }) };
+        }
+        return m;
+      }));
+    };
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
@@ -251,8 +214,8 @@ export const MessagesView: React.FC<{
     socket.on("user_typing", onUserTyping);
     socket.on("user_stopped_typing", onUserStoppedTyping);
     socket.on("messages_read", onMessagesRead);
+    socket.on("meetup_status_changed", onMeetupStatusChanged);
 
-    // Reflect current connection state immediately (in case already connected)
     setIsConnected(socket.connected);
 
     return () => {
@@ -264,23 +227,19 @@ export const MessagesView: React.FC<{
       socket.off("user_typing", onUserTyping);
       socket.off("user_stopped_typing", onUserStoppedTyping);
       socket.off("messages_read", onMessagesRead);
+      socket.off("meetup_status_changed", onMeetupStatusChanged);
     };
-  }, [token, user?.id, fetchConversations]);
-
-  // ── Join / leave conversation rooms ──────────────────────────────────────
+  }, [user?.id, fetchConversations]);
 
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
 
     if (activeConvo) {
-      // Load history from REST
       fetchMessages(activeConvo.conversationId);
-      // Join socket room
       socket.emit("join_conversation", {
         conversationId: activeConvo.conversationId,
       });
-      // Mark existing messages as read
       socket.emit("mark_read", {
         conversationId: activeConvo.conversationId,
       });
@@ -296,8 +255,6 @@ export const MessagesView: React.FC<{
     };
   }, [activeConvo, fetchMessages]);
 
-  // ── Typing emit helpers ───────────────────────────────────────────────────
-
   const emitTypingStart = useCallback(() => {
     const socket = socketRef.current;
     const convo = activeConvoRef.current;
@@ -306,7 +263,6 @@ export const MessagesView: React.FC<{
       isTypingRef.current = true;
       socket.emit("typing_start", { conversationId: convo.conversationId });
     }
-    // Auto-stop typing after 2 s of inactivity
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       emitTypingStop();
@@ -326,14 +282,9 @@ export const MessagesView: React.FC<{
     }
   }, []);
 
-  // Clear typing ref on unmount
   useEffect(() => {
-    return () => {
-      emitTypingStop();
-    };
+    return () => emitTypingStop();
   }, [emitTypingStop]);
-
-  // ── Send message ──────────────────────────────────────────────────────────
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeConvo || sending) return;
@@ -344,15 +295,11 @@ export const MessagesView: React.FC<{
     const socket = socketRef.current;
     const trimmedContent = newMessage.trim();
 
-    // Prefer socket when connected for instant delivery
     if (socket && socket.connected) {
-      // Optimistic: clear input immediately
       setNewMessage("");
-
-      // One-time error listener for this send attempt
       const onError = ({ message }: { message: string }) => {
         setErrorMsg(message);
-        setNewMessage(trimmedContent); // restore on error
+        setNewMessage(trimmedContent);
         socket.off("message_error", onError);
         setSending(false);
       };
@@ -365,17 +312,14 @@ export const MessagesView: React.FC<{
         content: trimmedContent,
       });
 
-      // If no error arrives within 3 s, assume success
       setTimeout(() => {
         socket.off("message_error", onError);
         setSending(false);
       }, 3000);
     } else {
-      // Fallback: REST API
       try {
-        const res = await fetch("/api/messages", {
+        const res = await apiRequest("/api/messages", {
           method: "POST",
-          headers,
           body: JSON.stringify({
             receiver_id: activeConvo.otherUserId,
             listing_id: activeConvo.listingId,
@@ -397,14 +341,10 @@ export const MessagesView: React.FC<{
     }
   };
 
-  // ── Clear error on convo change ───────────────────────────────────────────
-
   useEffect(() => {
     setErrorMsg("");
     setMessages([]);
   }, [activeConvo?.conversationId]);
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
 
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -432,7 +372,44 @@ export const MessagesView: React.FC<{
     }
   };
 
-  // ── Connection status pill ────────────────────────────────────────────────
+  const handleProposeMeetup = () => {
+    if (!meetupTime || !meetupLocation || !activeConvo) return;
+    const socket = socketRef.current;
+    if (socket && socket.connected) {
+      socket.emit("propose_meetup", {
+        conversationId: activeConvo.conversationId,
+        receiverId: activeConvo.otherUserId,
+        listingId: activeConvo.listingId,
+        proposedTime: meetupTime,
+        location: meetupLocation
+      });
+      setShowMeetupModal(false);
+      setMeetupTime("");
+      setMeetupLocation("");
+    }
+  };
+
+  const handleAcceptMeetup = (proposalId: string, messageId: string) => {
+    const socket = socketRef.current;
+    if (socket && socket.connected && activeConvo) {
+      socket.emit("accept_meetup", {
+        conversationId: activeConvo.conversationId,
+        proposalId,
+        messageId
+      });
+    }
+  };
+
+  const handleDeclineMeetup = (proposalId: string, messageId: string) => {
+    const socket = socketRef.current;
+    if (socket && socket.connected && activeConvo) {
+      socket.emit("decline_meetup", {
+        conversationId: activeConvo.conversationId,
+        proposalId,
+        messageId
+      });
+    }
+  };
 
   const ConnectionBadge = () => (
     <span
@@ -441,22 +418,15 @@ export const MessagesView: React.FC<{
           ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40"
           : "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800/40"
       }`}
-      title={isConnected ? "Real-time connected" : "Reconnecting…"}
     >
-      {isConnected ? (
-        <Wifi className="h-2.5 w-2.5" />
-      ) : (
-        <WifiOff className="h-2.5 w-2.5" />
-      )}
+      {isConnected ? <Wifi className="h-2.5 w-2.5" /> : <WifiOff className="h-2.5 w-2.5" />}
       {isConnected ? "Live" : "Reconnecting"}
     </span>
   );
 
-  // ── Typing bubble ─────────────────────────────────────────────────────────
-
   const TypingBubble = () => (
     <div className="flex justify-start">
-      <div className="px-4 py-3 rounded-2xl bg-surface text-text-main rounded-bl-md flex items-center gap-1.5">
+      <div className="px-4 py-3 rounded-2xl bg-surface text-text-main rounded-bl-md flex items-center gap-1.5 border border-border">
         <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:0ms]" />
         <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:150ms]" />
         <span className="h-1.5 w-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:300ms]" />
@@ -464,21 +434,85 @@ export const MessagesView: React.FC<{
     </div>
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const MeetupBubble = ({ msg, isMe }: { msg: Message, isMe: boolean }) => {
+    const metadata = JSON.parse(msg.metadata || '{}');
+    const { location, proposedTime, proposalId } = metadata;
+    // status fallback to pending if missing from older proposals or initial emit
+    const status = metadata.status || 'pending';
+    const date = new Date(proposedTime);
+
+    return (
+      <div className={`flex flex-col gap-2 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
+        <div className={`p-5 rounded-3xl border-2 shadow-sm ${
+          status === 'accepted' ? 'border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20' :
+          status === 'declined' ? 'border-red-500/30 bg-red-50/50 dark:bg-red-950/20' :
+          'border-primary/20 bg-surface'
+        }`}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+              status === 'accepted' ? 'bg-emerald-500 text-white' :
+              status === 'declined' ? 'bg-red-500 text-white' :
+              'bg-primary text-white'
+            }`}>
+              <Clock className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-text-muted">Meetup Proposal</p>
+              <h4 className="text-sm font-bold text-text-main">{status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Pending response'}</h4>
+            </div>
+          </div>
+
+          <div className="space-y-3 mb-5">
+            <div className="flex items-center gap-2 text-sm text-text-main font-medium">
+              <MapPin className="h-4 w-4 text-primary" />
+              {location}
+            </div>
+            <div className="flex items-center gap-2 text-sm text-text-main font-medium">
+              <Clock className="h-4 w-4 text-primary" />
+              {date.toLocaleDateString()} at {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+
+          {!isMe && status === 'pending' && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleAcceptMeetup(proposalId, msg.id)}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors font-black"
+              >
+                Accept
+              </button>
+              <button
+                onClick={() => handleDeclineMeetup(proposalId, msg.id)}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors font-black"
+              >
+                Decline
+              </button>
+            </div>
+          )}
+          
+          {status === 'accepted' && (
+            <div className="flex items-center justify-center gap-2 py-2 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase tracking-wider">
+              <Circle className="h-2 w-2 fill-current" /> Meetup Confirmed
+            </div>
+          )}
+        </div>
+        <span className="text-[10px] text-text-muted px-2">{timeAgo(msg.created_at)}</span>
+      </div>
+    );
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12"
+      className="max-width-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12"
     >
       <div className="mb-8 flex items-center gap-4">
         {onBack && !activeConvo && (
           <button
             onClick={onBack}
             className="p-2 hover:bg-primary-hover rounded-xl transition-colors shrink-0"
-            title="Go Back"
           >
             <ArrowLeft className="h-6 w-6 text-text-muted" />
           </button>
@@ -489,33 +523,24 @@ export const MessagesView: React.FC<{
             Messages
           </h1>
           <div className="flex items-center gap-2">
-            <p className="text-text-muted text-sm">
-              Chat with buyers and sellers
-            </p>
+            <p className="text-text-muted text-sm">Chat with buyers and sellers</p>
             <ConnectionBadge />
           </div>
         </div>
       </div>
 
-      <div
-        className="bg-surface rounded-3xl border border-border shadow-sm overflow-hidden"
-        style={{ minHeight: "500px" }}
-      >
+      <div className="bg-surface rounded-3xl border border-border shadow-sm overflow-hidden" style={{ minHeight: "600px" }}>
         {loading ? (
-          /* Loading spinner */
           <div className="flex justify-center p-16">
             <span className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
           </div>
         ) : !activeConvo ? (
-          /* ── Conversation List ───────────────────────────────────────────── */
           <div>
             {conversations.length === 0 ? (
               <div className="text-center py-16 text-text-muted">
                 <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-30" />
                 <p className="font-medium">No conversations yet</p>
-                <p className="text-sm">
-                  Start a conversation by clicking "Contact Seller" on a listing
-                </p>
+                <p className="text-sm">Start a conversation by clicking "Contact Seller" on a listing</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -525,27 +550,18 @@ export const MessagesView: React.FC<{
                     onClick={() => setActiveConvo(convo)}
                     className="w-full flex items-center gap-4 p-4 hover:bg-background transition-colors text-left"
                   >
-                    <img
-                      src={convo.listingImage}
-                      alt=""
-                      className="w-12 h-12 rounded-xl object-cover bg-surface shrink-0"
-                    />
+                    <img src={convo.listingImage} alt="" className="w-12 h-12 rounded-xl object-cover bg-surface shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-text-main">
-                          {convo.otherUserName}
-                        </p>
+                        <p className="text-sm font-semibold text-text-main">{convo.otherUserName}</p>
                         <span className="text-[10px] text-text-muted flex items-center gap-1 shrink-0">
                           <Clock className="h-3 w-3" />
                           {timeAgo(convo.lastMessageAt)}
                         </span>
                       </div>
-                      <p className="text-xs text-primary font-medium truncate">
-                        {convo.listingTitle}
-                      </p>
+                      <p className="text-xs text-primary font-medium truncate">{convo.listingTitle}</p>
                       <p className="text-xs text-text-muted truncate mt-0.5">
-                        {convo.lastMessageIsMe ? "You: " : ""}
-                        {convo.lastMessage}
+                        {convo.lastMessageIsMe ? "You: " : ""}{convo.lastMessage}
                       </p>
                     </div>
                     {convo.unreadCount > 0 && (
@@ -559,9 +575,7 @@ export const MessagesView: React.FC<{
             )}
           </div>
         ) : (
-          /* ── Active Chat ─────────────────────────────────────────────────── */
-          <div className="flex flex-col h-[500px]">
-            {/* Chat header */}
+          <div className="flex flex-col h-[600px]">
             <div className="flex items-center gap-3 p-4 border-b border-border bg-background">
               <button
                 onClick={() => {
@@ -576,88 +590,62 @@ export const MessagesView: React.FC<{
               >
                 <ArrowLeft className="h-5 w-5 text-text-muted" />
               </button>
-              <img
-                src={activeConvo.listingImage}
-                alt=""
-                className="w-10 h-10 rounded-lg object-cover bg-surface shrink-0"
-              />
+              <img src={activeConvo.listingImage} alt="" className="w-10 h-10 rounded-lg object-cover bg-surface shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-text-main truncate">
-                    {activeConvo.otherUserName}
-                  </p>
-                  {/* Online indicator dot (purely decorative — shows when socket is up) */}
-                  {isConnected && (
-                    <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />
-                  )}
+                  <p className="text-sm font-semibold text-text-main truncate">{activeConvo.otherUserName}</p>
+                  {isConnected && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
                 </div>
-                <p className="text-xs text-text-muted truncate">
-                  {activeConvo.listingTitle}
-                </p>
+                <p className="text-[10px] text-primary truncate max-w-[200px] font-bold uppercase tracking-wider">{activeConvo.listingTitle}</p>
               </div>
-              <ConnectionBadge />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowMeetupModal(true)}
+                  className="group relative p-2.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-sm active:scale-95"
+                  title="Schedule a meetup location and time for exchange"
+                >
+                  <Clock className="h-4 w-4" />
+                  <span className="hidden sm:inline">Schedule Meetup</span>
+                  
+                  {/* Tooltip Badge for awareness */}
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                  </span>
+                </button>
+                <ConnectionBadge />
+              </div>
             </div>
 
-            {/* Messages area */}
-            <div
-              ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto p-4 space-y-3"
-            >
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 && (
-                <div className="flex justify-center py-8 text-text-muted text-xs font-medium opacity-60">
-                  Start of conversation
-                </div>
+                <div className="flex justify-center py-8 text-text-muted text-xs font-medium opacity-60">Start of conversation</div>
               )}
               {messages.map((msg) => {
                 const isMe = msg.sender_id === user?.id;
+                if (msg.type === 'meetup_proposal') {
+                  return <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}><MeetupBubble msg={msg} isMe={isMe} /></div>;
+                }
                 return (
-                  <div
-                    key={msg.id}
-                    className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm ${
-                        isMe
-                          ? "bg-primary text-primary-foreground rounded-br-md"
-                          : "bg-surface text-text-main rounded-bl-md border border-border"
-                      }`}
-                    >
-                      <p>{msg.content}</p>
-                      <div
-                        className={`flex items-center justify-end gap-1 mt-1 ${
-                          isMe
-                            ? "text-primary-foreground/60"
-                            : "text-text-muted"
-                        }`}
-                      >
-                        <span className="text-[10px]">
-                          {timeAgo(msg.created_at)}
-                        </span>
-                        {/* Read receipt checkmarks for sent messages */}
-                        {isMe && (
-                          <span className="text-[10px] select-none">
-                            {msg.is_read ? "✓✓" : "✓"}
-                          </span>
-                        )}
+                  <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                    <div className={`flex flex-col gap-1 max-w-[75%] ${isMe ? "items-end" : "items-start"}`}>
+                      <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${isMe ? "bg-primary text-primary-foreground rounded-br-md shadow-sm" : "bg-background text-text-main rounded-bl-md border border-border shadow-sm"}`}>
+                        <p>{msg.content}</p>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-1 ${isMe ? "text-primary-foreground/60" : "text-text-muted"}`}>
+                        <span className="text-[9px] font-bold">{timeAgo(msg.created_at)}</span>
+                        {isMe && <span className="text-[9px] font-bold">{msg.is_read ? "Seen" : "Sent"}</span>}
                       </div>
                     </div>
                   </div>
                 );
               })}
-
-              {/* Typing indicator */}
               {otherUserTyping && <TypingBubble />}
-
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input area */}
             <div className="p-4 border-t border-border bg-background flex flex-col gap-2">
-              {errorMsg && (
-                <div className="bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 text-xs px-3 py-2 rounded-lg font-medium">
-                  {errorMsg}
-                </div>
-              )}
+              {errorMsg && <div className="bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 text-xs px-3 py-2 rounded-lg font-medium">{errorMsg}</div>}
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -666,28 +654,77 @@ export const MessagesView: React.FC<{
                   onKeyDown={handleKeyDown}
                   onBlur={emitTypingStop}
                   placeholder="Type a message…"
-                  className="flex-1 px-4 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main"
+                  className="flex-1 px-4 py-3 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main shadow-sm"
                   disabled={sending}
                   autoComplete="off"
                 />
                 <button
                   onClick={sendMessage}
                   disabled={!newMessage.trim() || sending}
-                  className="px-4 py-2.5 bg-primary text-primary-foreground rounded-xl font-medium text-sm hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="px-5 py-3 bg-primary text-primary-foreground rounded-xl font-bold text-sm hover:bg-primary-hover transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-primary/20 active:scale-95"
                 >
                   <Send className="h-4 w-4" />
                 </button>
               </div>
-              {!isConnected && (
-                <p className="text-[10px] text-amber-500 dark:text-amber-400 font-medium text-center">
-                  Reconnecting to real-time server… messages will be sent via
-                  HTTP fallback.
-                </p>
-              )}
             </div>
           </div>
         )}
       </div>
+
+      {showMeetupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-surface w-full max-w-md rounded-3xl p-6 shadow-2xl border border-border">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center text-white"><Clock className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-xl font-black text-text-main">Schedule Meetup</h2>
+                <p className="text-xs text-text-muted font-bold uppercase tracking-wider">Coordinate Exchange</p>
+              </div>
+            </div>
+            <div className="space-y-4 mb-8">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-text-muted mb-2">Location</label>
+                <div className="relative">
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted" />
+                  <input 
+                    type="text" 
+                    value={meetupLocation} 
+                    onChange={(e) => setMeetupLocation(e.target.value)} 
+                    placeholder="e.g. SR Grounds, ANC, Library" 
+                    className="w-full pl-12 pr-4 py-4 bg-background border border-border rounded-2xl focus:ring-2 focus:ring-primary outline-none text-sm font-medium text-text-main" 
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-text-muted mb-2">Time & Date</label>
+                <div className="relative">
+                  <Clock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted" />
+                  <input 
+                    type="datetime-local" 
+                    value={meetupTime} 
+                    onChange={(e) => setMeetupTime(e.target.value)} 
+                    className="w-full pl-12 pr-4 py-4 bg-background border border-border rounded-2xl focus:ring-2 focus:ring-primary outline-none text-sm font-medium text-text-main cursor-pointer [color-scheme:dark]" 
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-primary/5 rounded-2xl p-4 border border-primary/10 mb-8">
+              <h4 className="text-[10px] font-black text-primary uppercase tracking-wider mb-2 flex items-center gap-2">
+                <ShieldCheck className="h-3.5 w-3.5" /> How it works
+              </h4>
+              <p className="text-[11px] text-text-muted leading-relaxed font-medium">
+                Choose a public location (like Library or ANC) and a time. Once the other party accepts, you'll both receive a notification reminder 30 mins before the meetup!
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowMeetupModal(false)} className="flex-1 py-4 text-sm font-black text-text-muted uppercase tracking-widest hover:bg-background rounded-2xl transition-colors">Cancel</button>
+              <button onClick={handleProposeMeetup} disabled={!meetupTime || !meetupLocation} className="flex-[2] py-4 bg-primary hover:bg-primary-hover text-white rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/20 disabled:opacity-50 active:scale-[0.98]">Send Proposal</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 };

@@ -6,7 +6,7 @@ import { authenticate, AuthRequest } from '../middleware/auth.js';
 const router = express.Router();
 
 // Get my profile
-router.get('/me', authenticate, async (req: AuthRequest, res) => {
+router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const result = await db.execute({
       sql: 'SELECT id, email, name, upi_id, role, created_at FROM users WHERE id = ?',
@@ -19,15 +19,23 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    next(error);
   }
 });
 
 // Update my profile
-router.put('/me', authenticate, async (req: AuthRequest, res) => {
+router.put('/me', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const { name, upi_id } = req.body;
     const userId = req.user!.id;
+
+    // Validation
+    if (name && (name.length < 2 || name.length > 50)) {
+      return res.status(400).json({ error: 'Name must be between 2 and 50 characters' });
+    }
+    if (upi_id && upi_id.length > 100) {
+      return res.status(400).json({ error: 'UPI ID is too long' });
+    }
 
     const updates: string[] = [];
     const args: any[] = [];
@@ -53,12 +61,12 @@ router.put('/me', authenticate, async (req: AuthRequest, res) => {
 
     res.json({ message: 'Profile updated successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    next(error);
   }
 });
 
 // Change password
-router.put('/me/password', authenticate, async (req: AuthRequest, res) => {
+router.put('/me/password', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const { current_password, new_password } = req.body;
     const userId = req.user!.id;
@@ -94,7 +102,7 @@ router.put('/me/password', authenticate, async (req: AuthRequest, res) => {
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    next(error);
   }
 });
 
