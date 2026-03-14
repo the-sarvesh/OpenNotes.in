@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package,
   Tag, Layers, Eye, ShieldCheck, ChevronLeft, ChevronRight,
-  Share2, Maximize2, Calendar, Check, Banknote, CreditCard, Info,
+  Share2, Maximize2, Check, CreditCard,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext.js';
@@ -99,8 +99,6 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 
   const cartItem = cart.find(i => i.note.id === note.id);
   const currentQtyInCart = cartItem?.quantity || 0;
-  const platformFee = Math.round(note.price * 0.1);
-  const cashToSeller = note.price - platformFee;
 
   const deliveryLabel =
     note.deliveryMethod === 'in_person' ? 'In-person meetup' :
@@ -246,34 +244,6 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                   {note.seller.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-xs font-bold text-text-muted">{note.seller}</span>
-              </div>
-            </div>
-
-            {/* ── Payment split strip ─────────────────────────────── */}
-            <div className="rounded-2xl border border-border overflow-hidden">
-              <div className="grid grid-cols-2 divide-x divide-border">
-                <div className="p-3 flex flex-col gap-0.5 bg-primary/5">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <CreditCard className="h-3 w-3 text-primary shrink-0" />
-                    <span className="text-[9px] font-black text-primary uppercase tracking-widest">Pay Online</span>
-                  </div>
-                  <p className="text-xl font-black text-text-main">₹{platformFee}</p>
-                  <p className="text-[9px] text-text-muted">Platform fee</p>
-                </div>
-                <div className="p-3 flex flex-col gap-0.5 bg-surface">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <Banknote className="h-3 w-3 text-text-muted shrink-0" />
-                    <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">Cash at Meetup</span>
-                  </div>
-                  <p className="text-xl font-black text-text-main">₹{cashToSeller}</p>
-                  <p className="text-[9px] text-text-muted">To seller</p>
-                </div>
-              </div>
-              <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-t border-amber-200/50 dark:border-amber-800/40 flex items-center gap-2">
-                <Info className="h-3 w-3 text-amber-600 shrink-0" />
-                <p className="text-[9px] text-amber-700 dark:text-amber-400 font-medium">
-                  Share your <strong>4-digit PIN</strong> with seller only after inspecting notes.
-                </p>
               </div>
             </div>
 
