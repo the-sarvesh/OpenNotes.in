@@ -14,6 +14,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
+import { apiRequest, API_BASE_URL } from "../utils/api.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -202,9 +203,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           ? { email, password }
           : { email, password, name, upi_id: upiId };
 
-      const res = await fetch(endpoint, {
+      const res = await apiRequest(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -224,9 +224,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError("");
     setIsLoading(true);
     try {
-      const res = await fetch("/api/auth/forgot-password", {
+      const res = await apiRequest("/api/auth/forgot-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
@@ -258,9 +257,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsLoading(true);
     try {
-      const res = await fetch("/api/auth/reset-password", {
+      const res = await apiRequest("/api/auth/reset-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token: token.trim(),
           new_password: newPassword,
@@ -641,7 +639,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Google OAuth */}
             <button
               type="button"
-              onClick={() => (window.location.href = "/api/auth/google")}
+              onClick={() => (window.location.href = `${API_BASE_URL}/api/auth/google`)}
               className="w-full flex items-center justify-center gap-3 py-3 bg-white hover:bg-slate-50
                          border border-slate-200 rounded-xl font-bold text-slate-800 text-sm
                          transition-all shadow-sm active:scale-[0.98]"

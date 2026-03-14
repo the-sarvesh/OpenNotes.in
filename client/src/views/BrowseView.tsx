@@ -4,6 +4,7 @@ import { Search, X, SlidersHorizontal, BookOpen, BookMarked, FileText, Layers } 
 import { formatSemester } from '../utils/formatters';
 import { NoteCard } from '../components/NoteCard';
 import { mapListing } from '../utils/listings';
+import { apiRequest } from '../utils/api.js';
 import type { Note, View } from '../types/index.ts';
 
 interface BrowseViewProps {
@@ -75,7 +76,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
     if (isFirstPage) setLoading(true);
     else setLoadingMore(true);
 
-    fetch(`/api/listings?${params}`)
+    apiRequest(`/api/listings?${params}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {

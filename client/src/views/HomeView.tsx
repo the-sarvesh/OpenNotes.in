@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { apiRequest } from '../utils/api.js';
 import { motion, useScroll, useTransform, useInView } from 'motion/react';
 import {
   Search, ShoppingBag, BookOpen, MapPin, ArrowRight, TrendingUp, Shield, Zap,
@@ -74,7 +75,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   useEffect(() => {
-    fetch('/api/listings')
+    apiRequest('/api/listings')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setNotes(data.slice(0, 4).map(mapListing)); })
       .catch(console.error)

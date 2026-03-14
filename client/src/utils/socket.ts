@@ -11,7 +11,7 @@ export function getSocket(): Socket {
   }
 
   const SOCKET_URL =
-    import.meta.env.VITE_BACKEND_URL ||
+    import.meta.env.VITE_API_URL ||
     (typeof window !== "undefined"
       ? `${window.location.protocol}//${window.location.hostname}:5000`
       : "http://localhost:5000");

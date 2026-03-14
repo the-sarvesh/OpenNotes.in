@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { apiRequest } from '../utils/api.js';
 
 export interface User {
   id: string;
@@ -32,9 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (storedUser) {
         try {
           // Verify session via API
-          const res = await fetch('/api/users/me', {
-            credentials: 'include'
-          });
+          const res = await apiRequest('/api/users/me');
           
           if (res.status === 403) {
             const data = await res.json();
@@ -69,7 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     localStorage.removeItem('open_notes_user');
     try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      await apiRequest('/api/auth/logout', { method: 'POST' });
     } catch (err) {
       console.error('Logout failed:', err);
     }
@@ -77,9 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshUser = async () => {
     try {
-      const res = await fetch('/api/users/me', {
-        credentials: 'include'
-      });
+      const res = await apiRequest('/api/users/me');
       if (res.ok) {
         const updatedUser = await res.json();
         setUser(updatedUser);

@@ -8,6 +8,7 @@ import React, {
   ReactNode,
 } from "react";
 import { toast } from "react-hot-toast";
+import { apiRequest } from "../utils/api.js";
 import type { Note, CartItem } from "../types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -82,12 +83,8 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
       setIsValidating(true);
       try {
         const ids = cart.map((item) => item.note.id);
-        const res = await fetch("/api/listings/validate-cart", {
+        const res = await apiRequest("/api/listings/validate-cart", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: 'include',
           body: JSON.stringify({ ids }),
         });
 
