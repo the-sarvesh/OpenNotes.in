@@ -9,6 +9,7 @@ import {
   UserPlus,
   KeyRound,
   ArrowLeft,
+  ArrowDown,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -325,7 +326,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             >
               {error && (
                 <div className="space-y-3">
-                  <ErrorBanner msg={error} />
+                  {error.includes("Google Login") ? (
+                    <div className="p-4 bg-primary/10 border border-primary/20 rounded-2xl text-center space-y-3">
+                      <p className="text-sm font-bold text-text-main">
+                        This account is linked to Google
+                      </p>
+                      <p className="text-xs text-text-muted">
+                        Please use the "Continue with Google" button below to sign in.
+                      </p>
+                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center mx-auto animate-bounce">
+                        <ArrowDown className="h-4 w-4 text-black" />
+                      </div>
+                    </div>
+                  ) : (
+                    <ErrorBanner msg={error} />
+                  )}
                   {error === "User not found" && mode === "login" && (
                     <button
                       type="button"

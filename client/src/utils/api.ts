@@ -25,9 +25,14 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
 
   if (response.status === 401) {
     // Session expired or invalid
-    localStorage.removeItem('open_notes_user');
-    if (!window.location.pathname.includes('/auth/callback')) {
-      window.location.href = '/?error=session_expired';
+    // BUT don't redirect if we're on the login or register page/modal attempt
+    const isAuthRoute = url.includes('/api/auth/login') || url.includes('/api/auth/register');
+    
+    if (!isAuthRoute) {
+      localStorage.removeItem('open_notes_user');
+      if (!window.location.pathname.includes('/auth/callback')) {
+        window.location.href = '/?error=session_expired';
+      }
     }
     return response;
   }

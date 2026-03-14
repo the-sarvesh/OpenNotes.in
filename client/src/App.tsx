@@ -15,6 +15,7 @@ import { SellView } from "./views/SellView";
 // ── Components ──────────────────────────────────────────────────────
 import { ProductDetailsModal } from "./components/ProductDetailsModal";
 import { AuthModal } from "./components/AuthModal";
+import { ProfileCompletionModal } from "./components/ProfileCompletionModal";
 import { ProfileView } from "./components/ProfileView";
 import { OrdersView } from "./components/OrdersView";
 import { AdminView } from "./components/AdminView";
@@ -80,6 +81,7 @@ const App: React.FC = () => {
 
   // ── UI state ──────────────────────────────────────────────────────────
   const [showAuth, setShowAuth] = useState(false);
+  const [showProfileCompletion, setShowProfileCompletion] = useState(false);
   const [authMode, setAuthMode] = useState<
     "login" | "register" | "forgot" | "reset"
   >("login");
@@ -101,6 +103,17 @@ const App: React.FC = () => {
   const prevNotifsRef = React.useRef(unreadNotifs);
 
   const { user, login } = useAuth();
+
+  useEffect(() => {
+    if (user && (!user.mobile_number || !user.upi_id)) {
+      // Don't show if they are on the auth callback page (it's too fast)
+      if (location.pathname !== "/auth/callback") {
+        setShowProfileCompletion(true);
+      }
+    } else {
+      setShowProfileCompletion(false);
+    }
+  }, [user, location.pathname]);
 
   // ── Validate cart freshness whenever user authenticates (FE-4) ───────────
   useEffect(() => {
@@ -499,6 +512,12 @@ const App: React.FC = () => {
           }}
           defaultMode={authMode}
           resetToken={resetToken}
+        />
+
+        <ProfileCompletionModal
+          key="profile-completion"
+          isOpen={showProfileCompletion}
+          onClose={() => setShowProfileCompletion(false)}
         />
 
         {selectedNote && (
