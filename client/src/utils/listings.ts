@@ -18,6 +18,7 @@ export function mapListing(item: any): Note {
     semester: item.semester || 'Any',
     materialType: item.material_type || 'Mixed',
     location: item.location || 'Pilani',
+    images: item.images || (item.image_url ? [item.image_url] : []),
     deliveryMethod: item.delivery_method || 'in_person',
     preferredMeetupSpot: item.preferred_meetup_spot || null,
     meetupLocation: item.meetup_location || null,

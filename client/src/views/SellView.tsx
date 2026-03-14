@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Camera, MapPin, ChevronRight, ChevronLeft, Check, PlusCircle, Upload, Info, Shield } from 'lucide-react';
+import { BookOpen, Camera, MapPin, ChevronRight, ChevronLeft, Check, PlusCircle, Upload, Info, Shield, X, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../utils/api';
+import { toast } from 'react-hot-toast';
 
 const SUBJECTS_BY_SEM: Record<string, string[]> = {
   'Sem1': ['BSDCH ZC111: Probability & Statistics', 'BSDCH ZC112: Electrical Science', 'BSDCH ZC151: Writing Practice', 'BSDCH ZC236: Symbolic Logic'],
@@ -19,8 +20,8 @@ const STANDARD_SPOTS = ['HCL Office', 'BITS Exam Center'];
 const LOCATIONS = ['Noida / Delhi NCR', 'Bengaluru', 'Hyderabad', 'Chennai', 'Pune', 'Other (Manual)'];
 
 interface FormData {
-  imageFile: File | null;
-  imagePreview: string;
+  imageFiles: File[];
+  imagePreviews: string[];
   materialType: string;
   semester: string;
   courseCode: string;
@@ -38,8 +39,8 @@ interface FormData {
 }
 
 const INITIAL_FORM: FormData = {
-  imageFile: null,
-  imagePreview: '',
+  imageFiles: [],
+  imagePreviews: [],
   materialType: 'PPT',
   semester: '',
   courseCode: '',
@@ -80,10 +81,35 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
     setForm(prev => ({ ...prev, [key]: value }));
 
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    set('imageFile', file);
-    set('imagePreview', URL.createObjectURL(file));
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Limit to 3 images total
+    const totalRemaining = 3 - form.imageFiles.length;
+    const newFiles = files.slice(0, totalRemaining);
+
+    if (newFiles.length === 0) {
+      toast.error('You can only upload up to 3 images.');
+      return;
+    }
+
+    const newPreviews = newFiles.map(file => URL.createObjectURL(file));
+    set('imageFiles', [...form.imageFiles, ...newFiles]);
+    set('imagePreviews', [...form.imagePreviews, ...newPreviews]);
+  };
+
+  const removeImage = (index: number) => {
+    const newFiles = [...form.imageFiles];
+    const newPreviews = [...form.imagePreviews];
+    
+    // Revoke the object URL to avoid memory leaks
+    URL.revokeObjectURL(newPreviews[index]);
+    
+    newFiles.splice(index, 1);
+    newPreviews.splice(index, 1);
+    
+    set('imageFiles', newFiles);
+    set('imagePreviews', newPreviews);
   };
 
   const toggleSubject = (s: string) =>
@@ -92,7 +118,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       : [...form.subjects, s]);
 
   const canProceed = () => {
-    if (step === 1) return !!form.imageFile;
+    if (step === 1) return form.imageFiles.length > 0;
     if (step === 2) {
       if (!form.semester || !form.title) return false;
       if (form.isMultipleSubjects) return form.subjects.length > 0;
@@ -136,7 +162,12 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       fd.append('material_type', typeMap[form.materialType] || 'other');
       
       fd.append('is_multiple_subjects', String(form.is_multiple_subjects));
-      fd.append('image', form.imageFile!);
+      
+      // Append multiple images
+      form.imageFiles.forEach(file => {
+        fd.append('images', file);
+      });
+
       fd.append('delivery_method', form.deliveryMethod);
       if (form.deliveryMethod !== 'courier') {
         fd.append('preferred_meetup_spot', form.preferredMeetupSpot);
@@ -252,34 +283,53 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
           {/* Step 1 */}
           {step === 1 && (
             <motion.div key="step1" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.2 }} className="p-6 sm:p-8 space-y-6">
-              <div>
-                <h2 className="text-lg font-black text-text-main mb-1">Upload a photo</h2>
-                <p className="text-sm text-text-muted">A clear photo helps buyers see what they're getting.</p>
-              </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-black text-text-main mb-1">Upload photos (Up to 3)</h2>
+                  <span className="text-xs font-bold text-text-muted">{form.imageFiles.length}/3 photos</span>
+                </div>
+                <p className="text-sm text-text-muted">Clear photos help buyers see what they're getting.</p>
 
-              <label htmlFor="img-upload" className={`block border-2 border-dashed rounded-2xl transition-all cursor-pointer overflow-hidden group ${form.imagePreview ? 'border-border' : 'border-border hover:border-primary dark:hover:border-primary'}`}>
-                <input id="img-upload" type="file" accept="image/*" className="hidden" onChange={handleImage} />
-                {form.imagePreview ? (
-                  <div className="relative">
-                    <img src={form.imagePreview} alt="Preview" className="w-full h-64 object-cover" />
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Upload className="h-6 w-6 text-white" />
-                      <span className="text-white font-bold text-sm">Change photo</span>
-                    </div>
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-accent text-black text-xs font-bold px-2.5 py-1 rounded-full">
-                      <Check className="h-3 w-3" /> Photo added
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
-                    <div className="w-16 h-16 bg-surface hover:bg-surface border border-transparent hover:border-slate-300 dark:hover:border-slate-700 rounded-2xl flex items-center justify-center mb-4 transition-all">
-                      <Camera className="h-8 w-8 text-text-muted transition-colors group-hover:text-[#003366]" />
-                    </div>
-                    <p className="font-bold text-text-muted mb-1 transition-colors group-hover:text-[#003366]">Click to upload photo</p>
-                    <p className="text-xs text-text-muted">PNG, JPG up to 5MB</p>
-                  </div>
-                )}
-              </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <AnimatePresence>
+                    {form.imagePreviews.map((preview, index) => (
+                      <motion.div
+                        key={preview}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="relative aspect-square rounded-2xl overflow-hidden border border-border group"
+                      >
+                        <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => removeImage(index)}
+                          className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                        {index === 0 && (
+                          <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-primary text-black text-[10px] font-black rounded-md">
+                            Main Photo
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+
+                  {form.imageFiles.length < 3 && (
+                    <label
+                      htmlFor="img-upload"
+                      className="aspect-square border-2 border-dashed border-border hover:border-primary dark:hover:border-primary rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center gap-2 group bg-surface/50"
+                    >
+                      <input id="img-upload" type="file" accept="image/*" multiple className="hidden" onChange={handleImage} />
+                      <div className="p-3 bg-surface border border-border group-hover:border-primary/30 rounded-xl transition-all">
+                        <Camera className="h-6 w-6 text-text-muted group-hover:text-primary" />
+                      </div>
+                      <span className="text-xs font-bold text-text-muted group-hover:text-primary">Add Photo</span>
+                    </label>
+                  )}
+                </div>
+              </div>
 
               <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/40 rounded-xl">
                 <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-2">

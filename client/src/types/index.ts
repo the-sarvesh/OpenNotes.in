@@ -7,6 +7,7 @@ export type View = 'home' | 'browse' | 'sell' | 'profile' | 'admin' | 'messages'
 export interface Listing extends Note {
   seller_id: string;
   seller_name?: string;
+  images?: string[];
   status: 'active' | 'sold' | 'archived';
 }
 

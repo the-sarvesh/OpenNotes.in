@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package, Tag, Layers, Eye, ShieldCheck } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package, Tag, Layers, Eye, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
 import { formatSemester } from '../utils/formatters';
@@ -27,8 +27,21 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 }) => {
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
   const hasTrackedView = React.useRef(false);
+
+  const images = note.images && note.images.length > 0 ? note.images : [note.image];
+
+  const nextImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImageIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const prevImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+  };
 
   useEffect(() => {
     // Increment view count on mount
@@ -76,8 +89,49 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
         </button>
 
         {/* Left: Image Section */}
-        <div className="relative w-full sm:w-[45%] h-64 sm:h-auto shrink-0 bg-slate-100">
-          <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
+        <div className="relative w-full sm:w-[45%] h-72 sm:h-auto shrink-0 bg-slate-100 group/carousel">
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={currentImageIndex}
+              src={images[currentImageIndex]}
+              alt={`${note.title} - ${currentImageIndex + 1}`}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          </AnimatePresence>
+
+          {images.length > 1 && (
+            <>
+              <button
+                onClick={prevImage}
+                className="absolute left-3 top-1/2 -translate-y-1/2 p-2 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all sm:opacity-0 group-hover/carousel:opacity-100 active:scale-90 z-10"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={nextImage}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all sm:opacity-0 group-hover/carousel:opacity-100 active:scale-90 z-10"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+              
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 px-3 py-1.5 bg-black/20 backdrop-blur-md rounded-full z-10">
+                {images.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1.5 w-1.5 rounded-full transition-all ${
+                      i === currentImageIndex ? 'bg-white w-3' : 'bg-white/40'
+                    }`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent sm:hidden" />
           
           {/* Badges on image */}

@@ -54,28 +54,54 @@ router.get("/", async (req, res, next) => {
 
     const listings = await db.execute({ sql: query, args });
 
-    // Fetch subjects for filtered listings in batch (N+1 fix)
-    const multiSubjectIds = listings.rows
-      .filter((l: any) => l.is_multiple_subjects)
-      .map((l: any) => l.id);
-
-    if (multiSubjectIds.length > 0) {
-      const placeholders = multiSubjectIds.map(() => "?").join(",");
-      const subjectsRes = await db.execute({
-        sql: `SELECT listing_id, subject_name FROM listing_subjects WHERE listing_id IN (${placeholders})`,
-        args: multiSubjectIds,
+    // Fetch images and subjects for filtered listings in batch
+    const allListingIds = listings.rows.map((l: any) => l.id);
+    
+    if (allListingIds.length > 0) {
+      const placeholders = allListingIds.map(() => "?").join(",");
+      
+      // Fetch all images for these listings
+      const imagesRes = await db.execute({
+        sql: `SELECT listing_id, url, is_main FROM listing_images WHERE listing_id IN (${placeholders}) ORDER BY is_main DESC, created_at ASC`,
+        args: allListingIds,
       });
 
-      const subjectsByListing = subjectsRes.rows.reduce((acc: any, row: any) => {
+      const imagesByListing = imagesRes.rows.reduce((acc: any, row: any) => {
         const lid = String(row.listing_id);
         if (!acc[lid]) acc[lid] = [];
-        acc[lid].push(row.subject_name);
+        acc[lid].push(row.url);
         return acc;
       }, {});
 
+      // Fetch subjects for multiple-subject listings
+      const multiSubjectIds = listings.rows
+        .filter((l: any) => l.is_multiple_subjects)
+        .map((l: any) => l.id);
+
+      let subjectsByListing: any = {};
+      if (multiSubjectIds.length > 0) {
+        const subPlaceholders = multiSubjectIds.map(() => "?").join(",");
+        const subjectsRes = await db.execute({
+          sql: `SELECT listing_id, subject_name FROM listing_subjects WHERE listing_id IN (${subPlaceholders})`,
+          args: multiSubjectIds,
+        });
+
+        subjectsByListing = subjectsRes.rows.reduce((acc: any, row: any) => {
+          const lid = String(row.listing_id);
+          if (!acc[lid]) acc[lid] = [];
+          acc[lid].push(row.subject_name);
+          return acc;
+        }, {});
+      }
+
       listings.rows.forEach((l: any) => {
+        const lid = String(l.id);
+        l.images = imagesByListing[lid] || [l.image_url];
+        // Ensure legacy image field is populated
+        l.image = l.images[0] || l.image_url;
+        
         if (l.is_multiple_subjects) {
-          l.subjects = subjectsByListing[String(l.id)] || [];
+          l.subjects = subjectsByListing[lid] || [];
         }
       });
     }
@@ -90,7 +116,7 @@ router.get("/", async (req, res, next) => {
 router.post(
   "/",
   authenticate as any,
-  upload.single("image") as any,
+  upload.array("images", 3) as any,
   async (req: AuthRequest, res, next) => {
     try {
       const sellerId = req.user!.id;
@@ -110,10 +136,13 @@ router.post(
         meetup_location,
       } = req.body;
 
-      // Use helper to get either the Cloudinary URL or the local path
-      const imageUrl = req.file
-        ? getFileUrl(req.file)
-        : "https://images.unsplash.com/photo-1517842645767-c639042777db?q=80&w=800&auto=format&fit=crop";
+      const files = (req.files as any[]) || [];
+      const imageUrls = files.map(file => getFileUrl(file));
+      
+      // Fallback if no images provided
+      if (imageUrls.length === 0) {
+        imageUrls.push("https://images.unsplash.com/photo-1517842645767-c639042777db?q=80&w=800&auto=format&fit=crop");
+      }
 
       if (
         !title ||
@@ -154,6 +183,9 @@ router.post(
       const deliveryMethod = delivery_method || "in_person";
       const meetupLoc = meetup_location || null;
 
+      // Primary image for legacy support
+      const mainImageUrl = imageUrls[0];
+
       await db.execute({
         sql: `INSERT INTO listings (id, seller_id, title, course_code, semester, condition, price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
@@ -166,7 +198,7 @@ router.post(
           condition,
           parsedPrice,
           location,
-          imageUrl,
+          mainImageUrl,
           parsedQuantity,
           material_type,
           isMultiple ? 1 : 0,
@@ -175,6 +207,14 @@ router.post(
           meetupLoc,
         ],
       });
+
+      // Insert all images into listing_images table
+      for (let i = 0; i < imageUrls.length; i++) {
+        await db.execute({
+          sql: "INSERT INTO listing_images (id, listing_id, url, is_main) VALUES (?, ?, ?, ?)",
+          args: [uuidv4(), listingId, imageUrls[i], i === 0 ? 1 : 0],
+        });
+      }
 
       if (isMultiple && subjects) {
         try {
@@ -214,7 +254,31 @@ router.get("/me", authenticate, async (req: AuthRequest, res, next) => {
         ORDER BY l.created_at DESC`,
       args: [req.user!.id],
     });
-    res.json(listings.rows);
+
+    const rows = listings.rows as any[];
+    if (rows.length > 0) {
+      const allListingIds = rows.map((l: any) => l.id);
+      const placeholders = allListingIds.map(() => "?").join(",");
+      
+      const imagesRes = await db.execute({
+        sql: `SELECT listing_id, url, is_main FROM listing_images WHERE listing_id IN (${placeholders}) ORDER BY is_main DESC, created_at ASC`,
+        args: allListingIds,
+      });
+
+      const imagesByListing = imagesRes.rows.reduce((acc: any, row: any) => {
+        const lid = String(row.listing_id);
+        if (!acc[lid]) acc[lid] = [];
+        acc[lid].push(row.url);
+        return acc;
+      }, {});
+
+      rows.forEach((l: any) => {
+        l.images = imagesByListing[String(l.id)] || [l.image_url];
+        l.image = l.images[0] || l.image_url;
+      });
+    }
+
+    res.json(rows);
   } catch (error) {
     next(error);
   }

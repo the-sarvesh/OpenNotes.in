@@ -13,6 +13,7 @@ export interface Note {
   seller: string;
   location: string;
   image: string;
+  images?: string[];
   rating: number;
   quantity: number;
   materialType?: string;
