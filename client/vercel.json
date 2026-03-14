@@ -2,11 +2,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://opennotes-backend.onrender.com/api/:path*"
+      "destination": "https://opennotes-in.onrender.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://opennotes-backend.onrender.com/uploads/:path*"
+      "destination": "https://opennotes-in.onrender.com/uploads/:path*"
+    },
+    {
+      "source": "/((?!api|uploads).*.)",
+      "destination": "/index.html"
     }
   ]
 }
