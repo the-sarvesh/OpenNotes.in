@@ -262,7 +262,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Right Actions */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5 sm:gap-1">
 
               {/* Desktop-only icons */}
               <div className="hidden md:flex items-center gap-1">

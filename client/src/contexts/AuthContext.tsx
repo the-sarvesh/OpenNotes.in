@@ -5,6 +5,9 @@ export interface User {
   email: string;
   name: string;
   upi_id?: string;
+  mobile_number?: string;
+  location?: string;
+  profile_image_url?: string;
   role?: string;
 }
 

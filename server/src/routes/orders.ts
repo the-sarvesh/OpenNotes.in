@@ -5,6 +5,7 @@ import db from "../db/database.js";
 import { authenticate, AuthRequest } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
 import { applyCoupon } from "../utils/orders.js";
+import { io } from "../socket.js";
 
 
 const router = express.Router();
@@ -15,14 +16,13 @@ const PLATFORM_FEE_PERCENTAGE = 10;
 const generateSecurePin = () =>
   randomInt(1000, 9999).toString().padStart(4, "0");
 
-/** Consistent conversation ID between two users about a listing */
+/** Consistent conversation ID between two users */
 const getConversationId = (
   userId1: string,
   userId2: string,
-  listingId: string,
 ) => {
   const sorted = [userId1, userId2].sort();
-  return `${sorted[0]}_${sorted[1]}_${listingId}`;
+  return `${sorted[0]}_${sorted[1]}`;
 };
 
 // ─── POST /api/orders/validate-coupon ────────────────────────────────────────
@@ -94,7 +94,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       }
 
       const listingRes = await db.execute({
-        sql: "SELECT id, seller_id, price, quantity, title FROM listings WHERE id = ? AND status = ?",
+        sql: "SELECT id, seller_id, price, quantity, title, image_url FROM listings WHERE id = ? AND status = ?",
         args: [item.listing_id, "active"],
       });
 
@@ -129,6 +129,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         quantity: item.quantity,
         price_at_purchase: listing.price,
         title: listing.title,
+        image_url: listing.image_url,
         meetup_pin: generateSecurePin(),
       });
     }
@@ -159,6 +160,24 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
     const tx = await db.transaction("write");
 
     try {
+      // ── Re-validate all items INSIDE the transaction to prevent race conditions ──
+      for (const item of items) {
+        const listingRes = await tx.execute({
+          sql: "SELECT id, seller_id, price, quantity, title, status FROM listings WHERE id = ?",
+          args: [item.listing_id],
+        });
+
+        const listing = listingRes.rows[0] as any;
+
+        if (!listing || listing.status !== "active") {
+          throw new Error(`Listing "${listing?.title || item.listing_id}" is no longer active.`);
+        }
+
+        if (Number(listing.quantity) < item.quantity) {
+          throw new Error(`Not enough stock for "${listing.title}". Available: ${listing.quantity}`);
+        }
+      }
+
       await tx.execute({
         sql: `INSERT INTO orders
                 (id, buyer_id, total_amount, platform_fee, platform_fee_waived,
@@ -176,7 +195,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           buyer_location || null,
           buyer_availability,
           buyer_note || null,
-          1, // platform_fee_paid = true (fee collected or waived via coupon)
+          1,
         ],
       });
 
@@ -214,18 +233,27 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         const conversationId = getConversationId(
           buyerId as string,
           orderItem.seller_id as string,
-          orderItem.listing_id as string,
         );
         const messageId = uuidv4();
-        let initialMessage = `Hi! I just purchased your "${orderItem.title}".\n\nI'm based in ${buyer_location || "BITS"} and available on: ${buyer_availability}.`;
-        if (buyer_note) {
-          initialMessage += `\n\nNote: ${buyer_note}`;
-        }
+        
+        // Structured purchase message
+        const initialMessage = `Hi! I just purchased your "${orderItem.title}".\n\nI'm based in ${buyer_location || "BITS"} and available on: ${buyer_availability}.`;
+        const metadata = JSON.stringify({
+          type: 'purchase_notice',
+          listingId: orderItem.listing_id,
+          listingTitle: orderItem.title,
+          listingImage: orderItem.image_url,
+          orderItemId: orderItem.id,
+          meetupPin: orderItem.meetup_pin,
+          buyerLocation: buyer_location,
+          buyerAvailability: buyer_availability,
+          buyerNote: buyer_note
+        });
 
         await tx.execute({
           sql: `INSERT INTO messages
-                  (id, conversation_id, sender_id, receiver_id, listing_id, content)
-                VALUES (?, ?, ?, ?, ?, ?)`,
+                  (id, conversation_id, sender_id, receiver_id, listing_id, content, type, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, 'purchase_notice', ?)`,
           args: [
             messageId,
             conversationId,
@@ -233,6 +261,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             orderItem.seller_id as string,
             orderItem.listing_id as string,
             initialMessage,
+            metadata
           ],
         });
 
@@ -277,7 +306,51 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       throw err;
     }
 
+    // ── Transaction Success ──
+
+    // Emit live socket messages for each purchase notice
+    if (io) {
+      for (const orderItem of orderItemsToInsert) {
+        const conversationId = getConversationId(buyerId as string, orderItem.seller_id as string);
+
+        const buyerRes = await db.execute({
+          sql: "SELECT name FROM users WHERE id = ?",
+          args: [buyerId],
+        });
+        const buyerName = (buyerRes.rows[0] as any)?.name || "Buyer";
+
+        const messagePayload = {
+          id: uuidv4(), // Client needs unique ID for rendering
+          conversation_id: conversationId,
+          sender_id: buyerId,
+          receiver_id: orderItem.seller_id,
+          listing_id: orderItem.listing_id,
+          sender_name: buyerName,
+          content: `Hi! I just purchased your "${orderItem.title}".`,
+          type: 'purchase_notice',
+          metadata: JSON.stringify({
+            type: 'purchase_notice',
+            listingId: orderItem.listing_id,
+            listingTitle: orderItem.title,
+            listingImage: orderItem.image_url,
+            orderItemId: orderItem.id,
+            meetupPin: orderItem.meetup_pin,
+            buyerLocation: buyer_location,
+            buyerAvailability: buyer_availability,
+            buyerNote: buyer_note
+          }),
+
+          is_read: false,
+          created_at: new Date().toISOString(),
+        };
+
+        io.to(`conv:${conversationId}`).emit("new_message", messagePayload);
+        io.to(`user:${orderItem.seller_id}`).emit("unread_count_changed");
+      }
+    }
+
     res.status(201).json({
+
       message: "Order created successfully",
       orderId,
       totalAmount,
@@ -449,6 +522,35 @@ router.post(
         sql: "UPDATE order_items SET status = 'completed' WHERE id = ?",
         args: [itemId as string],
       });
+
+      // Update the associated purchase_notice message status to 'completed'
+      const convoId = getConversationId(item.buyer_id as string, sellerId as string);
+      const msgRes = await db.execute({
+        sql: "SELECT id, metadata FROM messages WHERE conversation_id = ? AND type = 'purchase_notice'",
+        args: [convoId]
+      });
+
+      // Find the specific message for this order item and update it
+      for (const row of msgRes.rows as any[]) {
+        const meta = JSON.parse(row.metadata || '{}');
+        if (meta.orderItemId === itemId) {
+          meta.status = 'completed';
+          await db.execute({
+            sql: "UPDATE messages SET metadata = ? WHERE id = ?",
+            args: [JSON.stringify(meta), row.id]
+          });
+          
+          // Emit socket update if needed (optional but good for real-time)
+          if (io) {
+            io.to(`conv:${convoId}`).emit("meetup_status_changed", { 
+              proposalId: itemId, // Mapping orderItemId to proposalId-like structure for the client
+              status: 'completed', 
+              messageId: row.id 
+            });
+          }
+          break;
+        }
+      }
 
       // Check if ALL items in this order are now completed
       const allItemsRes = await db.execute({

@@ -114,9 +114,27 @@ export const OrderSuccessView: React.FC<OrderSuccessViewProps> = ({ orderData, o
               </div>
             </div>
 
+            {/* Meetup Location Info */}
+            <div className="flex gap-4 p-2">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 font-black flex items-center justify-center shrink-0 border border-emerald-500/20">
+                <MapPin className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-text-main mb-1">Exchange Location</h3>
+                <p className="text-sm text-text-muted leading-relaxed">
+                  Meet at <strong className="text-text-main font-black">{orderData.buyer_location || 'Campus'}</strong>.
+                </p>
+                {orderData.buyer_note && (
+                  <p className="text-[11px] text-text-muted mt-1 italic">
+                    Note: "{orderData.buyer_note}"
+                  </p>
+                )}
+              </div>
+            </div>
+
             {/* Step 3: Chat */}
             <div className="flex gap-4 p-2">
-              <div className="w-10 h-10 rounded-2xl bg-accent text-accent-foreground font-black flex items-center justify-center shrink-0 border border-accent/20">
+              <div className="w-10 h-10 rounded-2xl bg-accent text-black font-black flex items-center justify-center shrink-0 border border-accent/20">
                 <MessageSquare className="h-4 w-4" />
               </div>
               <div className="w-full">

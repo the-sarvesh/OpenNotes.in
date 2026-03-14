@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package, Tag, Layers } from 'lucide-react';
+import { X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package, Tag, Layers, Eye, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
 import { formatSemester } from '../utils/formatters';
@@ -13,13 +13,13 @@ interface ProductDetailsModalProps {
   onBuyNow: (n: Note) => void;
   isInCart: boolean;
   cart: { note: any; quantity: number }[];
-  onContactSeller: (sellerId: string, listingId: string, title: string) => void;
+  onContactSeller: (sellerId: string, listingId: string, listingTitle: string) => void;
 }
 
 const conditionColor: Record<string, string> = {
-  'Like New': 'text-primary bg-surface bg-accent border-border',
-  'Good': 'text-primary bg-surface bg-accent border-border',
-  'Heavily Annotated': 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/50',
+  'Like New': 'text-emerald-700 bg-emerald-50 border-emerald-100',
+  'Good': 'text-blue-700 bg-blue-50 border-blue-100',
+  'Heavily Annotated': 'text-amber-700 bg-amber-50 border-amber-100',
 };
 
 export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
@@ -28,18 +28,25 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+  const hasTrackedView = React.useRef(false);
 
   useEffect(() => {
+    // Increment view count on mount
+    if (!hasTrackedView.current) {
+      apiRequest(`/api/listings/${note.id}/view`, { method: 'POST' }).catch(() => {});
+      hasTrackedView.current = true;
+    }
+
     document.body.style.overflow = 'hidden';
     document.body.style.touchAction = 'none';
     return () => { 
       document.body.style.overflow = '';
       document.body.style.touchAction = '';
     };
-  }, []);
+  }, [note.id]);
 
-  const handleAdminDelete = async () => {
-    if (!confirm('Delete this listing permanently?')) return;
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this listing?')) return;
     setDeleting(true);
     try {
       const res = await apiRequest(`/api/admin/listings/${note.id}`, {
@@ -51,34 +58,28 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
     }
   };
 
+  const cartItem = cart.find(i => i.note.id === note.id);
+  const currentQtyInCart = cartItem?.quantity || 0;
+
   return (
-    <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-950/70 backdrop-blur-sm">
-      {/* Backdrop */}
-      <div className="absolute inset-0" onClick={onClose} />
-
+    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
       <motion.div
-        initial={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.97, y: 12 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.97, y: 12 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 380 }}
-        className="relative bg-surface/90 dark:bg-slate-900/90 backdrop-blur-xl w-full sm:max-w-lg rounded-t-[2.5rem] sm:rounded-2xl shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden z-10 border border-white/20 dark:border-slate-700/50"
+        initial={{ opacity: 0, y: 100, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 100, scale: 0.98 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+        className="bg-surface w-full max-w-3xl sm:rounded-[2.5rem] shadow-2xl flex flex-col sm:flex-row max-h-[92vh] sm:max-h-[85vh] overflow-hidden border border-border"
       >
-        {/* Mobile drag handle */}
-        <div className="w-10 h-1.5 bg-surface  rounded-full mx-auto mt-4 sm:hidden shrink-0" />
-
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 sm:top-5 sm:right-5 z-20 p-2 bg-black/25 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all border border-white/20"
-        >
-          <X className="h-4 w-4" />
+        {/* Close Button Mobile */}
+        <button onClick={onClose} className="sm:hidden absolute top-4 right-4 z-10 p-2 bg-black/20 backdrop-blur-md rounded-full text-white active:scale-90">
+          <X className="h-5 w-5" />
         </button>
 
-        {/* Image */}
-        <div className="relative h-56 sm:h-64 shrink-0 bg-surface overflow-hidden">
+        {/* Left: Image Section */}
+        <div className="relative w-full sm:w-[45%] h-64 sm:h-auto shrink-0 bg-slate-100">
           <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent sm:hidden" />
+          
           {/* Badges on image */}
           <div className="absolute bottom-4 left-5 flex flex-col gap-2">
             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary text-black text-[10px] font-black rounded-lg uppercase tracking-wider shadow-md">
@@ -87,110 +88,127 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-5 pb-32">
-          {/* Title + seller */}
-          <div className="mb-5">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <h2 className="text-xl font-black text-text-main leading-tight">{note.title}</h2>
-              {note.rating > 0 && (
-                <div className="shrink-0 flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
-                  <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
-                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300">{note.rating}</span>
-                </div>
-              )}
+        {/* Right: Content Section */}
+        <div className="flex-1 flex flex-col min-w-0 bg-surface">
+          <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-6 scrollbar-hide">
+            <div className="hidden sm:flex justify-end mb-2">
+              <button onClick={onClose} className="p-2 hover:bg-background rounded-xl transition-all active:scale-90 text-text-muted">
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            {/* Seller chip */}
-            <div className="flex items-center gap-2 w-fit px-3 py-1.5 bg-surface border border-border rounded-full">
-              <div className="h-5 w-5 rounded-full bg-[#003366] flex items-center justify-center text-white text-[9px] font-black">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <h2 className="text-xl font-black text-text-main leading-tight">{note.title}</h2>
+              <div className="flex gap-2 shrink-0">
+                {note.views !== undefined && (
+                  <div className="flex items-center gap-1 px-2 py-1 bg-primary/10 rounded-lg">
+                    <Eye className="h-3 w-3 text-primary" />
+                    <span className="text-xs font-bold text-primary">{note.views}</span>
+                  </div>
+                )}
+                {note.rating > 0 && (
+                  <div className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/40 rounded-lg">
+                    <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300">{note.rating}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-fit px-3 py-1.5 bg-background border border-border rounded-full mb-6">
+              <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center text-black text-[9px] font-black">
                 {note.seller.charAt(0).toUpperCase()}
               </div>
               <span className="text-xs font-bold text-text-muted">{note.seller}</span>
             </div>
-          </div>
 
-          {/* Tags row */}
-          <div className="flex flex-wrap gap-2 mb-5">
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${conditionColor[note.condition] || conditionColor['Good']}`}>
-              {note.condition}
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-surface rounded-lg text-[11px] font-bold text-text-muted border border-border shadow-sm">
-              <Package className="h-3 w-3" /> {note.materialType}
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-background rounded-lg text-[11px] font-bold text-text-muted border border-border">
-              {formatSemester(note.semester)}
-            </span>
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${note.quantity > 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'}`}>
-              {note.quantity > 0 ? `${note.quantity} in stock` : 'Sold out'}
-            </span>
-          </div>
+            {/* Logistics */}
+            <div className="p-4 bg-background border border-border rounded-2xl mb-6">
+              <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 px-1">Exchange Details</p>
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-primary/10 rounded-xl">
+                  <MapPin className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-text-main">
+                    {note.deliveryMethod === 'in_person' ? 'In-person meetup' : note.deliveryMethod === 'courier' ? 'Courier / Shipping' : 'In-person or Courier'}
+                  </p>
+                  <p className="text-xs font-medium text-text-muted mt-0.5">{note.location}</p>
+                  {note.preferredMeetupSpot && (
+                    <p className="text-xs font-black text-primary mt-2">Spot: {note.preferredMeetupSpot}</p>
+                  )}
+                </div>
+              </div>
+            </div>
 
-          {/* Logistics */}
-          <div className="p-4 bg-surface/50 rounded-2xl border border-border mb-4">
-            <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3">Exchange Details</p>
-            <div className="flex items-start gap-3">
-              <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-bold text-text-main">
-                  {note.deliveryMethod === 'in_person' ? 'In-person meetup' : note.deliveryMethod === 'courier' ? 'Courier / Shipping' : 'In-person or Courier'} · {note.location}
-                </p>
-                {note.meetupLocation && (
-                  <p className="text-xs text-text-muted mt-1 italic">"{note.meetupLocation}"</p>
-                )}
+            {/* Info Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-8">
+              <div className="p-4 rounded-2xl bg-background border border-border">
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Semester</p>
+                <p className="text-sm font-bold text-text-main">{formatSemester(note.semester)}</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-background border border-border">
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Condition</p>
+                <p className="text-sm font-bold text-text-main">{note.condition}</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-background border border-border">
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Material</p>
+                <p className="text-sm font-bold text-text-main">{note.materialType}</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-background border border-border">
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1">Availability</p>
+                <p className="text-sm font-bold text-text-main">{note.quantity} left</p>
               </div>
             </div>
           </div>
 
-          {/* Multiple subjects */}
-          {note.isMultipleSubjects && note.subjects && note.subjects.length > 0 && (
-            <div className="p-4 bg-surface/50 rounded-2xl border border-border">
-              <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                <Layers className="h-3.5 w-3.5" /> Subjects included
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {note.subjects.map(s => (
-                  <span key={s} className="px-2.5 py-1 bg-background rounded-lg text-[10px] font-semibold text-text-muted border border-border">
-                    {s}
-                  </span>
-                ))}
-              </div>
+          {/* Footer Actions */}
+          <div className="p-5 sm:p-8 bg-background border-t border-border space-y-4">
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-xs font-black text-text-muted uppercase tracking-widest">Total Price</span>
+              <span className="text-3xl font-black text-text-main">₹{note.price}</span>
             </div>
-          )}
-        </div>
 
-        <div className="absolute bottom-0 left-0 right-0 bg-surface/96 /96 backdrop-blur-xl border-t border-border px-4 sm:px-6 py-4 flex items-center gap-3 z-20">
-          <div className="hidden sm:block min-w-[80px]">
-            <p className="text-[9px] font-bold text-text-muted uppercase tracking-wider">Price</p>
-            <p className="text-xl font-black text-text-main">₹{note.price}</p>
-          </div>
-          <div className="flex-1 flex items-center gap-2">
-            <button
-              onClick={() => { onContactSeller(note.sellerId || '', note.id, note.title); }}
-              className="p-3 bg-surface hover:bg-primary dark:hover:bg-primary group text-text-muted hover:text-white dark:hover:text-black rounded-xl transition-all border border-border"
-              title="Message Seller"
-            >
-              <MessageCircle className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => onAddToCart(note)}
-              disabled={note.quantity === 0 || (cart.find(i => i.note.id === note.id)?.quantity || 0) >= note.quantity}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-sm active:scale-95 disabled:opacity-40 ${
-                isInCart 
-                ? 'bg-accent text-white shadow-[#003366]/20 dark:shadow-[#FFC000]/10' 
-                : 'bg-surface text-text-main border border-border'
-              }`}
-            >
-              <ShoppingCart className="h-4 w-4" />
-              {note.quantity === 0 ? 'Out of Stock' : (cart.find(i => i.note.id === note.id)?.quantity || 0) >= note.quantity ? 'Max in Cart' : isInCart ? 'In Cart' : 'Add to Cart'}
-            </button>
-            <button
-              onClick={() => { onBuyNow(note); onClose(); }}
-              disabled={note.quantity === 0}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 bg-[#fb641b] text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-[#fb641b]/20 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Buy Now
-            </button>
+            <div className="flex gap-3">
+              {user?.role === 'admin' && (
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="p-4 bg-red-500/10 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-90"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              )}
+              
+              <button
+                onClick={() => onContactSeller(note.sellerId || '', note.id, note.title)}
+                className="p-4 bg-surface border border-border rounded-2xl text-text-muted hover:text-primary hover:border-primary transition-all active:scale-90"
+              >
+                <MessageCircle className="h-5 w-5" />
+              </button>
+
+              <button
+                onClick={() => onAddToCart(note)}
+                disabled={note.quantity === 0 || currentQtyInCart >= note.quantity}
+                className={`flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-lg active:scale-95 disabled:opacity-40 ${
+                  isInCart 
+                    ? 'bg-emerald-500 text-white shadow-emerald-500/20' 
+                    : 'bg-primary text-black shadow-primary/20'
+                }`}
+              >
+                {isInCart ? 'In Cart ✓' : 'Add to Cart'}
+              </button>
+
+              {!isMobile && (
+                <button
+                  onClick={() => onBuyNow(note)}
+                  disabled={note.quantity === 0}
+                  className="flex-1 py-4 bg-primary text-black rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-lg shadow-primary/20 active:scale-95 disabled:opacity-40"
+                >
+                  Buy Now
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </motion.div>

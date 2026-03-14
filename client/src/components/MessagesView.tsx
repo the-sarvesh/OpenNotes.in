@@ -13,18 +13,20 @@ import {
 } from "lucide-react";
 import { getSocket } from "../utils/socket.js";
 import { Socket } from "socket.io-client";
-import { useAuth } from "../contexts/AuthContext.js";
+import { useAuth, User } from "../contexts/AuthContext.js";
 import { apiRequest } from "../utils/api.js";
+import toast from "react-hot-toast";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Conversation {
   conversationId: string;
-  listingId: string;
-  listingTitle: string;
-  listingImage: string;
+  listingIds: string[];
+  listingTitles: string[];
+  listingImages: string[];
   otherUserId: string;
   otherUserName: string;
+  otherUserProfileImage?: string;
   unreadCount: number;
   lastMessage: string;
   lastMessageIsMe: boolean;
@@ -62,8 +64,20 @@ export const MessagesView: React.FC<{
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // User Profile Modal State
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [selectedUserProfile, setSelectedUserProfile] = useState<User | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // Arrived state (real-time handoff)
+  const [arrivedUsers, setArrivedUsers] = useState<Record<string, boolean>>({});
+
   // Meetup Proposal State
   const [showMeetupModal, setShowMeetupModal] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [activeOrderItemId, setActiveOrderItemId] = useState("");
+  const [pin, setPin] = useState("");
+  const [verifyingPin, setVerifyingPin] = useState(false);
   const [meetupTime, setMeetupTime] = useState("");
   const [meetupLocation, setMeetupLocation] = useState("");
 
@@ -206,6 +220,11 @@ export const MessagesView: React.FC<{
       }));
     };
 
+    const onOtherUserArrived = ({ userId: id }: { userId: string }) => {
+      setArrivedUsers(prev => ({ ...prev, [id]: true }));
+      toast.success("The other user has arrived at the meetup spot!", { icon: "📍", duration: 6000 });
+    };
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
@@ -215,6 +234,7 @@ export const MessagesView: React.FC<{
     socket.on("user_stopped_typing", onUserStoppedTyping);
     socket.on("messages_read", onMessagesRead);
     socket.on("meetup_status_changed", onMeetupStatusChanged);
+    socket.on("other_user_arrived", onOtherUserArrived);
 
     setIsConnected(socket.connected);
 
@@ -228,6 +248,7 @@ export const MessagesView: React.FC<{
       socket.off("user_stopped_typing", onUserStoppedTyping);
       socket.off("messages_read", onMessagesRead);
       socket.off("meetup_status_changed", onMeetupStatusChanged);
+      socket.off("other_user_arrived", onOtherUserArrived);
     };
   }, [user?.id, fetchConversations]);
 
@@ -308,7 +329,7 @@ export const MessagesView: React.FC<{
       socket.emit("send_message", {
         conversationId: activeConvo.conversationId,
         receiverId: activeConvo.otherUserId,
-        listingId: activeConvo.listingId,
+        listingId: activeConvo.listingIds[0],
         content: trimmedContent,
       });
 
@@ -322,7 +343,7 @@ export const MessagesView: React.FC<{
           method: "POST",
           body: JSON.stringify({
             receiver_id: activeConvo.otherUserId,
-            listing_id: activeConvo.listingId,
+            listing_id: activeConvo.listingIds[0],
             content: trimmedContent,
           }),
         });
@@ -373,15 +394,37 @@ export const MessagesView: React.FC<{
   };
 
   const handleProposeMeetup = () => {
-    if (!meetupTime || !meetupLocation || !activeConvo) return;
+    if (!meetupTime || !activeConvo) return;
+    
+    // If no custom location typed, try to get from the initial order message
+    let finalLocation = meetupLocation;
+    if (!finalLocation) {
+      const purchaseMsg = messages.find(m => m.type === 'purchase_notice');
+      if (purchaseMsg) {
+        const meta = JSON.parse(purchaseMsg.metadata || '{}');
+        finalLocation = meta.buyerLocation;
+      }
+    }
+
+    if (!finalLocation) {
+      alert("Please specify a meetup location.");
+      return;
+    }
+
+    // Simple validation: Time should be in future
+    if (new Date(meetupTime).getTime() <= Date.now()) {
+      alert("Please select a future time for the meetup.");
+      return;
+    }
+
     const socket = socketRef.current;
     if (socket && socket.connected) {
       socket.emit("propose_meetup", {
         conversationId: activeConvo.conversationId,
         receiverId: activeConvo.otherUserId,
-        listingId: activeConvo.listingId,
+        listingId: activeConvo.listingIds[0],
         proposedTime: meetupTime,
-        location: meetupLocation
+        location: finalLocation
       });
       setShowMeetupModal(false);
       setMeetupTime("");
@@ -408,6 +451,71 @@ export const MessagesView: React.FC<{
         proposalId,
         messageId
       });
+    }
+  };
+
+  const fetchUserProfile = async (userId: string) => {
+    setLoadingProfile(true);
+    setShowProfileModal(true);
+    try {
+      const res = await apiRequest(`/api/users/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedUserProfile(data);
+      } else {
+        toast.error("Failed to load user profile");
+        setShowProfileModal(false);
+      }
+    } catch (err) {
+      toast.error("Network error");
+      setShowProfileModal(false);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  const handleCancelMeetup = (proposalId: string, messageId: string) => {
+    const socket = socketRef.current;
+    if (socket && socket.connected && activeConvo) {
+      socket.emit("cancel_meetup", {
+        conversationId: activeConvo.conversationId,
+        proposalId,
+        messageId
+      });
+    }
+  };
+
+  const handleVerifyPin = async () => {
+    if (!pin || !activeOrderItemId) return;
+    setVerifyingPin(true);
+    try {
+      const res = await apiRequest(`/api/orders/items/${activeOrderItemId}/verify-pin`, {
+        method: 'POST',
+        body: JSON.stringify({ pin })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("PIN verified successfully!");
+        setShowPinModal(false);
+        setPin("");
+        // Give it a tiny moment to ensure modal state is cleared before refreshing messages
+        setTimeout(() => fetchMessages(activeConvo!.conversationId), 100);
+      } else {
+        toast.error(data.error || "Failed to verify PIN");
+      }
+    } catch (err) {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setVerifyingPin(false);
+    }
+  };
+
+  const handleArrived = () => {
+    const socket = socketRef.current;
+    if (socket && socket.connected && activeConvo && user) {
+      socket.emit("arrived_at_meetup", { conversationId: activeConvo.conversationId });
+      setArrivedUsers(prev => ({ ...prev, [user.id]: true }));
+      toast.success("Signal sent! The other user will be notified.", { icon: "📍" });
     }
   };
 
@@ -446,12 +554,14 @@ export const MessagesView: React.FC<{
         <div className={`p-5 rounded-3xl border-2 shadow-sm ${
           status === 'accepted' ? 'border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20' :
           status === 'declined' ? 'border-red-500/30 bg-red-50/50 dark:bg-red-950/20' :
+          status === 'cancelled' ? 'border-gray-500/30 bg-gray-50/50 dark:bg-gray-800/20 grayscale' :
           'border-primary/20 bg-surface'
         }`}>
           <div className="flex items-center gap-3 mb-4">
             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
               status === 'accepted' ? 'bg-emerald-500 text-white' :
               status === 'declined' ? 'bg-red-500 text-white' :
+              status === 'cancelled' ? 'bg-gray-500 text-white' :
               'bg-primary text-white'
             }`}>
               <Clock className="h-5 w-5" />
@@ -489,10 +599,97 @@ export const MessagesView: React.FC<{
               </button>
             </div>
           )}
+
+          {isMe && status === 'pending' && (
+            <button
+              onClick={() => handleCancelMeetup(proposalId, msg.id)}
+              className="w-full py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-text-main rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+            >
+              Cancel Proposal
+            </button>
+          )}
           
           {status === 'accepted' && (
             <div className="flex items-center justify-center gap-2 py-2 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase tracking-wider">
               <Circle className="h-2 w-2 fill-current" /> Meetup Confirmed
+            </div>
+          )}
+
+          {status === 'cancelled' && (
+            <div className="flex items-center justify-center gap-2 py-2 bg-gray-500/10 rounded-xl text-gray-500 text-xs font-black uppercase tracking-wider">
+              <Circle className="h-2 w-2 fill-current" /> Proposal Withdrawn
+            </div>
+          )}
+        </div>
+        <span className="text-[10px] text-text-muted px-2">{timeAgo(msg.created_at)}</span>
+      </div>
+    );
+  };
+
+  const PurchaseNoticeBubble = ({ msg, isMe }: { msg: Message, isMe: boolean }) => {
+    const metadata = JSON.parse(msg.metadata || '{}');
+    const { listingTitle, listingImage, orderItemId, meetupPin, buyerLocation, buyerAvailability, buyerNote } = metadata;
+
+    return (
+      <div className={`flex flex-col gap-2 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
+        <div className="p-5 rounded-3xl border-2 border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/10 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative shrink-0 w-12 h-12">
+              <img src={listingImage} alt="" className="w-full h-full object-cover rounded-xl shadow-sm" />
+              <div className="absolute -top-1 -right-1 bg-emerald-500 text-white rounded-full p-1 shadow-md">
+                <ShieldCheck className="h-3 w-3" />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Order Placed</p>
+              <h4 className="text-sm font-bold text-text-main line-clamp-1">{listingTitle}</h4>
+            </div>
+          </div>
+
+          <div className="space-y-2 mb-6 text-xs text-text-muted font-medium">
+            <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5" /> Based in {buyerLocation || "BITS"}</p>
+            <p className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> {buyerAvailability}</p>
+            {buyerNote && <p className="mt-2 italic border-l-2 border-emerald-200 pl-2">"{buyerNote}"</p>}
+          </div>
+
+          {!isMe && metadata.status !== 'completed' && (
+            <button
+              onClick={() => {
+                setActiveOrderItemId(orderItemId);
+                setShowPinModal(true);
+              }}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md active:scale-95 font-black"
+            >
+              Verify Exchange PIN
+            </button>
+          )}
+
+          {!isMe && metadata.status === 'completed' && (
+            <div className="flex items-center justify-center gap-2 py-3 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase tracking-widest border border-emerald-500/20">
+              <ShieldCheck className="h-4 w-4" /> Verified & Completed
+            </div>
+          )}
+
+          {isMe && metadata.status !== 'completed' && (
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-full py-3 bg-emerald-500/10 dark:bg-emerald-500/20 rounded-xl text-center border border-emerald-500/30">
+                <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Your Exchange PIN</p>
+                <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300 tracking-[0.3em]">{meetupPin}</p>
+              </div>
+              <p className="text-[9px] text-text-muted font-bold text-center px-2">
+                Share this PIN with the seller when you meet to confirm the handover.
+              </p>
+            </div>
+          )}
+
+          {isMe && metadata.status === 'completed' && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex items-center justify-center gap-2 py-3 px-6 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase tracking-widest border border-emerald-500/20 w-full">
+                <ShieldCheck className="h-4 w-4" /> Exchange Completed
+              </div>
+              <p className="text-[9px] text-text-muted font-bold text-center">
+                This item has been successfully handed over.
+              </p>
             </div>
           )}
         </div>
@@ -550,7 +747,18 @@ export const MessagesView: React.FC<{
                     onClick={() => setActiveConvo(convo)}
                     className="w-full flex items-center gap-4 p-4 hover:bg-background transition-colors text-left"
                   >
-                    <img src={convo.listingImage} alt="" className="w-12 h-12 rounded-xl object-cover bg-surface shrink-0" />
+                    <div className="relative shrink-0">
+                      {convo.otherUserProfileImage ? (
+                        <img src={convo.otherUserProfileImage} alt="" className="w-12 h-12 rounded-xl object-cover bg-surface" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-sm font-black">
+                          {convo.otherUserName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+                        </div>
+                      )}
+                      <div className="absolute -bottom-1 -right-1">
+                        <img src={convo.listingImages[0]} alt="" className="w-6 h-6 rounded-md border-2 border-surface object-cover shadow-sm" />
+                      </div>
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-text-main">{convo.otherUserName}</p>
@@ -559,7 +767,10 @@ export const MessagesView: React.FC<{
                           {timeAgo(convo.lastMessageAt)}
                         </span>
                       </div>
-                      <p className="text-xs text-primary font-medium truncate">{convo.listingTitle}</p>
+                      <p className="text-xs text-primary font-medium truncate">
+                        {convo.listingTitles[0]}
+                        {convo.listingTitles.length > 1 && ` (+${convo.listingTitles.length - 1} more)`}
+                      </p>
                       <p className="text-xs text-text-muted truncate mt-0.5">
                         {convo.lastMessageIsMe ? "You: " : ""}{convo.lastMessage}
                       </p>
@@ -590,15 +801,59 @@ export const MessagesView: React.FC<{
               >
                 <ArrowLeft className="h-5 w-5 text-text-muted" />
               </button>
-              <img src={activeConvo.listingImage} alt="" className="w-10 h-10 rounded-lg object-cover bg-surface shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-text-main truncate">{activeConvo.otherUserName}</p>
-                  {isConnected && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
+              
+              <button 
+                onClick={() => fetchUserProfile(activeConvo.otherUserId)}
+                className="flex items-center gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity text-left"
+              >
+                <div className="relative shrink-0">
+                  {activeConvo.otherUserProfileImage ? (
+                    <img src={activeConvo.otherUserProfileImage} alt="" className="w-10 h-10 rounded-lg object-cover bg-surface" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-xs font-black">
+                      {activeConvo.otherUserName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+                    </div>
+                  )}
                 </div>
-                <p className="text-[10px] text-primary truncate max-w-[200px] font-bold uppercase tracking-wider">{activeConvo.listingTitle}</p>
-              </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-text-main truncate">{activeConvo.otherUserName}</p>
+                    {isConnected && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
+                  </div>
+                  <div className="flex flex-col">
+                    <p className="text-[10px] text-primary truncate max-w-[200px] font-bold uppercase tracking-wider">
+                      {activeConvo.listingTitles[0]}
+                    </p>
+                  </div>
+                </div>
+              </button>
               <div className="flex items-center gap-2">
+                {messages.some(m => {
+                  const meta = JSON.parse(m.metadata || '{}');
+                  return m.type === 'meetup_proposal' && meta.status === 'accepted';
+                }) && (
+                  <button
+                    onClick={handleArrived}
+                    disabled={user ? arrivedUsers[user.id] : false}
+                    className={`p-2.5 rounded-xl transition-all flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-sm active:scale-95 ${
+                      user && arrivedUsers[user.id] 
+                        ? 'bg-emerald-500 text-white opacity-100' 
+                        : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                    }`}
+                    title="Signal that you have reached the meetup spot"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    <span className="hidden sm:inline">{user && arrivedUsers[user.id] ? "Arrived" : "I'm Here"}</span>
+                  </button>
+                )}
+
+                {user && arrivedUsers[activeConvo.otherUserId] && (
+                  <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 animate-pulse">
+                    <MapPin className="h-3.5 w-3.5 fill-current" />
+                    <span className="text-[10px] font-black uppercase tracking-tight">User Arrived</span>
+                  </div>
+                )}
+
                 <button
                   onClick={() => setShowMeetupModal(true)}
                   className="group relative p-2.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-sm active:scale-95"
@@ -606,12 +861,6 @@ export const MessagesView: React.FC<{
                 >
                   <Clock className="h-4 w-4" />
                   <span className="hidden sm:inline">Schedule Meetup</span>
-                  
-                  {/* Tooltip Badge for awareness */}
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
-                  </span>
                 </button>
                 <ConnectionBadge />
               </div>
@@ -625,6 +874,9 @@ export const MessagesView: React.FC<{
                 const isMe = msg.sender_id === user?.id;
                 if (msg.type === 'meetup_proposal') {
                   return <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}><MeetupBubble msg={msg} isMe={isMe} /></div>;
+                }
+                if (msg.type === 'purchase_notice') {
+                  return <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}><PurchaseNoticeBubble msg={msg} isMe={isMe} /></div>;
                 }
                 return (
                   <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -683,7 +935,20 @@ export const MessagesView: React.FC<{
             </div>
             <div className="space-y-4 mb-8">
               <div>
-                <label className="block text-xs font-black uppercase tracking-widest text-text-muted mb-2">Location</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-black uppercase tracking-widest text-text-muted">Location</label>
+                  {messages.find(m => m.type === 'purchase_notice') && (
+                    <button 
+                      onClick={() => {
+                        const m = messages.find(msg => msg.type === 'purchase_notice');
+                        if (m) setMeetupLocation(JSON.parse(m.metadata || '{}').buyerLocation);
+                      }}
+                      className="text-[9px] font-black text-primary uppercase tracking-tighter hover:underline"
+                    >
+                      Use Agreed Spot
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted" />
                   <input 
@@ -694,6 +959,11 @@ export const MessagesView: React.FC<{
                     className="w-full pl-12 pr-4 py-4 bg-background border border-border rounded-2xl focus:ring-2 focus:ring-primary outline-none text-sm font-medium text-text-main" 
                   />
                 </div>
+                {messages.find(m => m.type === 'purchase_notice') && (
+                  <p className="text-[10px] text-text-muted mt-2 px-1">
+                    Agreed in order: <span className="font-bold text-text-main">{JSON.parse(messages.find(m => m.type === 'purchase_notice')?.metadata || '{}').buyerLocation}</span>
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-black uppercase tracking-widest text-text-muted mb-2">Time & Date</label>
@@ -722,6 +992,112 @@ export const MessagesView: React.FC<{
               <button onClick={() => setShowMeetupModal(false)} className="flex-1 py-4 text-sm font-black text-text-muted uppercase tracking-widest hover:bg-background rounded-2xl transition-colors">Cancel</button>
               <button onClick={handleProposeMeetup} disabled={!meetupTime || !meetupLocation} className="flex-[2] py-4 bg-primary hover:bg-primary-hover text-white rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/20 disabled:opacity-50 active:scale-[0.98]">Send Proposal</button>
             </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showPinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-surface w-full max-w-md rounded-3xl p-6 shadow-2xl border border-border">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500 flex items-center justify-center text-white"><ShieldCheck className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-xl font-black text-text-main">Verify Exchange</h2>
+                <p className="text-xs text-text-muted font-bold uppercase tracking-wider">Enter Buyer's PIN</p>
+              </div>
+            </div>
+            
+            <div className="mb-8">
+              <label className="block text-xs font-black uppercase tracking-widest text-text-muted mb-2">4-Digit PIN</label>
+              <input 
+                type="text" 
+                maxLength={4}
+                value={pin} 
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} 
+                placeholder="0000" 
+                className="w-full text-center tracking-[1em] text-2xl font-black py-4 bg-background border border-border rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none text-text-main" 
+              />
+              <p className="text-[10px] text-text-muted mt-3 text-center font-medium">Ask the buyer to show the PIN from their "My Orders" section.</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => { setShowPinModal(false); setPin(""); }} className="flex-1 py-4 text-sm font-black text-text-muted uppercase tracking-widest hover:bg-background rounded-2xl transition-colors">Cancel</button>
+              <button 
+                onClick={handleVerifyPin} 
+                disabled={pin.length !== 4 || verifyingPin} 
+                className="flex-[2] py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 active:scale-[0.98]"
+              >
+                {verifyingPin ? "Verifying..." : "Confirm Delivery"}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showProfileModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-surface w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-border">
+            {loadingProfile ? (
+              <div className="flex justify-center py-12">
+                <span className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+              </div>
+            ) : selectedUserProfile ? (
+              <>
+                <div className="flex flex-col items-center text-center mb-6">
+                  <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center text-primary text-2xl font-black mb-4 overflow-hidden border-2 border-primary/20">
+                    {selectedUserProfile.profile_image_url ? (
+                      <img src={selectedUserProfile.profile_image_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      selectedUserProfile.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
+                    )}
+                  </div>
+                  <h2 className="text-xl font-black text-text-main">{selectedUserProfile.name}</h2>
+                  <p className="text-xs text-text-muted font-bold uppercase tracking-wider">{selectedUserProfile.role} · Joined {new Date(selectedUserProfile.created_at || "").toLocaleDateString()}</p>
+                </div>
+
+                <div className="space-y-4 mb-8">
+                  <div className="p-4 bg-background border border-border rounded-2xl">
+                    <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Email</p>
+                    <p className="text-sm font-bold text-text-main">{selectedUserProfile.email}</p>
+                  </div>
+
+                  {selectedUserProfile.mobile_number ? (
+                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
+                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Mobile Number</p>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{selectedUserProfile.mobile_number}</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl">
+                      <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Mobile Number</p>
+                      <p className="text-xs font-bold text-text-muted italic flex items-center gap-1.5">
+                        <ShieldCheck className="h-3 w-3" /> Shared after purchase
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedUserProfile.location ? (
+                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
+                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Hostel / Location</p>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{selectedUserProfile.location}</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl">
+                      <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Hostel / Location</p>
+                      <p className="text-xs font-bold text-text-muted italic flex items-center gap-1.5">
+                        <ShieldCheck className="h-3 w-3" /> Shared after purchase
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={() => setShowProfileModal(false)} 
+                  className="w-full py-4 bg-surface hover:bg-background text-text-main rounded-2xl text-xs font-black uppercase tracking-widest border border-border transition-colors"
+                >
+                  Close
+                </button>
+              </>
+            ) : null}
           </motion.div>
         </div>
       )}

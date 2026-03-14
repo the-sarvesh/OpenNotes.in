@@ -406,7 +406,6 @@ const App: React.FC = () => {
           <Routes location={location}>
             <Route path="/" element={
               <HomeView
-                setView={navigateTo}
                 onAddToCart={handleAddToCart}
                 onBuyNow={handleBuyNow}
                 onContactSeller={handleContactSeller}
@@ -415,6 +414,7 @@ const App: React.FC = () => {
                 cart={cart}
                 refreshKey={refreshKey}
                 onShowGuide={() => setShowUserGuide(true)}
+                userName={user?.name}
               />
             } />
             <Route path="/browse" element={

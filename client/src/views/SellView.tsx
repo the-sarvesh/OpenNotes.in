@@ -14,8 +14,9 @@ const SUBJECTS_BY_SEM: Record<string, string[]> = {
   '4-1': ['BSDCH ZC311: Information Security', 'BSDCH ZC365: Human Computer Interaction', 'BSDCH ZC481: Computer Networks (Elective)'],
   '4-2': ['BSDCH ZC499T: Capstone Project'],
 };
+const STANDARD_SPOTS = ['HCL Office', 'BITS Exam Center'];
 
-const LOCATIONS = ['Noida', 'Chennai', 'Bengaluru', 'Hyderabad', 'Pune', 'Lucknow', 'Nagpur', 'Vijayawada'];
+const LOCATIONS = ['Noida / Delhi NCR', 'Bengaluru', 'Hyderabad', 'Chennai', 'Pune', 'Other (Manual)'];
 
 interface FormData {
   imageFile: File | null;
@@ -30,7 +31,9 @@ interface FormData {
   quantity: string;
   condition: string;
   location: string;
+  customLocation: string; // New field for manual city entry
   deliveryMethod: string;
+  preferredMeetupSpot: string;
   meetupLocation: string;
 }
 
@@ -46,8 +49,10 @@ const INITIAL_FORM: FormData = {
   price: '',
   quantity: '1',
   condition: 'Good',
-  location: 'Bengaluru',
+  location: 'Noida / Delhi NCR',
+  customLocation: '',
   deliveryMethod: 'in_person',
+  preferredMeetupSpot: '',
   meetupLocation: '',
 };
 
@@ -93,23 +98,30 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       if (form.isMultipleSubjects) return form.subjects.length > 0;
       return !!form.courseCode;
     }
-    if (!form.price) return false;
-    if (form.deliveryMethod !== 'courier' && !form.meetupLocation.trim()) return false;
-    return true;
+    if (step === 3) {
+      if (!form.price) return false;
+      if (form.location === 'Other (Manual)' && !form.customLocation.trim()) return false;
+      if (form.deliveryMethod !== 'courier' && !form.preferredMeetupSpot) return false;
+      return true;
+    }
+    return false;
   };
+
 
   const handleSubmit = async () => {
     if (!user) { setError('Please sign in to sell notes.'); return; }
     setIsSubmitting(true);
     setError('');
     try {
+      const finalLocation = form.location === 'Other (Manual)' ? form.customLocation : form.location;
+      
       const fd = new FormData();
       fd.append('title', form.title);
       fd.append('course_code', form.isMultipleSubjects ? 'Multiple' : form.courseCode);
       fd.append('semester', form.semester);
       fd.append('condition', form.condition);
       fd.append('price', form.price);
-      fd.append('location', form.location);
+      fd.append('location', finalLocation);
       fd.append('quantity', form.quantity);
       
       // Map material type labels to backend-expected keys
@@ -123,7 +135,10 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       fd.append('is_multiple_subjects', String(form.is_multiple_subjects));
       fd.append('image', form.imageFile!);
       fd.append('delivery_method', form.deliveryMethod);
-      if (form.deliveryMethod !== 'courier') fd.append('meetup_location', form.meetupLocation);
+      if (form.deliveryMethod !== 'courier') {
+        fd.append('preferred_meetup_spot', form.preferredMeetupSpot);
+        fd.append('meetup_location', form.meetupLocation);
+      }
       if (form.isMultipleSubjects) fd.append('subjects', JSON.stringify(form.subjects));
 
       const res = await apiRequest('/api/listings', {
@@ -248,7 +263,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                       <Upload className="h-6 w-6 text-white" />
                       <span className="text-white font-bold text-sm">Change photo</span>
                     </div>
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-accent text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-accent text-black text-xs font-bold px-2.5 py-1 rounded-full">
                       <Check className="h-3 w-3" /> Photo added
                     </div>
                   </div>
@@ -388,12 +403,25 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                   </select>
                 </div>
                 <div>
-                  <Label>Your Location</Label>
-                  <select value={form.location} onChange={e => set('location', e.target.value)} className={inputClass}>
+                  <Label>City / Region</Label>
+                  <select value={form.location} onChange={e => { set('location', e.target.value); set('preferredMeetupSpot', ''); }} className={inputClass}>
                     {LOCATIONS.map(l => <option key={l}>{l}</option>)}
                   </select>
                 </div>
               </div>
+
+              {form.location === 'Other (Manual)' && (
+                <div>
+                  <Label>Specify Your City / Region <span className="text-red-500 text-[10px] font-bold">(Required)</span></Label>
+                  <input 
+                    type="text" 
+                    value={form.customLocation} 
+                    onChange={e => set('customLocation', e.target.value)} 
+                    placeholder="e.g. Mumbai, Kolkata, Pilani..." 
+                    className={inputClass} 
+                  />
+                </div>
+              )}
 
               <div>
                 <Label>Delivery Method</Label>
@@ -409,8 +437,25 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
 
               {form.deliveryMethod !== 'courier' && (
                 <div>
-                  <Label>Collection Notes / Meetup Instructions <span className="text-red-500 text-[10px] font-bold">(Required)</span></Label>
-                  <input type="text" value={form.meetupLocation} onChange={e => set('meetupLocation', e.target.value)} placeholder="e.g., Meet at HCL Gate 2 Noida, or near BITS Exam Center canteen..." className={inputClass} />
+                  <Label>Preferred Hand-over Spot <span className="text-red-500 text-[10px] font-bold">(Required)</span></Label>
+                  <select 
+                    value={form.preferredMeetupSpot} 
+                    onChange={e => set('preferredMeetupSpot', e.target.value)} 
+                    className={inputClass}
+                  >
+                    {/* Standard universal spots */}
+                    {STANDARD_SPOTS.map(spot => (
+                      <option key={spot} value={spot}>{spot}</option>
+                    ))}
+                    <option value="Other">Other (Specify below)</option>
+                  </select>
+                </div>
+              )}
+
+              {form.deliveryMethod !== 'courier' && (
+                <div>
+                  <Label>Specific Instructions / Custom Location</Label>
+                  <input type="text" value={form.meetupLocation} onChange={e => set('meetupLocation', e.target.value)} placeholder="e.g. Near the main entrance, 3rd floor..." className={inputClass} />
                 </div>
               )}
 

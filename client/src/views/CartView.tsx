@@ -78,7 +78,7 @@ export const CartView: React.FC<CartViewProps> = ({
                 
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start gap-2 mb-1">
-                    <h3 className="font-bold text-text-main text-lg line-clamp-1 group-hover:text-black dark:group-hover:text-primary transition-colors">
+                    <h3 className="font-bold text-text-main text-base sm:text-lg line-clamp-1 group-hover:text-black dark:group-hover:text-primary transition-colors">
                       {item.note.title}
                     </h3>
                     <button 

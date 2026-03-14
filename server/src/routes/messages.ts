@@ -10,10 +10,10 @@ const router = express.Router();
 // All message routes require auth
 router.use(authenticate);
 
-// Helper to generate a consistent conversation ID between two users about a listing
-const getConversationId = (userId1: string, userId2: string, listingId: string) => {
+// Helper to generate a consistent conversation ID between two users
+const getConversationId = (userId1: string, userId2: string) => {
   const sorted = [userId1, userId2].sort();
-  return `${sorted[0]}_${sorted[1]}_${listingId}`;
+  return `${sorted[0]}_${sorted[1]}`;
 };
 
 // GET /api/messages/check/:receiverId/:listingId — check if order exists & convo started
@@ -36,7 +36,7 @@ router.get('/check/:receiverId/:listingId', async (req: AuthRequest, res, next) 
     });
 
     // 2. Check if a conversation ID exists in messages table
-    const conversationId = getConversationId(senderId as string, receiverId as string, listingId as string);
+    const conversationId = getConversationId(senderId as string, receiverId as string);
     const convoCheck = await db.execute({
       sql: 'SELECT id FROM messages WHERE conversation_id = ? LIMIT 1',
       args: [conversationId as string]
@@ -62,14 +62,17 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
 
     const convos = await db.execute({
       sql: `
-        SELECT m.conversation_id, m.listing_id,
+        SELECT m.conversation_id,
                MAX(m.created_at) as last_message_at,
-               l.title as listing_title, l.image_url as listing_image,
+               GROUP_CONCAT(DISTINCT l.id) as listing_ids,
+               GROUP_CONCAT(DISTINCT l.title) as listing_titles,
+               GROUP_CONCAT(DISTINCT l.image_url) as listing_images,
                CASE 
                  WHEN m.sender_id = ? THEN m.receiver_id 
                  ELSE m.sender_id 
                END as other_user_id,
                u.name as other_user_name,
+               u.profile_image_url as other_user_profile_image,
                (SELECT COUNT(*) FROM messages m2 
                 WHERE m2.conversation_id = m.conversation_id 
                   AND m2.receiver_id = ? 
@@ -93,11 +96,12 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
 
     const results = convos.rows.map(convo => ({
       conversationId: convo.conversation_id,
-      listingId: convo.listing_id,
-      listingTitle: convo.listing_title,
-      listingImage: convo.listing_image,
+      listingIds: String(convo.listing_ids || "").split(','),
+      listingTitles: String(convo.listing_titles || "").split(','),
+      listingImages: String(convo.listing_images || "").split(','),
       otherUserId: convo.other_user_id,
       otherUserName: String(convo.other_user_name || "User"),
+      otherUserProfileImage: convo.other_user_profile_image,
       unreadCount: Number(convo.unread_count || 0),
       lastMessage: String(convo.last_message || ""),
       lastMessageAt: convo.last_message_at,
@@ -198,7 +202,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
       return res.status(403).json({ error: 'You can only message users after purchasing their item' });
     }
 
-    const conversationId = getConversationId(senderId, receiver_id, listing_id);
+    const conversationId = getConversationId(senderId, receiver_id);
     const messageId = uuidv4();
 
     await db.execute({

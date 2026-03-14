@@ -132,6 +132,7 @@ router.post(
         is_multiple_subjects,
         subjects,
         delivery_method,
+        preferred_meetup_spot,
         meetup_location,
       } = req.body;
 
@@ -180,8 +181,8 @@ router.post(
       const meetupLoc = meetup_location || null;
 
       await db.execute({
-        sql: `INSERT INTO listings (id, seller_id, title, course_code, semester, condition, price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, meetup_location, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+        sql: `INSERT INTO listings (id, seller_id, title, course_code, semester, condition, price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
         args: [
           listingId,
           sellerId,
@@ -196,6 +197,7 @@ router.post(
           material_type,
           isMultiple ? 1 : 0,
           deliveryMethod,
+          preferred_meetup_spot || null,
           meetupLoc,
         ],
       });
@@ -239,6 +241,20 @@ router.get("/me", authenticate, async (req: AuthRequest, res, next) => {
       args: [req.user!.id],
     });
     res.json(listings.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Increment view count for a listing
+router.post("/:id/view", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await db.execute({
+      sql: "UPDATE listings SET views = views + 1 WHERE id = ?",
+      args: [id],
+    });
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }

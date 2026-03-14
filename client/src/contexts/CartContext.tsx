@@ -54,9 +54,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
 
   const [isValidating, setIsValidating] = useState(false);
 
-  // Track whether we've already validated in the current session
-  const hasValidatedRef = useRef<boolean>(false);
-
   // ── Persist to localStorage on every change ───────────────────────────────
   useEffect(() => {
     try {
@@ -81,8 +78,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
     async (): Promise<void> => {
       // Nothing to validate
       if (cart.length === 0) return;
-      // Already validated in this session
-      if (hasValidatedRef.current) return;
 
       setIsValidating(true);
       try {
@@ -105,42 +100,39 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
         const results: ValidationResult[] = await res.json();
         const resultMap = new Map(results.map((r) => [r.id, r]));
 
-        let removedTitles: string[] = [];
-        let adjustedTitles: string[] = [];
+        const removedTitles: string[] = [];
+        const adjustedTitles: string[] = [];
+        const nextCart: CartItem[] = [];
 
-        setCart((prev) => {
-          const next: CartItem[] = [];
+        for (const item of cart) {
+          const info = resultMap.get(item.note.id);
 
-          for (const item of prev) {
-            const info = resultMap.get(item.note.id);
-
-            // Listing disappeared or became inactive → remove
-            if (!info || !info.available) {
-              removedTitles.push(item.note.title);
-              continue;
-            }
-
-            // Stock dropped below requested quantity → clamp
-            const maxQty = info.quantity ?? item.quantity;
-            if (item.quantity > maxQty) {
-              adjustedTitles.push(item.note.title);
-              next.push({ ...item, quantity: maxQty });
-            } else {
-              // Price may have changed — update in cart so checkout total is
-              // always fresh (note: this only updates the copy stored in cart)
-              if (info.price !== undefined && info.price !== item.note.price) {
-                next.push({
-                  ...item,
-                  note: { ...item.note, price: info.price },
-                });
-              } else {
-                next.push(item);
-              }
-            }
+          // Listing disappeared or became inactive → remove
+          if (!info || !info.available) {
+            removedTitles.push(item.note.title);
+            continue;
           }
 
-          return next;
-        });
+          // Stock dropped below requested quantity → clamp
+          const maxQty = info.quantity ?? item.quantity;
+          if (item.quantity > maxQty) {
+            adjustedTitles.push(item.note.title);
+            nextCart.push({ ...item, quantity: maxQty });
+          } else {
+            // Price may have changed — update in cart so checkout total is
+            // always fresh (note: this only updates the copy stored in cart)
+            if (info.price !== undefined && info.price !== item.note.price) {
+              nextCart.push({
+                ...item,
+                note: { ...item.note, price: info.price },
+              });
+            } else {
+              nextCart.push(item);
+            }
+          }
+        }
+
+        setCart(nextCart);
 
         // ── User-facing feedback ──────────────────────────────────────────────
         if (removedTitles.length > 0) {
@@ -170,9 +162,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
             },
           );
         }
-
-        // Mark as validated so we don't re-run during the session
-        hasValidatedRef.current = true;
       } catch (err) {
         // Network errors are non-fatal — the user can still proceed
         console.warn("[CartContext] validate-cart network error:", err);
@@ -181,7 +170,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cart.length], // re-create only when cart length changes (new items added)
+    [cart], // re-create whenever cart changes
   );
 
   // ── Cart mutation helpers ─────────────────────────────────────────────────
@@ -223,13 +212,6 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   const clearCart = () => setCart([]);
-
-  // ── Reset validation cache when cart is fully cleared ────────────────────
-  useEffect(() => {
-    if (cart.length === 0) {
-      hasValidatedRef.current = false;
-    }
-  }, [cart.length]);
 
   return (
     <CartContext.Provider

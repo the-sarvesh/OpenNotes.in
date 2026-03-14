@@ -57,7 +57,7 @@ const FadeIn: React.FC<{ children: React.ReactNode; delay?: number; x?: number; 
 };
 
 export const HomeView: React.FC<HomeViewProps> = ({
-  onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart, refreshKey, onShowGuide, userName,
+  onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart = [], refreshKey, onShowGuide, userName,
 }) => {
   const navigate = useNavigate();
   const [notes, setNotes] = useState<Note[]>([]);

@@ -59,11 +59,9 @@ export const initSocket = (httpServer: HttpServer) => {
     socket.on("join_conversation", async ({ conversationId }: { conversationId: string }) => {
       if (!conversationId) return;
       try {
-        // Check if an order exists between these two users for this listing
-        // This allows joining a room even if no messages have been sent yet.
-        const [u1, u2, lId] = conversationId.split('_');
+        const [u1, u2] = conversationId.split('_');
 
-        if (!u1 || !u2 || !lId) {
+        if (!u1 || !u2) {
           socket.emit("error", { message: "Invalid conversation ID" });
           return;
         }
@@ -73,17 +71,19 @@ export const initSocket = (httpServer: HttpServer) => {
           return;
         }
 
+        const otherUserId = userId === u1 ? u2 : u1;
+
         const orderCheck = await db.execute({
           sql: `SELECT o.id FROM orders o
                 JOIN order_items oi ON o.id = oi.order_id
-                WHERE oi.listing_id = ?
-                  AND (o.buyer_id = ? OR oi.seller_id = ?)
+                WHERE (o.buyer_id = ? AND oi.seller_id = ?) 
+                   OR (o.buyer_id = ? AND oi.seller_id = ?)
                 LIMIT 1`,
-          args: [lId, userId, userId],
+          args: [userId, otherUserId, otherUserId, userId],
         });
 
         if (orderCheck.rows.length === 0) {
-          socket.emit("error", { message: "No purchase found for this item." });
+          socket.emit("error", { message: "No purchase found between you and this user." });
           return;
         }
         socket.join(`conv:${conversationId}`);
@@ -120,26 +120,26 @@ export const initSocket = (httpServer: HttpServer) => {
         }
 
         try {
-          // Verify order exists (same check as REST endpoint)
+          // Verify order exists (any order between these two)
           const orderCheck = await db.execute({
             sql: `SELECT o.id FROM orders o
                   JOIN order_items oi ON o.id = oi.order_id
-                  WHERE oi.listing_id = ?
-                    AND ((o.buyer_id = ? AND oi.seller_id = ?) OR (o.buyer_id = ? AND oi.seller_id = ?))
+                  WHERE (o.buyer_id = ? AND oi.seller_id = ?) 
+                     OR (o.buyer_id = ? AND oi.seller_id = ?)
                   LIMIT 1`,
-            args: [listingId, userId, receiverId, receiverId, userId],
+            args: [userId, receiverId, receiverId, userId],
           });
 
           if (orderCheck.rows.length === 0) {
             socket.emit("message_error", {
-              message: "You can only message users after purchasing their item",
+              message: "You can only message users after purchasing an item from them",
             });
             return;
           }
 
           // Verify user is in the conversation room they claim
           const sorted = [userId, receiverId].sort();
-          const expectedConvId = `${sorted[0]}_${sorted[1]}_${listingId}`;
+          const expectedConvId = `${sorted[0]}_${sorted[1]}`;
           if (conversationId !== expectedConvId) {
             socket.emit("message_error", { message: "Invalid conversation ID" });
             return;
@@ -344,6 +344,38 @@ export const initSocket = (httpServer: HttpServer) => {
       } catch (err) {
         console.error("[Socket] decline_meetup error:", err);
       }
+    });
+
+    socket.on("cancel_meetup", async ({ conversationId, proposalId, messageId }) => {
+      try {
+        await db.execute({
+          sql: "UPDATE meetup_proposals SET status = 'cancelled' WHERE id = ? AND sender_id = ?",
+          args: [proposalId, userId]
+        });
+
+        // Update message metadata
+        const msgRes = await db.execute({ sql: "SELECT metadata FROM messages WHERE id = ?", args: [messageId] });
+        if (msgRes.rows[0]) {
+          const metadata = JSON.parse(msgRes.rows[0].metadata as string);
+          metadata.status = 'cancelled';
+          await db.execute({
+            sql: "UPDATE messages SET metadata = ? WHERE id = ?",
+            args: [JSON.stringify(metadata), messageId]
+          });
+        }
+
+        io.to(`conv:${conversationId}`).emit("meetup_status_changed", { proposalId, status: 'cancelled', messageId });
+      } catch (err) {
+        console.error("[Socket] cancel_meetup error:", err);
+      }
+    });
+
+    socket.on("arrived_at_meetup", ({ conversationId }: { conversationId: string }) => {
+      if (!conversationId) return;
+      const [u1, u2] = conversationId.split('_');
+      if (userId !== u1 && userId !== u2) return;
+
+      io.to(`conv:${conversationId}`).emit("other_user_arrived", { userId });
     });
 
     socket.on("disconnect", (reason) => {

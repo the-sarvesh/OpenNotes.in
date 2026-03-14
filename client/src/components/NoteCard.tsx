@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Heart, Star, Clock, MapPin, ShoppingCart, Layers } from 'lucide-react';
+import { Heart, Star, Clock, MapPin, ShoppingCart, Layers, Eye } from 'lucide-react';
 import { formatSemester } from '../utils/formatters';
 
 export interface Note {
@@ -20,7 +20,9 @@ export interface Note {
   subjects?: string[];
   sellerId?: string;
   deliveryMethod?: string;
+  preferredMeetupSpot?: string;
   meetupLocation?: string;
+  views?: number;
 }
 
 export const NoteCard = ({ 
@@ -104,6 +106,11 @@ export const NoteCard = ({
           <span className="flex items-center gap-1">
             <MapPin className="h-3 w-3" /> {note.location}
           </span>
+          {note.views !== undefined && (
+            <span className="flex items-center gap-1 ml-auto font-bold text-[#003366] dark:text-blue-400">
+              <Eye className="h-3 w-3" /> {note.views}
+            </span>
+          )}
         </div>
         
         <div className="mt-auto pt-4 border-t border-slate-50  flex items-center justify-between mb-4">
@@ -124,15 +131,16 @@ export const NoteCard = ({
             </span>
           </div>
           <div className="flex gap-2">
-            <button 
+            <button
               onClick={() => onAddToCart(note)}
               disabled={note.quantity === 0 || (cart.find(i => i.note.id === note.id)?.quantity || 0) >= note.quantity}
               className={`flex-1 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm ${
-                isInCart 
-                  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' 
+                isInCart
+                  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60'
                   : 'bg-[#FFC000] text-black hover:bg-amber-400'
               } disabled:opacity-50 disabled:cursor-not-allowed active:scale-95`}
             >
+
               <ShoppingCart className="h-3.5 w-3.5" />
               {note.quantity === 0 ? 'Out of Stock' : (cart.find(i => i.note.id === note.id)?.quantity || 0) >= note.quantity ? 'Max in Cart' : isInCart ? 'In Cart' : 'Add to Cart'}
             </button>
@@ -140,7 +148,7 @@ export const NoteCard = ({
             <button 
               onClick={() => onBuyNow?.(note)}
               disabled={note.quantity === 0}
-              className="flex-1 py-3 bg-[#fb641b] text-white rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-[#ff7d3e] transition-all flex items-center justify-center gap-2 shadow-md shadow-[#fb641b]/20 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+              className="flex-1 py-3 bg-[#003366] dark:bg-[#FFC000] text-white dark:text-black rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
             >
               Buy Now
             </button>

@@ -53,16 +53,27 @@ const JWT_SECRET =
   process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod";
 
 // ── Security: Warn if session secret is default ───────────────────────────────
-if (
-  process.env.NODE_ENV === "production" &&
-  (!process.env.SESSION_SECRET ||
-    process.env.SESSION_SECRET === "opennotes-session-secret")
-) {
-  console.error(
-    "[FATAL] SESSION_SECRET is not set or is using the default value in production. " +
-    "Server startup aborted.",
-  );
-  process.exit(1);
+if (process.env.NODE_ENV === "production") {
+  if (
+    !process.env.SESSION_SECRET ||
+    process.env.SESSION_SECRET === "opennotes-session-secret"
+  ) {
+    console.error(
+      "[FATAL] SESSION_SECRET is not set or is using the default value in production. " +
+        "Server startup aborted.",
+    );
+    process.exit(1);
+  }
+  if (
+    !process.env.JWT_SECRET ||
+    process.env.JWT_SECRET === "opennotes-dev-secret-change-in-prod"
+  ) {
+    console.error(
+      "[FATAL] JWT_SECRET is not set or is using the default value in production. " +
+        "Server startup aborted.",
+    );
+    process.exit(1);
+  }
 }
 
 // ── Socket.IO setup ──────────────────────────────────────────────────────────

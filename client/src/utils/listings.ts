@@ -19,7 +19,9 @@ export function mapListing(item: any): Note {
     materialType: item.material_type || 'Mixed',
     location: item.location || 'Pilani',
     deliveryMethod: item.delivery_method || 'in_person',
+    preferredMeetupSpot: item.preferred_meetup_spot || null,
     meetupLocation: item.meetup_location || null,
+    views: Number(item.views || 0),
     isMultipleSubjects: Boolean(item.is_multiple_subjects),
     subjects: Array.isArray(item.subjects) ? item.subjects : [],
   };

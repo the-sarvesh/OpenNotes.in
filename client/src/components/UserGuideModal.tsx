@@ -83,7 +83,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
           <div className="px-6 sm:px-8 pt-4 sm:pt-6 pb-4 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[#FFC000] rounded-xl shadow-lg shadow-[#FFC000]/20">
-                <BookOpen className="h-4 w-4 text-slate-900" />
+                <BookOpen className="h-4 w-4 text-black" />
               </div>
               <div>
                 <p className="font-black text-white text-base leading-none">How it Works</p>
@@ -105,7 +105,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${activeTab === tab.id
-                    ? 'bg-[#FFC000] text-slate-900 border-[#FFC000] shadow-lg shadow-[#FFC000]/20'
+                    ? 'bg-[#FFC000] text-black border-[#FFC000] shadow-lg shadow-[#FFC000]/20'
                     : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-white'
                   }`}
               >
@@ -347,14 +347,14 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
             {activeTab === 'safety' ? (
               <button
                 onClick={onClose}
-                className="flex items-center gap-2 px-6 py-3 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#FFC000]/20 active:scale-[0.97] transition-all"
+                className="flex items-center gap-2 px-6 py-3 bg-[#FFC000] hover:bg-[#e6ac00] text-black rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#FFC000]/20 active:scale-[0.97] transition-all"
               >
                 Let's Go! <ArrowUpRight className="h-4 w-4" />
               </button>
             ) : (
               <button
                 onClick={goNext}
-                className="flex items-center gap-2 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#FFC000]/20 active:scale-[0.97] transition-all"
+                className="flex items-center gap-2 bg-[#FFC000] hover:bg-[#e6ac00] text-black px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#FFC000]/20 active:scale-[0.97] transition-all"
               >
                 Next <ChevronRight className="h-4 w-4" />
               </button>
