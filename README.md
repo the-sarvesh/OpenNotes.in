@@ -93,10 +93,29 @@ You can run both the frontend and backend concurrently from the root directory:
 ```bash
 npm run dev
 ```
-- Frontend: `http://localhost:3000`
+- Frontend: `http://localhost:3001`
 - API Backend: `http://localhost:5000`
 
 ---
+100: 
+101: ## 🚢 Deployment
+102: 
+103: ### Backend (Render.com)
+104: 1. Create a new **Web Service** on Render.
+105: 2. Connect your GitHub repository.
+106: 3. Use the following build/start commands:
+107:    - Build: `npm install && npm run build --workspace=server`
+108:    - Start: `npm start --workspace=server`
+109: 4. Add all environment variables from `server/.env` to Render Dashboard.
+110: 
+111: ### Frontend (Vercel)
+112: 1. Import your project into Vercel.
+113: 2. Root Directory: `client`
+114: 3. Add the following Environment Variables:
+115:    - `VITE_BACKEND_URL`: Your Render backend URL (e.g., `https://your-api.onrender.com`)
+116: 4. Vercel will use `vercel.json` for proxying `/api` and `/uploads` requests.
+117: 
+118: ---
 
 ## 📄 License
 

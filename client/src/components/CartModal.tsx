@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingCart, X, Shield, CreditCard, Check, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import { apiRequest } from '../utils/api';
 import type { Note } from '../types';
 
 const PLATFORM_FEE_PCT = 10;
@@ -24,7 +25,7 @@ interface CartModalProps {
 export const CartModal: React.FC<CartModalProps> = ({
   cart, onClose, updateQuantity, removeItem, clearCart, onOrderSuccess,
 }) => {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [processing, setProcessing] = useState(false);
 
   // Scroll Lock (only when mounted)
@@ -47,14 +48,13 @@ export const CartModal: React.FC<CartModalProps> = ({
   const fee = Math.round(subtotal * (PLATFORM_FEE_PCT / 100));
 
   const handleCheckout = async () => {
-    if (!user || !token) { setError('Please sign in to checkout.'); return; }
+    if (!user) { setError('Please sign in to checkout.'); return; }
     if (!agreed) { setError('Please agree to coordinate with sellers.'); return; }
     setProcessing(true);
     setError('');
     try {
-      const res = await fetch('/api/orders', {
+      const res = await apiRequest('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           items: cart.map(i => ({ listing_id: i.note.id, quantity: i.quantity })),
           delivery_details: deliveryDetails,

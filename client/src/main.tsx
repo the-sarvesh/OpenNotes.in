@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { AuthProvider } from './contexts/AuthContext.tsx';
 import './index.css';
+import ErrorBoundary from './components/ErrorBoundary.tsx';
 
+import { BrowserRouter } from 'react-router-dom';
 import { CartProvider } from './contexts/CartContext.tsx';
 
 // Global Fetch Interceptor to handle Account Blocking
@@ -18,7 +20,6 @@ window.fetch = async (...args) => {
       const data = await clone.json();
       if (data.error === 'ACCOUNT_BLOCKED') {
         // Clear local storage and force reload/logout
-        localStorage.removeItem('open_notes_token');
         localStorage.removeItem('open_notes_user');
         window.location.href = '/?error=blocked';
       }
@@ -32,10 +33,14 @@ window.fetch = async (...args) => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <CartProvider>
-        <App />
-      </CartProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <CartProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </CartProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

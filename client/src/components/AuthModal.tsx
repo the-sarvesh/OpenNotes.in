@@ -161,7 +161,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Authentication failed");
 
-      login(data.token, data.user);
+      login(data.user);
       handleClose();
     } catch (err: any) {
       setError(err.message);

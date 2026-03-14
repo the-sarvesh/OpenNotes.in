@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AnimatePresence } from "motion/react";
 import { Toaster, toast } from "react-hot-toast";
+import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
 
 // ── Layout ──────────────────────────────────────────────────────────
 import { Navbar } from "./components/Navbar";
@@ -22,6 +23,10 @@ import { CartView } from "./views/CartView.tsx";
 import { CheckoutView } from "./views/CheckoutView.tsx";
 import { OrderSuccessView } from "./views/OrderSuccessView";
 import { UserGuideModal } from "./components/UserGuideModal";
+import { apiRequest } from "./utils/api";
+import { NotificationManager } from "./utils/NotificationManager";
+import { getSocket } from "./utils/socket";
+import type { Notification } from "./components/NotificationSystem";
 
 // ── Contexts / Types ────────────────────────────────────────────────
 import { useAuth } from "./contexts/AuthContext";
@@ -29,32 +34,33 @@ import { CartProvider, useCart } from "./contexts/CartContext";
 import type { Note, View } from "./types/index.ts";
 
 const App: React.FC = () => {
-  // ── Navigation ────────────────────────────────────────────────────
-  const [currentView, setCurrentView] = useState<View>("home");
-  const [previousView, setPreviousView] = useState<View | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [profileTab, setProfileTab] = useState<'listings' | 'earnings' | 'settings'>('listings');
 
   const navigateTo = (view: View, tab?: string) => {
-    setPreviousView(currentView);
-    setCurrentView(view);
+    // Re-validate cart when entering cart or checkout pages
+    if ((view === "cart" || view === "checkout") && user && cart.length > 0) {
+      validateCart();
+    }
+
     if (view === 'profile' && tab) {
       setProfileTab(tab as any);
-    } else if (view === 'profile') {
-      // Don't reset if we are already there, but if navigating fresh, default to listings
-      // unless a tab was specified.
-    }
-    
-    // Re-validate cart when entering cart or checkout pages (FE-4)
-    if ((view === "cart" || view === "checkout") && token && cart.length > 0) {
-      validateCart(token);
+      navigate('/profile');
+    } else {
+      navigate(`/${view === 'home' ? '' : view}`);
     }
   };
 
-  const goBack = () => {
-    setCurrentView(previousView ?? "home");
-    setPreviousView(null);
-  };
+  useEffect(() => {
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      (window as any).deferredPrompt = e;
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
 
   // ── Theme ─────────────────────────────────────────────────────────
   const [isDark, setIsDark] = useState(() => {
@@ -70,8 +76,7 @@ const App: React.FC = () => {
   }, [isDark]);
 
   // ── Cart ──────────────────────────────────────────────────────────
-  const { cart, setCart, addToCart, validateCart } = useCart();
-  const [showCart, setShowCart] = useState(false);
+  const { cart, setCart, addToCart, removeFromCart, updateQuantity, clearCart, validateCart } = useCart();
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
   // ── UI state ──────────────────────────────────────────────────────────
@@ -90,15 +95,20 @@ const App: React.FC = () => {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
 
-  const { user, token, login } = useAuth();
+  // ── Audio refs ────────────────────────────────────────────────────
+  const messageAudio = React.useRef<HTMLAudioElement | null>(null);
+  const notificationAudio = React.useRef<HTMLAudioElement | null>(null);
+  const prevMessagesRef = React.useRef(unreadMessages);
+  const prevNotifsRef = React.useRef(unreadNotifs);
+
+  const { user, login } = useAuth();
 
   // ── Validate cart freshness whenever user authenticates (FE-4) ───────────
   useEffect(() => {
-    if (token && cart.length > 0) {
-      validateCart(token);
+    if (user && cart.length > 0) {
+      validateCart();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [user]);
 
   // ── Handle password-reset deep link (/reset-password?token=...) ──────────
   useEffect(() => {
@@ -118,14 +128,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (window.location.pathname === "/auth/callback") {
       const params = new URLSearchParams(window.location.search);
-      const tokenParam = params.get("token");
       const userId = params.get("userId");
       const email = params.get("email");
       const name = params.get("name");
       const role = params.get("role");
 
-      if (tokenParam && userId && email && name) {
-        login(tokenParam, {
+      if (userId && email && name) {
+        login({
           id: userId,
           email,
           name,
@@ -137,10 +146,9 @@ const App: React.FC = () => {
       }
 
       // Clean up the URL and go home
-      window.history.replaceState({}, document.title, "/");
-      setCurrentView("home");
+      navigate("/", { replace: true });
     }
-  }, [login]);
+  }, [login, navigate]);
 
   // ── Handle OAuth / Account errors from query params ───────────────
   useEffect(() => {
@@ -165,16 +173,12 @@ const App: React.FC = () => {
 
   // ── Poll unread counts ────────────────────────────────────────────
   useEffect(() => {
-    if (!user || !token) return;
+    if (!user) return;
     const fetch_ = async () => {
       try {
         const [m, n] = await Promise.all([
-          fetch("/api/messages/unread/count", {
-            headers: { Authorization: `Bearer ${token}` },
-          }).then((r) => r.json()),
-          fetch("/api/notifications/unread/count", {
-            headers: { Authorization: `Bearer ${token}` },
-          }).then((r) => r.json()),
+          apiRequest("/api/messages/unread/count").then((r) => r.json()),
+          apiRequest("/api/notifications/unread/count").then((r) => r.json()),
         ]);
         setUnreadMessages(m.count ?? 0);
         setUnreadNotifs(n.count ?? 0);
@@ -185,7 +189,93 @@ const App: React.FC = () => {
     fetch_();
     const id = setInterval(fetch_, 30_000);
     return () => clearInterval(id);
-  }, [user, token, currentView]);
+  }, [user, location.pathname]);
+
+  // ── Service Worker & Push registration ───────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    
+    const initPush = async () => {
+      await NotificationManager.registerServiceWorker();
+      const granted = await NotificationManager.requestPermission();
+      if (granted) {
+        await NotificationManager.subscribeUser();
+      }
+    };
+    
+    initPush();
+  }, [user]);
+
+  // ── Socket.IO Notifications ──────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+
+    const socket = getSocket();
+    
+    const onNewNotification = (notif: Notification) => {
+      setUnreadNotifs(prev => prev + 1);
+      toast(notif.title, {
+        icon: '🔔',
+        duration: 5000,
+      });
+      notificationAudio.current?.play().catch(() => {});
+    };
+
+    const onUnreadCountChanged = () => {
+      // Something changed (e.g. read status elsewhere), refresh counts
+      apiRequest("/api/messages/unread/count").then(r => r.json()).then(data => setUnreadMessages(data.count ?? 0));
+      apiRequest("/api/notifications/unread/count").then(r => r.json()).then(data => setUnreadNotifs(data.count ?? 0));
+    };
+
+    const onConnectError = (err: any) => console.error("[Socket] connect_error:", err.message);
+
+    const onNewMessage = (msg: any) => {
+      // Avoid showing toast for our own messages (emitted via conv room)
+      if (msg.sender_id === user.id) return;
+
+      // Only show toast if we're not already on the messages page
+      if (location.pathname !== '/messages') {
+        const sender = msg.sender_name || "Someone";
+        toast(`${sender}: ${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}`, {
+          icon: '💬',
+          duration: 4000,
+        });
+        messageAudio.current?.play().catch(() => {});
+      }
+      setUnreadMessages(prev => prev + 1);
+    };
+
+    socket.on('connect_error', onConnectError);
+    socket.on('new_notification', onNewNotification);
+    socket.on('unread_count_changed', onUnreadCountChanged);
+    socket.on('new_message', onNewMessage);
+
+    return () => {
+      socket.off('connect_error', onConnectError);
+      socket.off('new_notification', onNewNotification);
+      socket.off('unread_count_changed', onUnreadCountChanged);
+      socket.off('new_message', onNewMessage);
+    };
+  }, [user]);
+
+  // ── Notification Sound handling ──────────────────────────────────
+  useEffect(() => {
+    if (!user) {
+      prevMessagesRef.current = unreadMessages;
+      prevNotifsRef.current = unreadNotifs;
+      return;
+    }
+    
+    if (unreadMessages > prevMessagesRef.current) {
+      messageAudio.current?.play().catch(() => {});
+    }
+    if (unreadNotifs > prevNotifsRef.current) {
+      notificationAudio.current?.play().catch(() => {});
+    }
+    
+    prevMessagesRef.current = unreadMessages;
+    prevNotifsRef.current = unreadNotifs;
+  }, [unreadMessages, unreadNotifs, user]);
 
   // ── First-time user guide ─────────────────────────────────────────
   useEffect(() => {
@@ -200,17 +290,18 @@ const App: React.FC = () => {
     localStorage.setItem("hasSeenGuide", "true");
   };
 
-  // ── Redirect logged-out users from protected views ────────────────
+  // No longer needed: Redirect logic handled by ProtectedRoute or similar if needed
+  // For now, simple redirect in main Routes is better.
+  const isProtected = (path: string) => {
+    const protected_ = ["/profile", "/sell", "/admin", "/messages", "/orders"];
+    return protected_.includes(path);
+  };
+
   useEffect(() => {
-    const protected_: View[] = [
-      "profile",
-      "sell",
-      "admin",
-      "messages",
-      "orders",
-    ];
-    if (!user && protected_.includes(currentView)) navigateTo("home");
-  }, [user, currentView]);
+    if (!user && isProtected(location.pathname)) {
+      navigate("/", { replace: true });
+    }
+  }, [user, location.pathname, navigate]);
 
   // ── Helpers ───────────────────────────────────────────────────────
   const requireAuth = (action: () => void) => {
@@ -227,8 +318,12 @@ const App: React.FC = () => {
         toast("You can't buy your own listing!");
         return;
       }
-      addToCart(note);
-      toast.success("Added to cart!");
+      const success = addToCart(note);
+      if (success) {
+        toast.success("Added to cart!");
+      } else {
+        toast.error("Stock limit reached!");
+      }
     });
   };
 
@@ -254,13 +349,10 @@ const App: React.FC = () => {
     title: string,
   ) => {
     requireAuth(async () => {
-      if (!sellerId || !token) return;
+      if (!sellerId) return;
       try {
-        const check = await fetch(
-          `/api/messages/check/${sellerId}/${listingId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
+        const check = await apiRequest(
+          `/api/messages/check/${sellerId}/${listingId}`
         );
         if (!check.ok) throw new Error("Failed to check messaging status");
         const { canMessage, hasConversation, conversationId } =
@@ -276,12 +368,8 @@ const App: React.FC = () => {
           return;
         }
 
-        const res = await fetch("/api/messages", {
+        const res = await apiRequest("/api/messages", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
           body: JSON.stringify({
             receiver_id: sellerId,
             listing_id: listingId,
@@ -302,108 +390,100 @@ const App: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col bg-background font-sans transition-colors duration-200">
+      <audio ref={messageAudio} src="/sounds/message.mp3" preload="auto" />
+      <audio ref={notificationAudio} src="/sounds/notification.mp3" preload="auto" />
       <Navbar
-        currentView={currentView}
-        setView={navigateTo}
         isDark={isDark}
-        toggleDark={() => setIsDark((d) => !d)}
+        toggleDark={() => setIsDark(!isDark)}
         cartCount={cartCount}
-        setShowCart={() => navigateTo("cart")}
         setShowAuth={setShowAuth}
-        unreadMessageCount={unreadMessages}
-        unreadNotificationCount={unreadNotifs}
         onShowGuide={() => setShowUserGuide(true)}
+        unreadNotificationCount={unreadNotifs}
+        unreadMessageCount={unreadMessages}
       />
-
       <main className="flex-1">
         <AnimatePresence mode="wait">
-          {currentView === "home" && (
-            <HomeView
-              key="home"
-              setView={navigateTo}
-              onAddToCart={handleAddToCart}
-              onBuyNow={handleBuyNow}
-              onContactSeller={handleContactSeller}
-              onViewDetails={setSelectedNote}
-              checkAuth={requireAuth}
-              cart={cart}
-              refreshKey={refreshKey}
-              onShowGuide={() => setShowUserGuide(true)}
-            />
-          )}
-          {currentView === "browse" && (
-            <BrowseView
-              key="browse"
-              onAddToCart={handleAddToCart}
-              onBuyNow={handleBuyNow}
-              onContactSeller={handleContactSeller}
-              onViewDetails={setSelectedNote}
-              cart={cart}
-              refreshKey={refreshKey}
-            />
-          )}
-          {currentView === "sell" && (
-            <SellView key="sell" onGoToBrowse={() => navigateTo("browse")} />
-          )}
-          {currentView === "profile" && (
-            <ProfileView 
-              key="profile" 
-              onContactSeller={handleContactSeller} 
-              initialTab={profileTab}
-            />
-          )}
-          {currentView === "orders" && (
-            <OrdersView key="orders" onContactSeller={handleContactSeller} />
-          )}
-          {currentView === "admin" && <AdminView key="admin" />}
-          {currentView === "cart" && (
-            <CartView
-              key="cart"
-              cart={cart}
-              updateQuantity={(id, q) =>
-                setCart((c) =>
-                  c.map((i) => (i.note.id === id ? { ...i, quantity: q } : i)),
-                )
-              }
-              removeItem={(id) =>
-                setCart((c) => c.filter((i) => i.note.id !== id))
-              }
-              onCheckout={() => navigateTo("checkout")}
-              onBack={() => navigateTo("browse")}
-            />
-          )}
-          {currentView === "checkout" && (
-            <CheckoutView
-              key="checkout"
-              cart={cart}
-              onSuccess={(data) => {
-                setCart([]);
-                setRefreshKey((k) => k + 1);
-                setOrderSuccessData(data);
-                navigateTo("order-success");
-              }}
-              onBack={() => navigateTo("cart")}
-            />
-          )}
-          {currentView === "order-success" && (
-            <OrderSuccessView
-              key="order-success"
-              orderData={orderSuccessData}
-              onBack={() => navigateTo("orders")}
-              onGoToMessages={() => navigateTo("messages")}
-            />
-          )}
-          {currentView === "messages" && (
-            <MessagesView
-              key="messages"
-              initialConversationId={selectedConversationId}
-              onBack={goBack}
-            />
-          )}
+          <Routes location={location}>
+            <Route path="/" element={
+              <HomeView
+                setView={navigateTo}
+                onAddToCart={handleAddToCart}
+                onBuyNow={handleBuyNow}
+                onContactSeller={handleContactSeller}
+                onViewDetails={setSelectedNote}
+                checkAuth={requireAuth}
+                cart={cart}
+                refreshKey={refreshKey}
+                onShowGuide={() => setShowUserGuide(true)}
+              />
+            } />
+            <Route path="/browse" element={
+              <BrowseView
+                onAddToCart={handleAddToCart}
+                onBuyNow={handleBuyNow}
+                onContactSeller={handleContactSeller}
+                onViewDetails={setSelectedNote}
+                checkAuth={requireAuth}
+                cart={cart}
+                refreshKey={refreshKey}
+              />
+            } />
+            <Route path="/sell" element={<SellView onGoToBrowse={() => navigate("/browse")} />} />
+            <Route path="/profile" element={
+              <ProfileView 
+                onContactSeller={handleContactSeller} 
+                initialTab={profileTab}
+              />
+            } />
+            <Route path="/orders" element={<OrdersView onContactSeller={handleContactSeller} />} />
+            <Route path="/admin" element={<AdminView />} />
+            <Route path="/cart" element={
+              <CartView
+                cart={cart}
+                updateQuantity={(id, q) =>
+                  setCart((c) =>
+                    c.map((i) => (i.note.id === id ? { ...i, quantity: q } : i)),
+                  )
+                }
+                removeItem={(id) =>
+                  setCart((c) => c.filter((i) => i.note.id !== id))
+                }
+                onCheckout={() => navigate("/checkout")}
+                onBack={() => navigate("/browse")}
+              />
+            } />
+            <Route path="/checkout" element={
+              <CheckoutView
+                cart={cart}
+                onSuccess={(data) => {
+                  setCart([]);
+                  setRefreshKey((k) => k + 1);
+                  setOrderSuccessData(data);
+                  navigate("/order-success");
+                }}
+                onBack={() => navigate("/cart")}
+              />
+            } />
+            <Route path="/order-success" element={
+              <OrderSuccessView
+                orderData={orderSuccessData}
+                onBack={() => navigate("/orders")}
+                onGoToMessages={() => navigate("/messages")}
+              />
+            } />
+            <Route path="/messages" element={
+              <MessagesView
+                initialConversationId={selectedConversationId}
+                onBack={() => navigate(-1)}
+              />
+            } />
+            <Route path="/auth/callback" element={<div className="min-h-[50vh] flex items-center justify-center text-text-muted font-medium animate-pulse">Authenticating with Google...</div>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </AnimatePresence>
       </main>
 
-      {currentView !== "messages" && <Footer />}
+      {location.pathname !== "/messages" && <Footer />}
 
       <AnimatePresence>
         <AuthModal
@@ -426,6 +506,7 @@ const App: React.FC = () => {
             onAddToCart={handleAddToCart}
             onBuyNow={handleBuyNow}
             isInCart={cart.some((i) => i.note.id === selectedNote.id)}
+            cart={cart}
             onContactSeller={handleContactSeller}
           />
         )}

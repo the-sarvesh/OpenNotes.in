@@ -4,22 +4,32 @@ import db from '../db/database.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'opennotes-dev-secret-change-in-prod';
 
-export interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-  };
+declare global {
+  namespace Express {
+    interface User {
+      id: string;
+      email: string;
+      role: string;
+    }
+    interface Request {
+      user?: User;
+    }
+  }
 }
 
-export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
+export type AuthRequest = Request;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  // Read from cookie first (preferred), then fallback to header
+  let token = req.cookies?.auth_token;
+
+  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
-  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+  }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string };

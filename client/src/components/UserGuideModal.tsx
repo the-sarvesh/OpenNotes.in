@@ -14,7 +14,23 @@ interface UserGuideModalProps {
 
 type GuideTab = 'welcome' | 'buying' | 'selling' | 'safety';
 
+const COLOR_MAP: Record<string, string> = {
+  emerald: 'bg-emerald-400',
+  blue: 'bg-blue-400',
+  amber: 'bg-amber-400',
+  purple: 'bg-purple-400',
+  emerald_bg: 'bg-emerald-500/15 border-emerald-500/20',
+  blue_bg: 'bg-blue-500/15 border-blue-500/20',
+  amber_bg: 'bg-amber-500/15 border-amber-500/20',
+  purple_bg: 'bg-purple-500/15 border-purple-500/20',
+  emerald_text: 'text-emerald-400',
+  blue_text: 'text-blue-400',
+  amber_text: 'text-amber-400',
+  purple_text: 'text-purple-400',
+};
+
 const TAB_ORDER: GuideTab[] = ['welcome', 'buying', 'selling', 'safety'];
+
 
 export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<GuideTab>('welcome');
@@ -148,8 +164,9 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                       { label: 'Simple', desc: 'List in under 2 minutes. No fluff.', color: 'purple' },
                     ].map(({ label, desc, color }) => (
                       <div key={label} className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors">
-                        <div className={`w-2 h-2 rounded-full bg-${color}-400 mb-2.5`} />
+                        <div className={`w-2 h-2 rounded-full ${COLOR_MAP[color]} mb-2.5`} />
                         <p className="font-black text-white text-sm mb-1">{label}</p>
+
                         <p className="text-[10px] text-slate-500 leading-relaxed">{desc}</p>
                       </div>
                     ))}
@@ -179,9 +196,10 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                       { icon: CheckCircle2, color: 'purple', title: 'Inspect & Pay Cash', desc: 'Check the notes in person first. If satisfied, share your 4-digit PIN (from My Orders) with the seller and pay the notes price in cash.' },
                     ].map(({ icon: Icon, color, title, desc }, i) => (
                       <div key={i} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors group">
-                        <div className={`w-9 h-9 rounded-xl bg-${color}-500/15 border border-${color}-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
-                          <Icon className={`h-4 w-4 text-${color}-400`} />
+                        <div className={`w-9 h-9 rounded-xl ${COLOR_MAP[`${color}_bg`]} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
+                          <Icon className={`h-4 w-4 ${COLOR_MAP[`${color}_text`]}`} />
                         </div>
+
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Step {i + 1}</span>
@@ -217,9 +235,10 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                       { icon: Lock, color: 'purple', title: 'Verify PIN & Collect', desc: "During handover, ask the buyer for their 4-digit order PIN. Once verified in your dashboard the order is complete — collect your cash." },
                     ].map(({ icon: Icon, color, title, desc }, i) => (
                       <div key={i} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors group">
-                        <div className={`w-9 h-9 rounded-xl bg-${color}-500/15 border border-${color}-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
-                          <Icon className={`h-4 w-4 text-${color}-400`} />
+                        <div className={`w-9 h-9 rounded-xl ${COLOR_MAP[`${color}_bg`]} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
+                          <Icon className={`h-4 w-4 ${COLOR_MAP[`${color}_text`]}`} />
                         </div>
+
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Step {i + 1}</span>
