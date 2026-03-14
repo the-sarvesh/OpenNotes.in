@@ -42,10 +42,10 @@ export const Footer: React.FC = () => (
               sarvesh.03.ai@gmail.com
             </a>
             <div className="flex items-center gap-3 pt-2">
-              <a href="#" className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+              <a href="https://github.com/the-sarvesh" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all">
                 <Github className="h-4 w-4" />
               </a>
-              <a href="#" className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+              <a href="https://www.linkedin.com/in/the-sarvesh" target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all">
                 <Linkedin className="h-4 w-4" />
               </a>
             </div>
