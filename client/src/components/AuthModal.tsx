@@ -36,6 +36,55 @@ const SLIDE = {
   transition: { duration: 0.2 },
 };
 
+// ── Sub-components ────────────────────────────────────────────────────────
+const ErrorBanner = ({ msg }: { msg: string }) => (
+  <div className="p-3 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-200 dark:border-red-900/50 text-center font-medium">
+    {msg}
+  </div>
+);
+
+const TextField = ({
+  label,
+  icon,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  minLength,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  minLength?: number;
+}) => (
+  <div>
+    <label className="block text-sm font-medium text-text-muted mb-1.5">
+      {label}
+    </label>
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+        {icon}
+      </span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        required={required}
+        minLength={minLength}
+        className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-sm
+                   focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
+                   transition-all text-text-main placeholder:text-text-muted/60"
+      />
+    </div>
+  </div>
+);
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -229,53 +278,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // ── Shared UI pieces ──────────────────────────────────────────────────────
 
-  const ErrorBanner = ({ msg }: { msg: string }) => (
-    <div className="p-3 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-200 dark:border-red-900/50 text-center font-medium">
-      {msg}
-    </div>
-  );
-
-  const TextField = ({
-    label,
-    icon,
-    type = "text",
-    value,
-    onChange,
-    placeholder,
-    required = false,
-    minLength,
-  }: {
-    label: string;
-    icon: React.ReactNode;
-    type?: string;
-    value: string;
-    onChange: (v: string) => void;
-    placeholder?: string;
-    required?: boolean;
-    minLength?: number;
-  }) => (
-    <div>
-      <label className="block text-sm font-medium text-text-muted mb-1.5">
-        {label}
-      </label>
-      <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-          {icon}
-        </span>
-        <input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          required={required}
-          minLength={minLength}
-          className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-sm
-                     focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-                     transition-all text-text-main placeholder:text-text-muted/60"
-        />
-      </div>
-    </div>
-  );
 
   // ── Render ────────────────────────────────────────────────────────────────
 
