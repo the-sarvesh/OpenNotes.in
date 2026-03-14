@@ -77,14 +77,9 @@ export const initSocket = (httpServer: HttpServer) => {
           sql: `SELECT o.id FROM orders o
                 JOIN order_items oi ON o.id = oi.order_id
                 WHERE oi.listing_id = ?
-                  AND ((o.buyer_id = ? AND (SELECT seller_id FROM listings WHERE id = ?) = ?) 
-                    OR (o.buyer_id = ? AND (SELECT seller_id FROM listings WHERE id = ?) = ?))
+                  AND (o.buyer_id = ? OR oi.seller_id = ?)
                 LIMIT 1`,
-          args: [
-            lId,
-            userId, lId, userId,
-            userId === u1 ? u2 : u1, lId, userId
-          ],
+          args: [lId, userId, userId],
         });
 
         if (orderCheck.rows.length === 0) {
@@ -273,7 +268,8 @@ export const initSocket = (httpServer: HttpServer) => {
           created_at: new Date().toISOString(),
         };
 
-        io.to(`conv:${conversationId}`).to(`user:${receiverId}`).emit("new_message", messagePayload);
+        io.to(`conv:${conversationId}`).emit("new_message", messagePayload);
+
         io.to(`user:${receiverId}`).emit("unread_count_changed");
 
         // Web Push
