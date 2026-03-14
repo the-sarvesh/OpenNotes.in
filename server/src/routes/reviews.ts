@@ -6,7 +6,7 @@ import { authenticate, AuthRequest } from '../middleware/auth.js';
 const router = express.Router();
 
 // POST /api/reviews — leave a review after purchase
-router.post('/', authenticate, async (req: AuthRequest, res, next) => {
+router.post('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const reviewerId = req.user!.id;
     const { seller_id, order_id, listing_id, rating, comment } = req.body;
@@ -35,15 +35,6 @@ router.post('/', authenticate, async (req: AuthRequest, res, next) => {
       return res.status(400).json({ error: 'You can only leave a review once the order is fully completed' });
     }
 
-    // Verify the listing_id belongs to the order_id
-    const itemCheck = await db.execute({
-      sql: 'SELECT id FROM order_items WHERE order_id = ? AND listing_id = ?',
-      args: [order_id, listing_id]
-    });
-    if (itemCheck.rows.length === 0) {
-      return res.status(400).json({ error: 'This item was not part of the specified order' });
-    }
-
     // Check for duplicate review
     const existing = await db.execute({
       sql: 'SELECT id FROM reviews WHERE reviewer_id = ? AND order_id = ? AND listing_id = ?',
@@ -61,12 +52,13 @@ router.post('/', authenticate, async (req: AuthRequest, res, next) => {
 
     res.status(201).json({ message: 'Review submitted', id: reviewId });
   } catch (error) {
-    next(error);
+    console.error('Review error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // GET /api/reviews/seller/:sellerId — get all reviews for a seller
-router.get('/seller/:sellerId', async (req, res, next) => {
+router.get('/seller/:sellerId', async (req, res) => {
   try {
     const reviews = await db.execute({
       sql: `
@@ -92,12 +84,12 @@ router.get('/seller/:sellerId', async (req, res, next) => {
       totalReviews: Number(avgResult.rows[0]?.count || 0)
     });
   } catch (error) {
-    next(error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // GET /api/reviews/my-reviews — reviews I've written
-router.get('/my-reviews', authenticate, async (req: AuthRequest, res, next) => {
+router.get('/my-reviews', authenticate, async (req: AuthRequest, res) => {
   try {
     const reviews = await db.execute({
       sql: `
@@ -112,7 +104,7 @@ router.get('/my-reviews', authenticate, async (req: AuthRequest, res, next) => {
     });
     res.json(reviews.rows);
   } catch (error) {
-    next(error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

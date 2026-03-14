@@ -8,10 +8,14 @@ import React, {
   ReactNode,
 } from "react";
 import { toast } from "react-hot-toast";
-import type { Note, CartItem } from "../types";
+import type { Note } from "../types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface CartItem {
+  note: Note;
+  quantity: number;
+}
 
 interface ValidationResult {
   id: string;
@@ -30,7 +34,7 @@ interface CartContextType {
   updateQuantity: (noteId: string, quantity: number) => void;
   clearCart: () => void;
   /** Manually trigger a server-side freshness check. Requires a valid JWT. */
-  validateCart: () => Promise<void>;
+  validateCart: (token: string) => Promise<void>;
   isValidating: boolean;
 }
 
@@ -45,7 +49,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
 }) => {
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
-      const saved = localStorage.getItem("opennotes_cart");
+      const saved = localStorage.getItem("bits_notes_cart");
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -54,18 +58,18 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
 
   const [isValidating, setIsValidating] = useState(false);
 
-  // Track whether we've already validated in the current session
-  const hasValidatedRef = useRef<boolean>(false);
+  // Track whether we've already validated on the current token so we don't
+  // hammer the server on every re-render.
+  const validatedTokenRef = useRef<string | null>(null);
 
   // ── Persist to localStorage on every change ───────────────────────────────
   useEffect(() => {
     try {
-      localStorage.setItem("opennotes_cart", JSON.stringify(cart));
+      localStorage.setItem("bits_notes_cart", JSON.stringify(cart));
     } catch {
       /* storage full or blocked — silently skip */
     }
   }, [cart]);
-
 
   // ── Server-side stale cart validation (FE-4) ──────────────────────────────
   /**
@@ -78,11 +82,11 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
    * Skips silently if the cart is empty or the user is not authenticated.
    */
   const validateCart = useCallback(
-    async (): Promise<void> => {
+    async (token: string): Promise<void> => {
       // Nothing to validate
       if (cart.length === 0) return;
-      // Already validated in this session
-      if (hasValidatedRef.current) return;
+      // Already validated with this token in this session
+      if (validatedTokenRef.current === token) return;
 
       setIsValidating(true);
       try {
@@ -91,8 +95,8 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
-          credentials: 'include',
           body: JSON.stringify({ ids }),
         });
 
@@ -171,8 +175,8 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
           );
         }
 
-        // Mark as validated so we don't re-run during the session
-        hasValidatedRef.current = true;
+        // Mark this token as validated so we don't re-run during the session
+        validatedTokenRef.current = token;
       } catch (err) {
         // Network errors are non-fatal — the user can still proceed
         console.warn("[CartContext] validate-cart network error:", err);
@@ -187,25 +191,16 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   // ── Cart mutation helpers ─────────────────────────────────────────────────
 
   const addToCart = (note: Note) => {
-    let success = true;
     setCart((prev) => {
       const existing = prev.find((i) => i.note.id === note.id);
       if (existing) {
-        if (existing.quantity >= note.quantity) {
-          success = false;
-          return prev;
-        }
+        if (existing.quantity >= note.quantity) return prev;
         return prev.map((i) =>
           i.note.id === note.id ? { ...i, quantity: i.quantity + 1 } : i,
         );
       }
-      if (note.quantity <= 0) {
-        success = false;
-        return prev;
-      }
       return [...prev, { note, quantity: 1 }];
     });
-    return success;
   };
 
   const removeFromCart = (noteId: string) => {
@@ -227,7 +222,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
   // ── Reset validation cache when cart is fully cleared ────────────────────
   useEffect(() => {
     if (cart.length === 0) {
-      hasValidatedRef.current = false;
+      validatedTokenRef.current = null;
     }
   }, [cart.length]);
 

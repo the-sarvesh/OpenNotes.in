@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, X, SlidersHorizontal, BookOpen, BookMarked, FileText, Layers } from 'lucide-react';
-import { formatSemester } from '../utils/formatters';
 import { NoteCard } from '../components/NoteCard';
-import { mapListing } from '../utils/listings';
 import type { Note, View } from '../types/index.ts';
 
 interface BrowseViewProps {
@@ -11,12 +9,11 @@ interface BrowseViewProps {
   onBuyNow: (n: Note) => void;
   onContactSeller: (sellerId: string, listingId: string, title: string) => void;
   onViewDetails: (n: Note) => void;
-  checkAuth: (action: () => void) => void;
   cart: { note: Note }[];
   refreshKey?: number;
 }
 
-const SEMESTERS = ['All', '1-1', '1-2', '2-1', '2-2', '3-1', '3-2', '4-1', '4-2'];
+const SEMESTERS = ['All', 'Semester 1', 'Semester 2', 'Semester 3', 'Semester 4', 'Semester 5', 'Semester 6', 'Semester 7', 'Semester 8'];
 const MATERIAL_TYPES = [
   { label: 'All', icon: Layers },
   { label: 'PPT', icon: FileText },
@@ -24,79 +21,38 @@ const MATERIAL_TYPES = [
   { label: 'Book', icon: BookOpen },
 ];
 
-export const BrowseView: React.FC<BrowseViewProps> = ({ 
-  onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart, refreshKey 
-}) => {
+export const BrowseView: React.FC<BrowseViewProps> = ({ onAddToCart, onBuyNow, onContactSeller, onViewDetails, cart, refreshKey }) => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
-  const observer = useRef<IntersectionObserver | null>(null);
-
-  const lastNoteElementRef = useCallback((node: HTMLDivElement) => {
-    if (loading || loadingMore) return;
-    if (observer.current) observer.current.disconnect();
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) {
-        setPage(prevPage => prevPage + 1);
-      }
-    });
-    if (node) observer.current.observe(node);
-  }, [loading, loadingMore, hasMore]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 350);
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  // Reset when filters change
-  useEffect(() => {
-    setNotes([]);
-    setPage(1);
-    setHasMore(true);
-    setLoading(true);
-  }, [debouncedSearch, selectedSemester, selectedType, refreshKey]);
-
-  const fetchNotes = useCallback((pageNum: number) => {
+  const fetchNotes = useCallback(() => {
     const params = new URLSearchParams();
     if (selectedSemester !== 'All') params.set('semester', selectedSemester);
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (selectedType !== 'All') params.set('material_type', selectedType);
-    params.set('page', pageNum.toString());
-    params.set('limit', '20');
 
-    const isFirstPage = pageNum === 1;
-    if (isFirstPage) setLoading(true);
-    else setLoadingMore(true);
-
+    setLoading(true);
     fetch(`/api/listings?${params}`)
       .then(r => r.json())
       .then(data => {
-        if (Array.isArray(data)) {
-          const mapped = data.map(mapListing);
-          setNotes(prev => isFirstPage ? mapped : [...prev, ...mapped]);
-          setHasMore(data.length === 20);
-        } else {
-          if (isFirstPage) setNotes([]);
-          setHasMore(false);
-        }
+        if (Array.isArray(data)) setNotes(data.map(mapListing));
+        else setNotes([]);
       })
       .catch(console.error)
-      .finally(() => {
-        setLoading(false);
-        setLoadingMore(false);
-      });
+      .finally(() => setLoading(false));
   }, [debouncedSearch, selectedSemester, selectedType, refreshKey]);
 
-  useEffect(() => { 
-    fetchNotes(page); 
-  }, [page, debouncedSearch, selectedSemester, selectedType, refreshKey, fetchNotes]);
+  useEffect(() => { fetchNotes(); }, [fetchNotes]);
 
   const activeFiltersCount = [selectedSemester !== 'All', selectedType !== 'All'].filter(Boolean).length;
   const clearFilters = () => { setSelectedSemester('All'); setSelectedType('All'); };
@@ -217,7 +173,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                   : 'bg-surface border-border text-text-muted hover:border-[#003366]/30 hover:text-text-main'
                 }`}
             >
-              {sem === 'All' ? 'All' : formatSemester(sem)}
+              {sem === 'All' ? 'All' : sem.replace('Semester ', 'Sem ')}
             </button>
           ))}
         </div>
@@ -265,14 +221,12 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(idx * 0.04, 0.3), duration: 0.25 }}
-              ref={idx === notes.length - 1 ? lastNoteElementRef : null}
             >
               <NoteCard
                 note={note}
                 onAddToCart={onAddToCart}
                 onBuyNow={onBuyNow}
                 isInCart={cart.some(i => i.note.id === note.id)}
-                cart={cart}
                 onContactSeller={onContactSeller}
                 onViewDetails={onViewDetails}
               />
@@ -280,22 +234,28 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
           ))}
         </motion.div>
       )}
-
-      {/* Loading states for subsequent pages */}
-      {loadingMore && (
-        <div className="flex justify-center py-8">
-          <div className="relative h-8 w-8">
-            <span className="absolute inset-0 rounded-full border-2 border-primary/20"></span>
-            <span className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin"></span>
-          </div>
-        </div>
-      )}
-
-      {!hasMore && notes.length > 0 && (
-        <p className="text-center text-text-muted text-[11px] font-bold mt-12 mb-6 uppercase tracking-widest opacity-60">
-          ✨ You've reached the end of the marketplace
-        </p>
-      )}
     </motion.div>
   );
 };
+
+function mapListing(item: any): Note {
+  return {
+    id: item.id,
+    title: item.title,
+    courseCode: item.course_code,
+    semester: item.semester,
+    condition: item.condition,
+    price: item.price,
+    seller: item.seller_name,
+    sellerId: item.seller_id,
+    location: item.location,
+    image: item.image_url,
+    rating: item.seller_rating || 0,
+    quantity: item.quantity,
+    materialType: item.material_type,
+    isMultipleSubjects: item.is_multiple_subjects === 1 || item.is_multiple_subjects === true,
+    subjects: item.subjects || [],
+    deliveryMethod: item.delivery_method,
+    meetupLocation: item.meetup_location,
+  };
+}

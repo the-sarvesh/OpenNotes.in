@@ -3,9 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { randomInt } from "crypto";
 import db from "../db/database.js";
 import { authenticate, AuthRequest } from "../middleware/auth.js";
-import { createNotification } from "../utils/notifications.js";
-import { applyCoupon } from "../utils/orders.js";
-
+import { createNotification } from "./notifications.js";
 
 const router = express.Router();
 
@@ -25,9 +23,70 @@ const getConversationId = (
   return `${sorted[0]}_${sorted[1]}_${listingId}`;
 };
 
+// ─── Validate & apply a coupon code ──────────────────────────────────────────
+// Returns { valid, discountType, discountValue, feeWaived, finalFee, message }
+const applyCoupon = async (
+  code: string,
+  originalFee: number,
+): Promise<{
+  valid: boolean;
+  discountType: string;
+  discountValue: number;
+  feeWaived: boolean;
+  finalFee: number;
+  couponId: string;
+  message: string;
+}> => {
+  const result = await db.execute({
+    sql: `SELECT * FROM coupon_codes
+          WHERE code = ?
+            AND is_active = 1
+            AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+            AND (max_uses IS NULL OR used_count < max_uses)`,
+    args: [code.toUpperCase().trim()],
+  });
+
+  if (result.rows.length === 0) {
+    return {
+      valid: false,
+      discountType: "percentage",
+      discountValue: 0,
+      feeWaived: false,
+      finalFee: originalFee,
+      couponId: "",
+      message: "Invalid, expired, or already fully used coupon code.",
+    };
+  }
+
+  const coupon = result.rows[0] as any;
+  let finalFee = originalFee;
+  let feeWaived = false;
+
+  if (coupon.discount_type === "percentage") {
+    const discount = Math.round(originalFee * (coupon.discount_value / 100));
+    finalFee = Math.max(0, originalFee - discount);
+    if (coupon.discount_value >= 100) feeWaived = true;
+  } else if (coupon.discount_type === "fixed") {
+    finalFee = Math.max(0, originalFee - coupon.discount_value);
+    if (finalFee === 0) feeWaived = true;
+  }
+
+  return {
+    valid: true,
+    discountType: coupon.discount_type,
+    discountValue: coupon.discount_value,
+    feeWaived,
+    finalFee,
+    couponId: coupon.id,
+    message: feeWaived
+      ? "✅ Platform fee fully waived!"
+      : `✅ Coupon applied — fee reduced to ₹${finalFee}.`,
+  };
+};
+
 // ─── POST /api/orders/validate-coupon ────────────────────────────────────────
 // Frontend calls this to preview the discount before placing the order
-router.post("/validate-coupon", authenticate, async (req: AuthRequest, res, next) => {
+router.post("/validate-coupon", authenticate, async (req: AuthRequest, res) => {
   try {
     const { coupon_code, order_total } = req.body;
 
@@ -57,12 +116,13 @@ router.post("/validate-coupon", authenticate, async (req: AuthRequest, res, next
       discountValue: result.discountValue,
     });
   } catch (error) {
-    next(error);
+    console.error("Validate coupon error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // ─── POST /api/orders — Create Order (checkout) ───────────────────────────────
-router.post("/", authenticate, async (req: AuthRequest, res, next) => {
+router.post("/", authenticate, async (req: AuthRequest, res) => {
   try {
     const buyerId = req.user!.id;
     const {
@@ -89,10 +149,6 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
 
     // ── Validate all items first (before touching DB state) ──────────────────
     for (const item of items) {
-      if (!item.listing_id || !item.quantity || Number(item.quantity) <= 0) {
-        return res.status(400).json({ error: "Invalid item quantity" });
-      }
-
       const listingRes = await db.execute({
         sql: "SELECT id, seller_id, price, quantity, title FROM listings WHERE id = ? AND status = ?",
         args: [item.listing_id, "active"],
@@ -144,6 +200,15 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
     let appliedCouponCode: string | null = null;
     let appliedCouponId: string | null = null;
 
+    // ── PAYMENT GATEWAY HOOK ─────────────────────────────────────────────────
+    // TODO: When a real payment gateway (e.g. Razorpay) is integrated:
+    //   1. Remove the coupon bypass below.
+    //   2. Create a Razorpay order here for `platformFee` amount.
+    //   3. Return the `razorpay_order_id` to the frontend.
+    //   4. Frontend completes payment and sends back `razorpay_payment_id`.
+    //   5. Verify signature here before inserting the DB order.
+    // ────────────────────────────────────────────────────────────────────────
+
     if (coupon_code && coupon_code.trim()) {
       const couponResult = await applyCoupon(coupon_code, rawPlatformFee);
       if (!couponResult.valid) {
@@ -156,10 +221,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
     }
 
     // ── Insert order atomically ───────────────────────────────────────────────
-    const tx = await db.transaction("write");
+    await db.execute({ sql: "BEGIN", args: [] }).catch(() => {});
 
     try {
-      await tx.execute({
+      await db.execute({
         sql: `INSERT INTO orders
                 (id, buyer_id, total_amount, platform_fee, platform_fee_waived,
                  coupon_code, status, buyer_location, buyer_availability,
@@ -181,7 +246,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       });
 
       for (const orderItem of orderItemsToInsert) {
-        await tx.execute({
+        await db.execute({
           sql: `INSERT INTO order_items
                   (id, order_id, listing_id, seller_id, quantity,
                    price_at_purchase, status, meetup_pin)
@@ -199,13 +264,13 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         });
 
         // Decrement inventory
-        await tx.execute({
+        await db.execute({
           sql: "UPDATE listings SET quantity = quantity - ? WHERE id = ?",
           args: [orderItem.quantity, orderItem.listing_id],
         });
 
         // Auto-archive if sold out
-        await tx.execute({
+        await db.execute({
           sql: "UPDATE listings SET status = 'archived' WHERE id = ? AND quantity <= 0",
           args: [orderItem.listing_id],
         });
@@ -222,7 +287,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           initialMessage += `\n\nNote: ${buyer_note}`;
         }
 
-        await tx.execute({
+        await db.execute({
           sql: `INSERT INTO messages
                   (id, conversation_id, sender_id, receiver_id, listing_id, content)
                 VALUES (?, ?, ?, ?, ?, ?)`,
@@ -243,11 +308,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           "Item Sold! 🎉",
           `A buyer has purchased ${orderItem.quantity}x "${orderItem.title}".`,
           "/orders",
-          tx
         );
 
         // Notify seller — message
-        const buyerRes = await tx.execute({
+        const buyerRes = await db.execute({
           sql: "SELECT name FROM users WHERE id = ?",
           args: [buyerId],
         });
@@ -259,21 +323,20 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           "New Meetup Details 💬",
           `${buyerName} sent their meetup availability.`,
           "/messages",
-          tx
         );
       }
 
       // Increment coupon usage counter
       if (appliedCouponId) {
-        await tx.execute({
+        await db.execute({
           sql: "UPDATE coupon_codes SET used_count = used_count + 1 WHERE id = ?",
           args: [appliedCouponId],
         });
       }
 
-      await tx.commit();
+      await db.execute({ sql: "COMMIT", args: [] }).catch(() => {});
     } catch (err) {
-      await tx.rollback();
+      await db.execute({ sql: "ROLLBACK", args: [] }).catch(() => {});
       throw err;
     }
 
@@ -287,73 +350,49 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       items: orderItemsToInsert, // contains meetup_pin per item
     });
   } catch (error) {
-    next(error);
+    console.error("Order creation error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // ─── GET /api/orders/my-orders (buyer) ───────────────────────────────────────
-router.get("/my-orders", authenticate, async (req: AuthRequest, res, next) => {
+router.get("/my-orders", authenticate, async (req: AuthRequest, res) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const offset = (page - 1) * limit;
-
     const ordersRes = await db.execute({
-      sql: "SELECT * FROM orders WHERE buyer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-      args: [req.user!.id, limit, offset],
+      sql: "SELECT * FROM orders WHERE buyer_id = ? ORDER BY created_at DESC",
+      args: [req.user!.id],
     });
 
     const orders = ordersRes.rows;
-    if (orders.length === 0) {
-      return res.json([]);
+
+    for (const order of orders) {
+      const itemsRes = await db.execute({
+        sql: `
+          SELECT
+            oi.*,
+            l.title, l.course_code, l.image_url, l.seller_id, l.delivery_method,
+            l.meetup_location, l.condition, l.semester, l.material_type, l.location,
+            u.name as seller_name, u.email as seller_email
+          FROM order_items oi
+          JOIN listings l ON oi.listing_id = l.id
+          JOIN users u ON l.seller_id = u.id
+          WHERE oi.order_id = ?
+        `,
+        args: [order.id],
+      });
+      (order as any).items = itemsRes.rows;
     }
 
-    // Get all item IDs to fetch items in one go (N+1 fix)
-    const orderIds = orders.map(o => o.id);
-    const placeholders = orderIds.map(() => "?").join(",");
-
-    const itemsRes = await db.execute({
-      sql: `
-        SELECT
-          oi.*,
-          l.title, l.course_code, l.image_url, l.seller_id, l.delivery_method,
-          l.meetup_location, l.condition, l.semester, l.material_type, l.location,
-          u.name as seller_name, u.email as seller_email
-        FROM order_items oi
-        JOIN listings l ON oi.listing_id = l.id
-        JOIN users u ON l.seller_id = u.id
-        WHERE oi.order_id IN (${placeholders})
-      `,
-      args: orderIds,
-    });
-
-    // Map items to their respective orders
-    const itemsByOrder = itemsRes.rows.reduce((acc: Record<string, any[]>, item: any) => {
-      const orderId = String(item.order_id);
-      if (!acc[orderId]) acc[orderId] = [];
-      acc[orderId].push(item);
-      return acc;
-    }, {});
-
-    const enrichedOrders = orders.map(order => ({
-      ...order,
-      items: itemsByOrder[String(order.id)] || []
-    }));
-
-    res.json(enrichedOrders);
+    res.json(orders);
   } catch (error) {
-    next(error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // ─── GET /api/orders/my-sales (seller) ───────────────────────────────────────
-router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
+router.get("/my-sales", authenticate, async (req: AuthRequest, res) => {
   try {
     const sellerId = req.user!.id;
-
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const offset = (page - 1) * limit;
 
     const salesRes = await db.execute({
       sql: `
@@ -369,9 +408,8 @@ router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
         JOIN users u ON o.buyer_id = u.id
         WHERE oi.seller_id = ?
         ORDER BY o.created_at DESC
-        LIMIT ? OFFSET ?
       `,
-      args: [sellerId, limit, offset],
+      args: [sellerId],
     });
 
     const totalEarnings = salesRes.rows.reduce(
@@ -395,7 +433,8 @@ router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
       },
     });
   } catch (error) {
-    next(error);
+    console.error("Error fetching sales:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -403,7 +442,7 @@ router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
 router.post(
   "/items/:itemId/verify-pin",
   authenticate,
-  async (req: AuthRequest, res, next) => {
+  async (req: AuthRequest, res) => {
     try {
       const sellerId = req.user!.id;
       const { itemId } = req.params;
@@ -481,7 +520,8 @@ router.post(
         orderCompleted: allCompleted,
       });
     } catch (error) {
-      next(error);
+      console.error("Verify PIN error:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   },
 );

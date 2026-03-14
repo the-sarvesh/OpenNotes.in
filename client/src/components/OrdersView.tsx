@@ -2,15 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, Star, MessageCircle, MapPin, ChevronLeft, ChevronRight, Users, Package, Clock, CheckCircle2, XCircle, Truck, Hash } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
-import { apiRequest } from '../utils/api.js';
-import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { statusColors, formatStatus } from '../utils/status.js';
-import { formatSemester } from '../utils/formatters';
-import { Order, OrderItem } from '../types';
 
+interface OrderItem {
+  id: string;
+  title: string;
+  course_code: string;
+  image_url: string;
+  quantity: number;
+  price_at_purchase: number;
+  status: string;
+  seller_id: string;
+  listing_id: string;
+  seller_name?: string;
+  seller_email?: string;
+  meetup_location?: string;
+  condition?: string;
+  semester?: string;
+  delivery_method?: string;
+  material_type?: string;
+  location?: string;
+}
 
-
+interface Order {
+  id: string;
+  total_amount: number;
+  platform_fee: number;
+  status: string;
+  created_at: string;
+  delivery_details?: string;
+  collection_date?: string;
+  meetup_pin?: string;
+  items: OrderItem[];
+}
 
 const StatusIcon = ({ status }: { status: string }) => {
   if (status === 'completed') return <CheckCircle2 className="h-3.5 w-3.5" />;
@@ -21,8 +46,7 @@ const StatusIcon = ({ status }: { status: string }) => {
 };
 
 export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: string, listingId: string, listingTitle: string) => void; key?: React.Key }) => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+  const { token } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -35,21 +59,22 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
   const [pinVisible, setPinVisible] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!user) return;
+    if (!token) return;
     setLoading(true);
-    apiRequest('/api/orders/my-orders')
+    fetch('/api/orders/my-orders', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setOrders(data); })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [token]);
 
   const handleLeaveReview = async () => {
-    if (!reviewOrder || !reviewItem || submittingReview || !user) return;
+    if (!reviewOrder || !reviewItem || submittingReview || !token) return;
     setSubmittingReview(true);
     try {
-      const res = await apiRequest('/api/reviews', {
+      const res = await fetch('/api/reviews', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           seller_id: reviewItem.seller_id,
           order_id: reviewOrder.id,
@@ -178,7 +203,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                         <div className="p-4 sm:p-5 space-y-4">
                           {/* Tags */}
                           <div className="flex flex-wrap gap-2">
-                            {item.semester && <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-2.5 py-1 rounded-lg">{formatSemester(item.semester)}</span>}
+                            {item.semester && <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-2.5 py-1 rounded-lg">Sem {item.semester}</span>}
                             {item.condition && <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-2.5 py-1 rounded-lg">{item.condition}</span>}
                             <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-2.5 py-1 rounded-lg">Qty: {item.quantity}</span>
                             {item.material_type && (

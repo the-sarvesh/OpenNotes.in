@@ -10,8 +10,7 @@ import {
   BookOpen, Layers, Clock, CheckCircle2, XCircle,
   PackageOpen, Truck
 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext.js';
-import { apiRequest } from '../utils/api.js';
+import { useAuth } from '../contexts/AuthContext';
 import { statusColors, formatStatus } from '../utils/status';
 
 type AdminTab = 'overview' | 'listings' | 'users' | 'orders' | 'chats';
@@ -73,7 +72,7 @@ const StatChip: React.FC<{ label: string; value: string | number; gold?: boolean
 );
 
 export const AdminView: React.FC = () => {
-  const { user } = useAuth();
+  const { token } = useAuth();
   const [tab, setTab] = useState<AdminTab>('overview');
   const [stats, setStats] = useState<Stats | null>(null);
   const [listings, setListings] = useState<any[]>([]);
@@ -102,26 +101,26 @@ export const AdminView: React.FC = () => {
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [purgeConfirm, setPurgeConfirm] = useState('');
 
-  // No manual headers with apiRequest
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
   const fetchData = async () => {
     setLoading(true);
     try {
       if (tab === 'overview') {
-        const res = await apiRequest('/api/admin/stats');
+        const res = await fetch('/api/admin/stats', { headers });
         if (res.ok) setStats(await res.json());
       } else if (tab === 'listings') {
         const url = listingFilter ? `/api/admin/listings?status=${listingFilter}` : '/api/admin/listings';
-        const res = await apiRequest(url);
+        const res = await fetch(url, { headers });
         if (res.ok) setListings(await res.json());
       } else if (tab === 'users') {
-        const res = await apiRequest('/api/admin/users');
+        const res = await fetch('/api/admin/users', { headers });
         if (res.ok) setUsers(await res.json());
       } else if (tab === 'orders') {
-        const res = await apiRequest('/api/admin/orders');
+        const res = await fetch('/api/admin/orders', { headers });
         if (res.ok) setOrders(await res.json());
       } else if (tab === 'chats') {
-        const res = await apiRequest('/api/admin/chats');
+        const res = await fetch('/api/admin/chats', { headers });
         if (res.ok) setChats(await res.json());
       }
     } catch (err) {
@@ -136,7 +135,7 @@ export const AdminView: React.FC = () => {
 
   const doAction = async (url: string, method: string, body?: any) => {
     try {
-      const res = await apiRequest(url, { method, body: body ? JSON.stringify(body) : undefined });
+      const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
       const data = await res.json();
       setActionMsg(data.message || 'Done');
       fetchData();
@@ -150,7 +149,7 @@ export const AdminView: React.FC = () => {
     setSelectedChatId(chatId);
     setLoadingTranscript(true);
     try {
-      const res = await apiRequest(`/api/admin/chats/${chatId}/messages`);
+      const res = await fetch(`/api/admin/chats/${chatId}/messages`, { headers });
       if (res.ok) setTranscript(await res.json());
     } finally {
       setLoadingTranscript(false);
@@ -162,7 +161,7 @@ export const AdminView: React.FC = () => {
     setLoadingActivity(true);
     setUserActivity(null);
     try {
-      const res = await apiRequest(`/api/admin/users/${user.id}/activity`);
+      const res = await fetch(`/api/admin/users/${user.id}/activity`, { headers });
       if (res.ok) setUserActivity(await res.json());
     } finally {
       setLoadingActivity(false);
@@ -172,7 +171,7 @@ export const AdminView: React.FC = () => {
   const handlePurge = async () => {
     if (purgeConfirm !== 'PURGE') return;
     try {
-      const res = await apiRequest('/api/admin/purge-data', { method: 'POST' });
+      const res = await fetch('/api/admin/purge-data', { method: 'POST', headers });
       if (res.ok) { setShowPurgeModal(false); setPurgeConfirm(''); window.location.reload(); }
       else alert('Purge failed');
     } catch { alert('Error purging data'); }

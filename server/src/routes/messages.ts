@@ -2,8 +2,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../db/database.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
-import { createNotification } from '../utils/notifications.js';
-
+import { createNotification } from './notifications.js';
 
 const router = express.Router();
 
@@ -17,7 +16,7 @@ const getConversationId = (userId1: string, userId2: string, listingId: string) 
 };
 
 // GET /api/messages/check/:receiverId/:listingId — check if order exists & convo started
-router.get('/check/:receiverId/:listingId', async (req: AuthRequest, res, next) => {
+router.get('/check/:receiverId/:listingId', async (req: AuthRequest, res) => {
   try {
     const senderId = req.user!.id;
     const { receiverId, listingId } = req.params;
@@ -48,17 +47,14 @@ router.get('/check/:receiverId/:listingId', async (req: AuthRequest, res, next) 
       conversationId
     });
   } catch (error) {
-    next(error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // GET /api/messages/conversations — list all my conversations
-router.get("/conversations", async (req: AuthRequest, res, next) => {
+router.get('/conversations', async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const offset = (page - 1) * limit;
 
     const convos = await db.execute({
       sql: `
@@ -68,63 +64,57 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
                CASE 
                  WHEN m.sender_id = ? THEN m.receiver_id 
                  ELSE m.sender_id 
-               END as other_user_id,
-               u.name as other_user_name,
-               (SELECT COUNT(*) FROM messages m2 
-                WHERE m2.conversation_id = m.conversation_id 
-                  AND m2.receiver_id = ? 
-                  AND m2.is_read = 0) as unread_count,
-               (SELECT content FROM messages m3 
-                WHERE m3.conversation_id = m.conversation_id 
-                ORDER BY created_at DESC LIMIT 1) as last_message,
-               (SELECT sender_id FROM messages m4 
-                WHERE m4.conversation_id = m.conversation_id 
-                ORDER BY created_at DESC LIMIT 1) as last_sender_id
+               END as other_user_id
         FROM messages m
         JOIN listings l ON m.listing_id = l.id
-        JOIN users u ON u.id = (CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END)
         WHERE m.sender_id = ? OR m.receiver_id = ?
         GROUP BY m.conversation_id
         ORDER BY last_message_at DESC
-        LIMIT ? OFFSET ?
       `,
-      args: [userId, userId, userId, userId, userId, limit, offset]
+      args: [userId, userId, userId]
     });
 
-    const results = convos.rows.map(convo => ({
-      conversationId: convo.conversation_id,
-      listingId: convo.listing_id,
-      listingTitle: convo.listing_title,
-      listingImage: convo.listing_image,
-      otherUserId: convo.other_user_id,
-      otherUserName: String(convo.other_user_name || "User"),
-      unreadCount: Number(convo.unread_count || 0),
-      lastMessage: String(convo.last_message || ""),
-      lastMessageAt: convo.last_message_at,
-      lastMessageIsMe: convo.last_sender_id === userId
-    }));
+    // Get other user names and unread counts
+    const results = [];
+    for (const convo of convos.rows) {
+      const otherUser = await db.execute({
+        sql: 'SELECT name FROM users WHERE id = ?',
+        args: [convo.other_user_id]
+      });
+
+      const unread = await db.execute({
+        sql: 'SELECT COUNT(*) as count FROM messages WHERE conversation_id = ? AND receiver_id = ? AND is_read = 0',
+        args: [convo.conversation_id, userId]
+      });
+
+      const lastMsg = await db.execute({
+        sql: 'SELECT content, sender_id FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1',
+        args: [convo.conversation_id]
+      });
+
+      results.push({
+        conversationId: convo.conversation_id,
+        listingId: convo.listing_id,
+        listingTitle: convo.listing_title,
+        listingImage: convo.listing_image,
+        otherUserId: convo.other_user_id,
+        otherUserName: otherUser.rows[0]?.name || 'Unknown',
+        unreadCount: Number(unread.rows[0]?.count || 0),
+        lastMessage: lastMsg.rows[0]?.content || '',
+        lastMessageIsMe: lastMsg.rows[0]?.sender_id === userId,
+        lastMessageAt: convo.last_message_at,
+      });
+    }
 
     res.json(results);
   } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/messages/unread/count — total unread count for badge
-router.get('/unread/count', async (req: AuthRequest, res, next) => {
-  try {
-    const result = await db.execute({
-      sql: 'SELECT COUNT(*) as count FROM messages WHERE receiver_id = ? AND is_read = 0',
-      args: [req.user!.id]
-    });
-    res.json({ count: Number(result.rows[0]?.count || 0) });
-  } catch (error) {
-    next(error);
+    console.error('Conversations error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // GET /api/messages/:conversationId — get messages in a conversation
-router.get('/:conversationId', async (req: AuthRequest, res, next) => {
+router.get('/:conversationId', async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
     const { conversationId } = req.params;
@@ -147,8 +137,7 @@ router.get('/:conversationId', async (req: AuthRequest, res, next) => {
 
     const messages = await db.execute({
       sql: `
-        SELECT m.id, m.conversation_id, m.sender_id, m.receiver_id, m.listing_id, 
-               m.content, m.type, m.metadata, m.is_read, m.created_at, u.name as sender_name 
+        SELECT m.*, u.name as sender_name 
         FROM messages m 
         JOIN users u ON m.sender_id = u.id 
         WHERE m.conversation_id = ? 
@@ -159,22 +148,18 @@ router.get('/:conversationId', async (req: AuthRequest, res, next) => {
 
     res.json(messages.rows);
   } catch (error) {
-    next(error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // POST /api/messages — send a message
-router.post('/', async (req: AuthRequest, res, next) => {
+router.post('/', async (req: AuthRequest, res) => {
   try {
     const senderId = req.user!.id;
     const { receiver_id, listing_id, content } = req.body;
 
     if (!receiver_id || !listing_id || !content?.trim()) {
       return res.status(400).json({ error: 'receiver_id, listing_id, and content are required' });
-    }
-
-    if (content.trim().length > 2000) {
-      return res.status(400).json({ error: 'Message content matches maximum limit of 2000 characters' });
     }
 
     if (receiver_id === senderId) {
@@ -222,13 +207,49 @@ router.post('/', async (req: AuthRequest, res, next) => {
       '/messages'
     );
 
+    // Emit socket events if io is available
+    const io = req.app.get('io');
+    if (io) {
+      const messagePayload = {
+        id: messageId,
+        conversation_id: conversationId,
+        sender_id: senderId,
+        receiver_id: receiver_id,
+        listing_id: listing_id,
+        sender_name: senderName,
+        content: content.trim(),
+        is_read: false,
+        created_at: new Date().toISOString(),
+      };
+
+      // Broadcast to everyone in the conversation room
+      io.to(`conv:${conversationId}`).emit('new_message', messagePayload);
+      // Notify receiver to update unread badge
+      io.to(`user:${receiver_id}`).emit('unread_count_changed');
+    }
+
     res.status(201).json({ 
       id: messageId, 
       conversationId,
       message: 'Message sent' 
     });
   } catch (error) {
-    next(error);
+    console.error('Send message error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// GET /api/messages/unread/count — total unread count for badge
+router.get('/unread/count', async (req: AuthRequest, res) => {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT COUNT(*) as count FROM messages WHERE receiver_id = ? AND is_read = 0',
+      args: [req.user!.id]
+    });
+    res.json({ count: Number(result.rows[0]?.count || 0) });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

@@ -1,23 +1,28 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ShoppingCart, ArrowLeft, Trash2, Plus, Minus, ChevronRight, ShieldCheck } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { formatSemester } from '../utils/formatters';
-import { View, Listing, Order, OrderItem, CartItem } from '../types';
+import type { Note } from '../types';
 
+interface CartItem {
+  note: Note;
+  quantity: number;
+}
 
 interface CartViewProps {
   cart: CartItem[];
   updateQuantity: (id: string, q: number) => void;
   removeItem: (id: string) => void;
+  onCheckout: () => void;
+  onBack: () => void;
 }
 
 export const CartView: React.FC<CartViewProps> = ({
   cart,
   updateQuantity,
   removeItem,
+  onCheckout,
+  onBack,
 }) => {
-  const navigate = useNavigate();
   const total = cart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
   const platformFee = Math.round(total * 0.1); 
   const cashAtMeetup = total - platformFee;
@@ -38,7 +43,7 @@ export const CartView: React.FC<CartViewProps> = ({
             Looks like you haven't added any notes yet. Browse the marketplace to find what you need.
           </p>
           <button
-            onClick={() => navigate('/')}
+            onClick={onBack}
             className="px-8 py-4 bg-primary text-black font-black uppercase tracking-widest text-xs rounded-2xl active:scale-95 transition-all shadow-lg"
           >
             Start Shopping
@@ -51,7 +56,7 @@ export const CartView: React.FC<CartViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 pb-32">
       <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-primary-hover hover:bg-primary-hover rounded-xl transition-colors">
+        <button onClick={onBack} className="p-2 hover:bg-primary-hover hover:bg-primary-hover rounded-xl transition-colors">
           <ArrowLeft className="h-6 w-6 text-text-muted" />
         </button>
         <h1 className="text-3xl font-black text-text-main tracking-tight">Shopping Cart</h1>
@@ -90,7 +95,7 @@ export const CartView: React.FC<CartViewProps> = ({
                   </div>
                   
                   <p className="text-xs font-black text-text-muted uppercase tracking-widest mb-3">
-                    {item.note.courseCode} · {formatSemester(item.note.semester)}
+                    {item.note.courseCode} · {item.note.semester}
                   </p>
                   
                   <div className="flex items-center gap-3 text-[10px] font-medium text-text-muted mb-4">
@@ -164,7 +169,7 @@ export const CartView: React.FC<CartViewProps> = ({
             </div>
 
             <button
-              onClick={() => navigate('/checkout')}
+              onClick={onCheckout}
               className="w-full py-4 bg-[#003366] hover:bg-[#002244] text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl shadow-[#003366]/20 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
               Checkout Now <ChevronRight className="h-4 w-4" />

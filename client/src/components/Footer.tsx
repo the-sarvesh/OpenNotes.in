@@ -1,4 +1,5 @@
 import React from 'react';
+import { GraduationCap } from 'lucide-react';
 
 export const Footer: React.FC = () => (
   <footer className="relative bg-slate-900 border-t border-white/[0.08] py-10 mt-auto overflow-hidden">
@@ -11,7 +12,9 @@ export const Footer: React.FC = () => (
       <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <img src="/logo192.png" alt="OpenNotes" className="h-7 w-7 rounded-lg shadow-lg shadow-[#FFC000]/10" />
+          <div className="bg-[#FFC000] p-1.5 rounded-lg shadow-lg shadow-[#FFC000]/20">
+            <GraduationCap className="h-4 w-4 text-slate-900" />
+          </div>
           <span className="font-black text-base tracking-tight text-white">
             Open<span className="text-[#FFC000]">Notes</span>.in
           </span>

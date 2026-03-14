@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Search, PlusCircle, ShoppingBag, Sun, Moon,
+  GraduationCap, Search, PlusCircle, ShoppingBag, Sun, Moon,
   ShoppingCart, MessageCircle, Menu, User as UserIcon, Bell,
   ChevronDown, LogOut, X, HelpCircle
 } from 'lucide-react';
-import { useNavigate, NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import type { View } from '../types';
-import { apiRequest } from '../utils/api';
 import { 
   Notification, 
   NotifRow, 
@@ -18,9 +16,12 @@ import {
 } from './NotificationSystem';
 
 interface NavbarProps {
+  currentView: View;
+  setView: (v: View) => void;
   isDark: boolean;
   toggleDark: () => void;
   cartCount: number;
+  setShowCart: (v: boolean) => void;
   setShowAuth: (v: boolean) => void;
   unreadMessageCount?: number;
   unreadNotificationCount?: number;
@@ -28,14 +29,12 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
-  isDark, toggleDark,
-  cartCount, setShowAuth,
+  currentView, setView, isDark, toggleDark,
+  cartCount, setShowCart, setShowAuth,
   unreadMessageCount = 0, unreadNotificationCount = 0,
   onShowGuide,
 }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);   // desktop dropdown
   const [showMobileSheet, setShowMobileSheet] = useState(false);        // mobile bottom sheet
@@ -81,10 +80,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   const fetchNotifications = async () => {
-    if (!user) return;
+    if (!token) return;
     setLoadingNotifs(true);
     try {
-      const res = await apiRequest('/api/notifications');
+      const res = await fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) setNotifications(await res.json());
     } finally {
       setLoadingNotifs(false);
@@ -92,8 +91,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const markAllAsRead = async () => {
-    if (!user) return;
-    await apiRequest('/api/notifications/mark-read', { method: 'PUT' });
+    if (!token) return;
+    await fetch('/api/notifications/mark-read', { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
     setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
   };
 
@@ -104,9 +103,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     setIsMenuOpen(false);
 
     // 2. Mark as read in the background
-    if (!notif.is_read && user) {
-      apiRequest(`/api/notifications/${notif.id}/mark-read`, {
-        method: 'PUT'
+    if (!notif.is_read && token) {
+      fetch(`/api/notifications/${notif.id}/mark-read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
       }).catch(() => { });
       setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: 1 } : n));
     }
@@ -114,38 +114,39 @@ export const Navbar: React.FC<NavbarProps> = ({
     const link = notif.link;
     if (!link) return;
 
-    // 3. Delay the navigation slightly to allow exit animations to run smoothly.
+    // 3. Delay the view change slightly to allow exit animations to run smoothly.
+    // This removes the "jitter" where the UI freezes during a large DOM swap.
     setTimeout(() => {
       const type = notif.type.toLowerCase();
       
       // Explicit Mapping by Notification Type
       if (type === 'sold' || type === 'payout' || type === 'sale') {
-        navigate('/profile?tab=earnings');
+        setView('profile', 'earnings');
         return;
       }
       
       if (type === 'message' || type === 'chat') {
-        navigate('/messages');
+        setView('messages');
         return;
       }
       
       if (type === 'purchase' || type === 'order' || type === 'buy') {
-        navigate('/orders');
+        setView('orders');
         return;
       }
       
       if (type === 'listing' || type === 'approved' || type === 'rejected') {
-        navigate('/profile?tab=listings');
+        setView('profile', 'listings');
         return;
       }
 
       // Fallback: Path-based detection if type doesn't match
-      if (link.startsWith('/messages')) navigate('/messages');
-      else if (link.startsWith('/profile') || link.startsWith('/dashboard')) navigate('/profile');
-      else if (link.startsWith('/orders')) navigate('/orders');
-      else if (link.startsWith('/sell')) navigate('/sell');
-      else if (link.startsWith('/browse')) navigate('/browse');
-      else navigate('/');
+      if (link.startsWith('/messages')) setView('messages');
+      else if (link.startsWith('/profile') || link.startsWith('/dashboard')) setView('profile', 'listings');
+      else if (link.startsWith('/orders')) setView('orders');
+      else if (link.startsWith('/sell')) setView('sell');
+      else if (link.startsWith('/browse')) setView('browse');
+      else setView('home');
     }, 180);
   };
 
@@ -166,27 +167,20 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const navLink = (to: string, label: string) => (
-    <NavLink
-      to={to}
-      className={({ isActive }) => 
-        `relative text-sm font-semibold tracking-tight transition-colors duration-150 py-1 ${
-          isActive ? 'text-[#FFC000]' : 'text-slate-400 hover:text-white'
-        }`
-      }
+  const navLink = (view: View, label: string) => (
+    <button
+      onClick={() => setView(view)}
+      className={`relative text-sm font-semibold tracking-tight transition-colors duration-150 py-1 ${currentView === view ? 'text-[#FFC000]' : 'text-slate-400 hover:text-white'
+        }`}
     >
-      {({ isActive }) => (
-        <>
-          {label}
-          {isActive && (
-            <motion.span
-              layoutId="nav-indicator"
-              className="absolute -bottom-[1px] left-0 right-0 h-0.5 bg-[#FFC000] rounded-full"
-            />
-          )}
-        </>
+      {label}
+      {currentView === view && (
+        <motion.span
+          layoutId="nav-indicator"
+          className="absolute -bottom-[1px] left-0 right-0 h-0.5 bg-[#FFC000] rounded-full"
+        />
       )}
-    </NavLink>
+    </button>
   );
 
   const iconBtn = (onClick: () => void, children: React.ReactNode, badge?: number, title?: string) => (
@@ -213,51 +207,28 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex justify-between h-16 items-center gap-4 py-3">
 
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2 group shrink-0">
-              <img 
-                src="/logo192.png" 
-                alt="OpenNotes Logo" 
-                className="h-9 w-9 rounded-xl shadow-lg shadow-[#FFC000]/10 group-hover:scale-110 transition-transform duration-300" 
-              />
+            <button onClick={() => setView('home')} className="flex items-center gap-2 group shrink-0">
+              <div className="bg-[#FFC000] p-1.5 rounded-lg group-hover:bg-[#e6ac00] transition-colors shadow-lg shadow-[#FFC000]/20">
+                <GraduationCap className="h-5 w-5 text-slate-900" />
+              </div>
               <span className="font-black text-lg tracking-tight text-white">
                 Open<span className="text-[#FFC000]">Notes</span>.in
               </span>
-            </Link>
+            </button>
 
             {/* Desktop Nav Links */}
             <div className="hidden md:flex items-center gap-7 border-b border-transparent">
-              {navLink('/browse', 'Browse Notes')}
-              <button
-                onClick={() => {
-                  if (!user) {
-                    setShowAuth(true);
-                  } else {
-                    navigate('/sell');
-                  }
-                }}
-                className={`relative text-sm font-semibold tracking-tight transition-colors duration-150 py-1 ${
-                  location.pathname === '/sell' ? 'text-[#FFC000]' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Sell Notes
-                {location.pathname === '/sell' && (
-                  <motion.span
-                    layoutId="nav-indicator"
-                    className="absolute -bottom-[1px] left-0 right-0 h-0.5 bg-[#FFC000] rounded-full"
-                  />
-                )}
-              </button>
-              {user && navLink('/profile', 'Dashboard')}
-              {user && navLink('/orders', 'My Orders')}
+              {navLink('browse', 'Browse Notes')}
+              {navLink('sell', 'Sell Notes')}
+              {user && navLink('profile', 'Dashboard')}
+              {user && navLink('orders', 'My Orders')}
               {user?.role === 'admin' && (
-                <NavLink
-                  to="/admin"
-                  className={({ isActive }) => 
-                    `text-sm font-semibold tracking-tight transition-colors py-1 ${isActive ? 'text-[#FFC000]' : 'text-slate-400 hover:text-[#FFC000]'}`
-                  }
+                <button
+                  onClick={() => setView('admin')}
+                  className={`text-sm font-semibold tracking-tight transition-colors py-1 ${currentView === 'admin' ? 'text-[#FFC000]' : 'text-slate-400 hover:text-[#FFC000]'}`}
                 >
                   Admin
-                </NavLink>
+                </button>
               )}
             </div>
 
@@ -270,7 +241,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {iconBtn(toggleDark, isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />, undefined, 'Toggle theme')}
               </div>
 
-              {user && iconBtn(() => navigate('/messages'), <MessageCircle className="h-4 w-4" />, unreadMessageCount, 'Messages')}
+              {/* Message Icon — always visible if logged in */}
+              {user && (
+                <div className="relative">
+                  {iconBtn(() => setView('messages'), <MessageCircle className="h-4 w-4" />, unreadMessageCount, 'Messages')}
+                </div>
+              )}
 
               {/* Bell — always visible */}
               {user && (
@@ -314,7 +290,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Desktop cart + user menu */}
               {user && (
                 <div className="hidden md:block">
-                  {iconBtn(() => navigate('/cart'), <ShoppingCart className="h-4 w-4" />, cartCount, 'Cart')}
+                  {iconBtn(() => setShowCart(true), <ShoppingCart className="h-4 w-4" />, cartCount, 'Cart')}
                 </div>
               )}
 
@@ -347,12 +323,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                             </div>
                             <div className="p-1.5 space-y-0.5">
                               {[
-                                { icon: UserIcon, label: 'Dashboard', path: '/profile' },
-                                { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
-                              ].map(({ icon: Icon, label, path }) => (
+                                { icon: UserIcon, label: 'Dashboard', view: 'profile' as View },
+                                { icon: ShoppingBag, label: 'My Orders', view: 'orders' as View },
+                              ].map(({ icon: Icon, label, view }) => (
                                 <button
-                                  key={path}
-                                  onClick={() => { navigate(path); setShowUserMenu(false); }}
+                                  key={view}
+                                  onClick={() => { setView(view); setShowUserMenu(false); }}
                                   className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white text-sm font-medium transition-colors"
                                 >
                                   <Icon className="h-4 w-4" /> {label}
@@ -380,7 +356,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Sign in
                   </button>
                   <button
-                    onClick={() => setShowAuth(true)}
+                    onClick={() => setView('sell')}
                     className="flex items-center gap-1.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#FFC000]/20"
                   >
                     <PlusCircle className="h-3.5 w-3.5" />
@@ -391,7 +367,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {user && (
                 <button
-                  onClick={() => navigate('/sell')}
+                  onClick={() => setView('sell')}
                   className="hidden md:flex items-center gap-1.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#FFC000]/20 ml-2"
                 >
                   <PlusCircle className="h-3.5 w-3.5" />
@@ -402,7 +378,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Mobile: Cart icon */}
               {user && (
                 <div className="md:hidden">
-                  {iconBtn(() => navigate('/cart'), <ShoppingCart className="h-4 w-4" />, cartCount, 'Cart')}
+                  {iconBtn(() => setShowCart(true), <ShoppingCart className="h-4 w-4" />, cartCount, 'Cart')}
                 </div>
               )}
 
@@ -450,47 +426,34 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
                   </div>
                 )}
+
                 {[
-                  { icon: Search, label: 'Browse Notes', path: '/browse' },
-                  { icon: PlusCircle, label: 'Sell Notes', path: '/sell' },
+                  { icon: Search, label: 'Browse Notes', view: 'browse' as View },
+                  { icon: PlusCircle, label: 'Sell Notes', view: 'sell' as View },
                   ...(user ? [
-                    { icon: UserIcon, label: 'Dashboard', path: '/profile' },
-                    { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
-                    { icon: Bell, label: 'Notifications', path: null, onClick: () => toggleNotifications(), badge: unreadNotificationCount },
-                    { icon: MessageCircle, label: 'Messages', path: '/messages', badge: unreadMessageCount },
+                    { icon: UserIcon, label: 'Dashboard', view: 'profile' as View },
+                    { icon: ShoppingBag, label: 'My Orders', view: 'orders' as View },
+                    { icon: Bell, label: 'Notifications', view: null, onClick: () => toggleNotifications(), badge: unreadNotificationCount },
+                    { icon: MessageCircle, label: 'Messages', view: 'messages' as View, badge: unreadMessageCount },
                   ] : []),
-                  { icon: isDark ? Sun : Moon, label: `${isDark ? 'Light' : 'Dark'} Mode`, path: null, onClick: () => toggleDark() },
-                  { icon: HelpCircle, label: 'How it Works', path: null, onClick: () => { onShowGuide?.(); setIsMenuOpen(false); } },
-                ].map(({ icon: Icon, label, path, badge, onClick }: any) => {
-                  const isActive = path ? location.pathname === path : false;
-                  return (
-                    <button
-                      key={label}
-                      onClick={() => { 
-                        if (onClick) {
-                          onClick();
-                        } else {
-                          if (path === '/sell' && !user) {
-                            setShowAuth(true);
-                          } else {
-                            navigate(path);
-                          }
-                          setIsMenuOpen(false);
-                        }
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-3.5 rounded-xl transition-colors ${isActive ? 'bg-[#FFC000]/10 text-[#FFC000]' : 'hover:bg-white/5 text-slate-400 hover:text-white'
-                        }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Icon className="h-5 w-5 opacity-70" />
-                        <span className="text-sm font-bold">{label}</span>
-                      </div>
-                      {badge > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-md">{badge}</span>
-                      )}
-                    </button>
-                  );
-                })}
+                  { icon: isDark ? Sun : Moon, label: `${isDark ? 'Light' : 'Dark'} Mode`, view: null, onClick: () => toggleDark() },
+                  { icon: HelpCircle, label: 'How it Works', view: null, onClick: () => { onShowGuide?.(); setIsMenuOpen(false); } },
+                ].map(({ icon: Icon, label, view, badge, onClick }: any) => (
+                  <button
+                    key={label}
+                    onClick={() => { if (onClick) onClick(); else { setView(view); setIsMenuOpen(false); } }}
+                    className={`w-full flex items-center justify-between px-3 py-3.5 rounded-xl transition-colors ${currentView === view ? 'bg-[#FFC000]/10 text-[#FFC000]' : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                      }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-5 w-5 opacity-70" />
+                      <span className="text-sm font-bold">{label}</span>
+                    </div>
+                    {badge > 0 && (
+                      <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-md">{badge}</span>
+                    )}
+                  </button>
+                ))}
 
                 <div className="pt-4 mt-4 border-t border-white/10 space-y-2">
                   {user ? (

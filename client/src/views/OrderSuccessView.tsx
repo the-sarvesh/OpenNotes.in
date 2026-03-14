@@ -58,78 +58,61 @@ export const OrderSuccessView: React.FC<OrderSuccessViewProps> = ({ orderData, o
           
           <h2 className="text-lg font-black text-text-main mb-6 flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            Security & Exchange
+            Next Steps for Meetup
           </h2>
 
-          <div className="space-y-8">
-            {/* PIN HERO SECTION */}
-            <div className="bg-background/80 border-2 border-primary/20 rounded-3xl p-6 text-center relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110" />
-              
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-4">
-                <ShieldCheck className="h-3 w-3" /> Secure Exchange PIN
+          <div className="space-y-6">
+            {/* Step 1: Cash */}
+            <div className="flex gap-4">
+              <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-black flex items-center justify-center shrink-0">1</div>
+              <div>
+                <h3 className="font-bold text-text-main mb-1">Bring exact cash</h3>
+                <p className="text-sm text-text-muted">You still need to pay the seller <strong className="text-text-main font-black">₹{cashDue}</strong> in cash (or UPI) during the meetup. (Total was ₹{totalCost})</p>
               </div>
-
-              <div className="space-y-4">
-                {orderData.items.map((item: any, idx: number) => (
-                  <div key={idx} className="relative z-10">
-                    <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-2 truncate px-4">
-                      {item.title}
-                    </p>
-                    <div className="flex items-center justify-center gap-3">
-                      <div className="flex gap-2">
-                        {(item.meetup_pin || '0000').split('').map((char: string, i: number) => (
-                          <span key={i} className="w-10 h-12 sm:w-12 sm:h-14 bg-surface rounded-xl border border-border flex items-center justify-center text-xl sm:text-2xl font-black text-primary shadow-sm">
-                            {char}
-                          </span>
-                        ))}
-                      </div>
-                      <button 
-                        onClick={() => handleCopyPin(item.meetup_pin)}
-                        className="p-3 bg-surface hover:bg-primary-hover border border-border rounded-xl text-text-muted transition-all active:scale-95"
-                        title="Copy PIN"
-                      >
-                        <Copy className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <p className="mt-6 text-[11px] font-medium text-text-muted leading-relaxed">
-                <span className="text-primary font-black">CRITICAL:</span> Only show this PIN to the seller <span className="underline decoration-primary/30 underline-offset-4">after</span> you have inspected and received the physical notes.
-              </p>
             </div>
 
-            {/* Step 1: Cash */}
-            <div className="flex gap-4 p-2">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary font-black flex items-center justify-center shrink-0 border border-primary/20">
-                <span className="text-sm">₹</span>
-              </div>
-              <div>
-                <h3 className="font-bold text-text-main mb-1">Cash Payment Due</h3>
-                <p className="text-sm text-text-muted leading-relaxed">
-                  Hand over <strong className="text-text-main font-black">₹{cashDue}</strong> to the seller at the meetup. The remaining balance was settled via the online platform fee.
-                </p>
+            {/* Step 2: Secret PIN */}
+            <div className="flex gap-4">
+              <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-black flex items-center justify-center shrink-0">2</div>
+              <div className="w-full">
+                <h3 className="font-bold text-text-main mb-1">Share PIN to collect notes</h3>
+                <p className="text-sm text-text-muted mb-3">Provide this PIN <strong className="text-black dark:text-white">after</strong> you've inspected the notes.</p>
+                
+                <div className="flex flex-col gap-2">
+                  {orderData.items.map((item: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-background rounded-xl border border-border">
+                      <div className="truncate pr-4">
+                        <p className="text-xs font-semibold text-text-muted truncate">{item.title}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-lg font-black tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-lg">
+                          {item.meetup_pin || '----'}
+                        </span>
+                        <button 
+                          onClick={() => handleCopyPin(item.meetup_pin)}
+                          className="p-2 hover:bg-surface rounded-lg text-text-muted transition-colors"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
             {/* Step 3: Chat */}
-            <div className="flex gap-4 p-2">
-              <div className="w-10 h-10 rounded-2xl bg-accent text-accent-foreground font-black flex items-center justify-center shrink-0 border border-accent/20">
-                <MessageSquare className="h-4 w-4" />
-              </div>
+            <div className="flex gap-4">
+              <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-black flex items-center justify-center shrink-0">3</div>
               <div className="w-full">
-                <h3 className="font-bold text-text-main mb-1">Coordinate via Chat</h3>
-                <p className="text-sm text-text-muted mb-5 leading-relaxed">
-                  We've sent your availability to the seller. Open the chat to confirm the exact location and time for the exchange.
-                </p>
+                <h3 className="font-bold text-text-main mb-1">Coordinate time and place</h3>
+                <p className="text-sm text-text-muted mb-4">We've automatically messaged the seller with your availability. Go to Chat to confirm the exact meetup time.</p>
                 
                 <button
                   onClick={onGoToMessages}
-                  className="w-full py-4 bg-[#003366] hover:bg-[#002244] text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-[#003366]/20 active:scale-[0.98]"
+                  className="w-full py-3 bg-primary hover:bg-primary-hover text-primary-foreground font-black text-sm uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
                 >
-                  <MessageSquare className="h-4 w-4" /> Go to Chat
+                  <MessageSquare className="h-4 w-4" /> Open Chat Now
                 </button>
               </div>
             </div>

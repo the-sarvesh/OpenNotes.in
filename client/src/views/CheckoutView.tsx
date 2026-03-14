@@ -11,17 +11,15 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import type { Note } from "../types";
 import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
 import toast from "react-hot-toast";
-import { apiRequest } from "../utils/api";
 
 interface CheckoutViewProps {
-  cart?: any[];
-  onSuccess?: (orderData: any) => void;
-  onBack?: () => void;
+  onBack: () => void;
+  cart?: any[]; // Keep optional for backwards compatibility
+  onSuccess?: (data: any) => void;
 }
 
 // ── Reusable section card ──────────────────────────────────────────
@@ -64,12 +62,11 @@ const ShieldCheck = ({ className }: { className?: string }) => (
 
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
   cart,
-  onSuccess,
   onBack,
+  onSuccess,
 }) => {
-  const navigate = useNavigate();
   const { cart: contextCart, clearCart } = useCart();
-  const { user } = useAuth();
+  const { token } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -131,8 +128,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     setCouponLoading(true);
     setCouponResult(null);
     try {
-      const res = await apiRequest("/api/orders/validate-coupon", {
+      const res = await fetch("/api/orders/validate-coupon", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           coupon_code: couponInput.trim(),
           order_total: total,
@@ -161,7 +162,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     } finally {
       setCouponLoading(false);
     }
-  }, [couponInput, total, rawPlatformFee]);
+  }, [couponInput, token, total, rawPlatformFee]);
 
   const removeCoupon = () => {
     setCouponInput("");
@@ -170,7 +171,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   };
 
   const handlePlaceOrder = async () => {
-    if (!user) return;
+    if (!token) return;
     if (needsDelivery && !address) {
       toast.error("Please enter delivery address");
       return;
@@ -186,8 +187,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
     setLoading(true);
     try {
-      const res = await apiRequest("/api/orders", {
+      const res = await fetch("/api/orders", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           items: activeCart.map((item) => ({
             listing_id: item.note.id,
@@ -202,12 +207,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       });
       const data = await res.json();
       if (res.ok) {
-        if (onSuccess) {
-          onSuccess(data);
-        } else {
-          clearCart();
-          toast.success("Order placed successfully!");
-        }
+        clearCart();
+        onSuccess?.(data);
       } else toast.error(data.error || "Failed to place order");
     } catch {
       toast.error("Network error. Please try again.");
@@ -221,7 +222,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       {/* ── Page header ── */}
       <div className="flex items-center gap-3 mb-8">
         <button
-          onClick={() => (onBack ? onBack() : navigate(-1))}
+          onClick={onBack}
           className="p-2 rounded-xl hover:bg-primary-hover hover:bg-primary-hover text-text-muted transition-colors shrink-0"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -577,7 +578,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
             {/* Cart items */}
             <div className="space-y-5 max-h-80 overflow-y-auto pr-1 mb-5">
-              {activeCart.map((item) => (
+              {cart.map((item) => (
                 <div key={item.note.id} className="flex gap-3">
                   <div className="relative shrink-0">
                     <img

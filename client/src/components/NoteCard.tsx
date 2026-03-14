@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Heart, Star, Clock, MapPin, ShoppingCart, Layers } from 'lucide-react';
-import { formatSemester } from '../utils/formatters';
 
 export interface Note {
   id: string;
@@ -29,8 +28,7 @@ export const NoteCard = ({
   onBuyNow,
   isInCart,
   onContactSeller, 
-  onViewDetails,
-  cart = []
+  onViewDetails 
 }: { 
   note: Note; 
   onAddToCart: (n: Note) => void; 
@@ -38,7 +36,6 @@ export const NoteCard = ({
   isInCart?: boolean;
   onContactSeller?: (sellerId: string, listingId: string, title: string) => void; 
   onViewDetails?: (n: Note) => void; 
-  cart?: { note: any, quantity: number }[];
   key?: React.Key 
 }) => {
   const [isFavorite, setIsFavorite] = useState(false);
@@ -99,7 +96,7 @@ export const NoteCard = ({
         
         <div className="flex items-center gap-3 text-xs text-text-muted mb-4">
           <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3" /> {formatSemester(note.semester)}
+            <Clock className="h-3 w-3" /> {note.semester}
           </span>
           <span className="flex items-center gap-1">
             <MapPin className="h-3 w-3" /> {note.location}
@@ -126,7 +123,7 @@ export const NoteCard = ({
           <div className="flex gap-2">
             <button 
               onClick={() => onAddToCart(note)}
-              disabled={note.quantity === 0 || (cart.find(i => i.note.id === note.id)?.quantity || 0) >= note.quantity}
+              disabled={note.quantity === 0}
               className={`flex-1 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm ${
                 isInCart 
                   ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60' 
@@ -134,7 +131,7 @@ export const NoteCard = ({
               } disabled:opacity-50 disabled:cursor-not-allowed active:scale-95`}
             >
               <ShoppingCart className="h-3.5 w-3.5" />
-              {note.quantity === 0 ? 'Out of Stock' : (cart.find(i => i.note.id === note.id)?.quantity || 0) >= note.quantity ? 'Max in Cart' : isInCart ? 'In Cart' : 'Add to Cart'}
+              {isInCart ? 'In Cart' : 'Add to Cart'}
             </button>
             
             <button 

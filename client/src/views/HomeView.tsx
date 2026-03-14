@@ -5,22 +5,20 @@ import {
   CheckCircle2, ShieldCheck, HelpCircle, Star, ArrowUpRight
 } from 'lucide-react';
 import { NoteCard } from '../components/NoteCard';
-import { useNavigate, Link } from 'react-router-dom';
-import { mapListing } from '../utils/listings';
-import type { Note, CartItem } from '../types/index.ts';
+import type { Note, View } from '../types/index.ts';
 
 interface HomeViewProps {
+  setView: (v: View) => void;
   onAddToCart: (n: Note) => void;
   onBuyNow: (n: Note) => void;
   onContactSeller: (sellerId: string, listingId: string, title: string) => void;
   onViewDetails: (n: Note) => void;
   checkAuth: (action: () => void) => void;
-  cart: CartItem[];
+  cart: { note: Note }[];
   refreshKey?: number;
   onShowGuide?: () => void;
   userName?: string; // optional greeting name
 }
-
 
 // Reusable scroll-triggered fade-up
 const FadeUp: React.FC<{ children: React.ReactNode; delay?: number; className?: string }> = ({ children, delay = 0, className = '' }) => {
@@ -57,9 +55,8 @@ const FadeIn: React.FC<{ children: React.ReactNode; delay?: number; x?: number; 
 };
 
 export const HomeView: React.FC<HomeViewProps> = ({
-  onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart, refreshKey, onShowGuide, userName,
+  setView, onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart, refreshKey, onShowGuide, userName,
 }) => {
-  const navigate = useNavigate();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -174,7 +171,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="flex flex-col sm:flex-row gap-3"
             >
               <button
-                onClick={() => navigate('/browse')}
+                onClick={() => setView('browse')}
                 className="group inline-flex items-center justify-center gap-2.5 bg-primary hover:bg-primary-hover active:scale-[0.97] text-white px-8 py-4 rounded-2xl font-bold text-base transition-all shadow-xl shadow-[#003366]/25 dark:shadow-[#FFC000]/15"
               >
                 <Search className="h-5 w-5" />
@@ -182,7 +179,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <ArrowUpRight className="h-4 w-4 opacity-60 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </button>
               <button
-                onClick={() => checkAuth(() => navigate('/sell'))}
+                onClick={() => checkAuth(() => setView('sell'))}
                 className="inline-flex items-center justify-center gap-2.5 bg-surface hover:bg-background border border-border active:scale-[0.97] text-text-main px-8 py-4 rounded-2xl font-bold text-base transition-all shadow-sm"
               >
                 <ShoppingBag className="h-5 w-5" />
@@ -340,7 +337,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <h2 className="text-3xl sm:text-4xl font-black text-text-main">Notes from your peers</h2>
               </div>
               <button
-                onClick={() => navigate('/browse')}
+                onClick={() => setView('browse')}
                 className="hidden sm:inline-flex items-center gap-1.5 text-sm font-black text-primary hover:underline underline-offset-4"
               >
                 View all <ArrowRight className="h-4 w-4" />
@@ -369,7 +366,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     onAddToCart={onAddToCart}
                     onBuyNow={onBuyNow}
                     isInCart={cart.some(c => c.note.id === note.id)}
-                    cart={cart}
                     onContactSeller={onContactSeller}
                     onViewDetails={onViewDetails}
                   />
@@ -380,7 +376,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           <FadeUp>
             <button
-              onClick={() => navigate('/browse')}
+              onClick={() => setView('browse')}
               className="w-full mt-8 sm:hidden py-4 bg-surface border border-border rounded-2xl text-sm font-bold text-text-muted flex items-center justify-center gap-2 hover:border-primary/20 transition-colors"
             >
               View all listings <ArrowRight className="h-4 w-4" />
@@ -411,7 +407,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <h2 className="text-3xl sm:text-4xl font-black text-white mb-4">Start selling today</h2>
                 <p className="text-slate-400 mb-8 max-w-md mx-auto font-medium leading-relaxed">Your study materials have already served you well. List them for free and help a fellow student pass their exams.</p>
                 <button
-                  onClick={() => checkAuth(() => navigate('/sell'))}
+                  onClick={() => checkAuth(() => setView('sell'))}
                   className="inline-flex items-center gap-2.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 active:scale-[0.97] px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-[#FFC000]/25"
                 >
                   <ShoppingBag className="h-5 w-5" />
@@ -427,3 +423,25 @@ export const HomeView: React.FC<HomeViewProps> = ({
     </motion.div>
   );
 };
+
+function mapListing(item: any): Note {
+  return {
+    id: item.id,
+    title: item.title,
+    courseCode: item.course_code,
+    semester: item.semester,
+    condition: item.condition,
+    price: item.price,
+    seller: item.seller_name,
+    sellerId: item.seller_id,
+    location: item.location,
+    image: item.image_url,
+    rating: item.seller_rating || 0,
+    quantity: item.quantity,
+    materialType: item.material_type,
+    isMultipleSubjects: item.is_multiple_subjects === 1 || item.is_multiple_subjects === true,
+    subjects: item.subjects || [],
+    deliveryMethod: item.delivery_method,
+    meetupLocation: item.meetup_location,
+  };
+}

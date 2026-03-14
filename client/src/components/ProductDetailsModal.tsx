@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package, Tag, Layers } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext.js';
-import { apiRequest } from '../utils/api.js';
-import { formatSemester } from '../utils/formatters';
+import { useAuth } from '../contexts/AuthContext';
 import type { Note } from '../types';
 
 interface ProductDetailsModalProps {
@@ -12,7 +10,6 @@ interface ProductDetailsModalProps {
   onAddToCart: (n: Note) => void;
   onBuyNow: (n: Note) => void;
   isInCart: boolean;
-  cart: { note: any; quantity: number }[];
   onContactSeller: (sellerId: string, listingId: string, title: string) => void;
 }
 
@@ -23,9 +20,9 @@ const conditionColor: Record<string, string> = {
 };
 
 export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
-  note, onClose, onAddToCart, onBuyNow, isInCart, cart, onContactSeller,
+  note, onClose, onAddToCart, onBuyNow, isInCart, onContactSeller,
 }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
 
@@ -42,8 +39,9 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
     if (!confirm('Delete this listing permanently?')) return;
     setDeleting(true);
     try {
-      const res = await apiRequest(`/api/admin/listings/${note.id}`, {
+      const res = await fetch(`/api/admin/listings/${note.id}`, {
         method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) { alert('Deleted successfully'); onClose(); window.location.reload(); }
     } finally {
@@ -119,7 +117,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               <Package className="h-3 w-3" /> {note.materialType}
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-background rounded-lg text-[11px] font-bold text-text-muted border border-border">
-              {formatSemester(note.semester)}
+              {note.semester}
             </span>
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${note.quantity > 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'}`}>
               {note.quantity > 0 ? `${note.quantity} in stock` : 'Sold out'}
@@ -174,7 +172,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             </button>
             <button
               onClick={() => onAddToCart(note)}
-              disabled={note.quantity === 0 || (cart.find(i => i.note.id === note.id)?.quantity || 0) >= note.quantity}
+              disabled={note.quantity === 0}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-sm active:scale-95 disabled:opacity-40 ${
                 isInCart 
                 ? 'bg-accent text-white shadow-[#003366]/20 dark:shadow-[#FFC000]/10' 
@@ -182,7 +180,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               }`}
             >
               <ShoppingCart className="h-4 w-4" />
-              {note.quantity === 0 ? 'Out of Stock' : (cart.find(i => i.note.id === note.id)?.quantity || 0) >= note.quantity ? 'Max in Cart' : isInCart ? 'In Cart' : 'Add to Cart'}
+              {isInCart ? 'In Cart' : 'Add to Cart'}
             </button>
             <button
               onClick={() => { onBuyNow(note); onClose(); }}
