@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   MessageCircle,
@@ -485,7 +486,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   }, [activeConvo.conversationId]);
 
   // ── KEY FIX: snap to bottom once loadingMessages flips to false ──
-  // This fires AFTER React has painted the messages into the DOM.
+  // flushSync in fetchMessages guarantees messages are in the DOM before
+  // this effect fires, so scrollHeight is already the real full height.
   useEffect(() => {
     if (loadingMessages) return;           // still loading — wait
     if (!isInitialLoadRef.current) return; // only for the first load of a convo
@@ -495,12 +497,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     // Seed seenIds so existing messages don't animate
     messages.forEach((m) => seenIdsRef.current.add(m.id));
 
-    // double rAF: first frame commits DOM layout, second reads correct scrollHeight
+    // Single rAF is enough — DOM is already painted thanks to flushSync
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        snapToBottom();
-      });
+      snapToBottom();
     });
+
+    // Belt-and-suspenders: retry after 100ms for slow renders / tall bubbles
+    const t = setTimeout(() => snapToBottom(), 100);
+    return () => clearTimeout(t);
   }, [loadingMessages]); // ← intentionally only loadingMessages
 
   // ── New messages arriving (after initial load) ────────────────────
@@ -673,7 +677,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       </div>
 
       {/* ── Input bar ── */}
-      <div className="px-3 sm:px-4 py-3 border-t border-border bg-surface shrink-0">
+      <div className="px-3 sm:px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border bg-surface shrink-0">
         {errorMsg && (
           <div className="mb-2 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 text-xs px-3 py-2 rounded-xl font-medium">
             {errorMsg}
@@ -779,13 +783,17 @@ export const MessagesView: React.FC<{
       const res = await apiRequest(`/api/messages/${convoId}`);
       if (res.ok) {
         const data: Message[] = await res.json();
-        setMessages(data);
+        // flushSync forces React to paint messages into the DOM BEFORE
+        // setLoadingMessages(false) runs — this gives scrollHeight a real
+        // value when the scroll effect fires on the next line.
+        flushSync(() => {
+          setMessages(data);
+        });
       }
     } catch (err) {
       console.error("[Messages] fetchMessages error:", err);
     } finally {
-      // loadingMessages = false fires AFTER messages are in state,
-      // which is what ChatPanel's scroll effect waits for.
+      // Now messages are already in the DOM — this flip triggers the scroll.
       setLoadingMessages(false);
     }
   }, []);
@@ -1017,6 +1025,35 @@ export const MessagesView: React.FC<{
     else { setActiveConvo(null); fetchConversations(); }
   };
 
+  // ── Mobile keyboard fix ───────────────────────────────────────────
+  const mobileRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = mobileRootRef.current;
+    if (!el || !window.visualViewport) return;
+
+    const onViewportChange = () => {
+      const vv = window.visualViewport!;
+      // On mobile, the Navbar is 64px. We want to fill the area between Navbar and keyboard.
+      // If vv.height is already small (keyboard open), we adjust the container height.
+      // We don't use fixed/top anymore to avoid "jumpy" iOS behavior.
+      const isMobile = window.innerWidth < 1024;
+      if (isMobile) {
+        // We subtract the navbar height (approx 64px)
+        // Adjust for visual viewport height
+        el.style.height = `${vv.height - 64}px`;
+      }
+    };
+
+    onViewportChange();
+    window.visualViewport.addEventListener("resize", onViewportChange);
+    window.visualViewport.addEventListener("scroll", onViewportChange);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", onViewportChange);
+      window.visualViewport?.removeEventListener("scroll", onViewportChange);
+    };
+  }, []);
+
   // Shared props for ChatPanel
   const chatPanelProps = {
     messages, user, isConnected, arrivedUsers, otherUserTyping,
@@ -1078,9 +1115,11 @@ export const MessagesView: React.FC<{
       </div>
 
       {/* ── Mobile: full screen ── */}
+      {/* position:fixed + top:0 is overridden by the visualViewport hook on iOS */}
       <div
-        className="lg:hidden flex flex-col bg-surface border border-border overflow-hidden"
-        style={{ height: "100dvh" }}
+        ref={mobileRootRef}
+        className="lg:hidden flex flex-col bg-surface border-t border-border overflow-hidden"
+        style={{ height: "calc(100dvh - 64px)", overscrollBehavior: "none" }}
       >
         <AnimatePresence mode="wait" initial={false}>
           {!activeConvo ? (
@@ -1090,7 +1129,7 @@ export const MessagesView: React.FC<{
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.15 }}
-              className="flex-1 flex flex-col h-full"
+              style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}
             >
               <ConversationList
                 conversations={conversations} activeConvo={activeConvo}
@@ -1105,7 +1144,7 @@ export const MessagesView: React.FC<{
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.15 }}
-              className="flex-1 flex flex-col h-full min-h-0"
+              style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}
             >
               <ChatPanel activeConvo={activeConvo} {...chatPanelProps} />
             </motion.div>
