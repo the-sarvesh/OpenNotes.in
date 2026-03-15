@@ -29,6 +29,9 @@ const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
       folder: folder,
       allowed_formats: ['jpg', 'png', 'webp', 'jpeg'],
       public_id: `file-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+      transformation: [
+        { width: 1200, height: 1200, crop: 'limit', quality: 'auto', fetch_format: 'auto' }
+      ]
     };
   },
 }) : null;

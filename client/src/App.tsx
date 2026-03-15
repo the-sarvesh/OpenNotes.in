@@ -24,6 +24,7 @@ import { CartView } from "./views/CartView.tsx";
 import { CheckoutView } from "./views/CheckoutView.tsx";
 import { OrderSuccessView } from "./views/OrderSuccessView";
 import { UserGuideModal } from "./components/UserGuideModal";
+import ScrollToTop from "./components/ScrollToTop";
 import { apiRequest } from "./utils/api";
 import { NotificationManager } from "./utils/NotificationManager";
 import { getSocket } from "./utils/socket";
@@ -403,6 +404,7 @@ const App: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col bg-background font-sans transition-colors duration-200">
+      <ScrollToTop />
       <audio ref={messageAudio} src="/sounds/message.mp3" preload="auto" />
       <audio ref={notificationAudio} src="/sounds/notification.mp3" preload="auto" />
       <Navbar

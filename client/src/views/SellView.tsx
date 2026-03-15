@@ -19,9 +19,16 @@ const STANDARD_SPOTS = ['HCL Office', 'BITS Exam Center'];
 
 const LOCATIONS = ['Noida / Delhi NCR', 'Bengaluru', 'Hyderabad', 'Chennai', 'Pune', 'Other (Manual)'];
 
+interface ImageUpload {
+  file: File;
+  preview: string;
+  url: string | null;      // Cloudinary URL (null if still uploading)
+  isUploading: boolean;
+  error: string | null;
+}
+
 interface FormData {
-  imageFiles: File[];
-  imagePreviews: string[];
+  images: ImageUpload[];
   materialType: string;
   semester: string;
   courseCode: string;
@@ -40,8 +47,7 @@ interface FormData {
 }
 
 const INITIAL_FORM: FormData = {
-  imageFiles: [],
-  imagePreviews: [],
+  images: [],
   materialType: 'PPT',
   semester: '',
   courseCode: '',
@@ -71,6 +77,53 @@ const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const inputClass = "w-full px-4 py-3 bg-surface/80 border border-border rounded-xl text-sm text-text-main placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-1 focus:ring-primary focus:border-primary transition-all";
 
+const compressImage = async (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        }, 'image/jpeg', 0.8);
+      };
+    };
+  });
+};
+
 export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse }) => {
   const { user } = useAuth();
   const [step, setStep] = useState(1);
@@ -79,15 +132,50 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
   const [error, setError] = useState('');
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
+
   const set = (key: keyof FormData, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadFile = async (index: number, file: File) => {
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      
+      const res = await apiRequest('/api/listings/upload-image', {
+        method: 'POST',
+        body: fd,
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      
+      setForm(prev => {
+        const newImages = [...prev.images];
+        if (newImages[index]) {
+          newImages[index] = { ...newImages[index], url: data.url, isUploading: false };
+        }
+        return { ...prev, images: newImages };
+      });
+    } catch (err: any) {
+      setForm(prev => {
+        const newImages = [...prev.images];
+        if (newImages[index]) {
+          newImages[index] = { ...newImages[index], isUploading: false, error: err.message };
+        }
+        return { ...prev, images: newImages };
+      });
+      toast.error(`Image upload failed: ${err.message}`);
+    }
+  };
+
+  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Limit to 3 images total
-    const totalRemaining = 3 - form.imageFiles.length;
+    const totalRemaining = 3 - form.images.length;
     const newFiles = files.slice(0, totalRemaining);
 
     if (newFiles.length === 0) {
@@ -95,23 +183,41 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       return;
     }
 
-    const newPreviews = newFiles.map(file => URL.createObjectURL(file));
-    set('imageFiles', [...form.imageFiles, ...newFiles]);
-    set('imagePreviews', [...form.imagePreviews, ...newPreviews]);
+    // Process one by one to avoid state race conditions easily
+    for (const file of newFiles) {
+      const preview = URL.createObjectURL(file);
+      const tempId = form.images.length; // Approximate, will be correct in functional update
+      
+      setForm(prev => {
+        if (prev.images.length >= 3) return prev;
+        
+        const newEntry: ImageUpload = {
+          file,
+          preview,
+          url: null,
+          isUploading: true,
+          error: null
+        };
+        
+        const updatedImages = [...prev.images, newEntry];
+        const newIdx = updatedImages.length - 1;
+        
+        // Start compression and upload in background
+        (async () => {
+          const compressed = await compressImage(file);
+          uploadFile(newIdx, compressed);
+        })();
+        
+        return { ...prev, images: updatedImages };
+      });
+    }
   };
 
   const removeImage = (index: number) => {
-    const newFiles = [...form.imageFiles];
-    const newPreviews = [...form.imagePreviews];
-    
-    // Revoke the object URL to avoid memory leaks
-    URL.revokeObjectURL(newPreviews[index]);
-    
-    newFiles.splice(index, 1);
-    newPreviews.splice(index, 1);
-    
-    set('imageFiles', newFiles);
-    set('imagePreviews', newPreviews);
+    const newImages = [...form.images];
+    URL.revokeObjectURL(newImages[index].preview);
+    newImages.splice(index, 1);
+    set('images', newImages);
   };
 
   const toggleSubject = (s: string) =>
@@ -120,7 +226,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       : [...form.subjects, s]);
 
   const canProceed = () => {
-    if (step === 1) return form.imageFiles.length > 0;
+    if (step === 1) return form.images.length > 0 && !form.images.some(img => img.isUploading);
     if (step === 2) {
       if (!form.semester || !form.title) return false;
       if (form.isMultipleSubjects) return form.subjects.length > 0;
@@ -141,20 +247,15 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
 
   const handleSubmit = async () => {
     if (!user) { setError('Please sign in to sell notes.'); return; }
+    if (form.images.some(img => img.isUploading)) {
+      toast.error('Please wait for all images to finish uploading.');
+      return;
+    }
+
     setIsSubmitting(true);
     setError('');
     try {
       const finalLocation = form.location === 'Other (Manual)' ? form.customLocation : form.location;
-      
-      const fd = new FormData();
-      fd.append('title', form.title);
-      fd.append('description', form.description);
-      fd.append('course_code', form.isMultipleSubjects ? 'Multiple' : form.courseCode);
-      fd.append('semester', form.semester);
-      fd.append('condition', form.condition);
-      fd.append('price', form.price);
-      fd.append('location', finalLocation);
-      fd.append('quantity', form.quantity);
       
       // Map material type labels to backend-expected keys
       const typeMap: Record<string, string> = {
@@ -162,26 +263,33 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
         'PPT': 'printed',
         'Book': 'printed'
       };
-      fd.append('material_type', typeMap[form.materialType] || 'other');
-      
-      fd.append('is_multiple_subjects', String(form.is_multiple_subjects));
-      
-      // Append multiple images
-      form.imageFiles.forEach(file => {
-        fd.append('images', file);
-      });
 
-      fd.append('delivery_method', form.deliveryMethod);
-      if (form.deliveryMethod !== 'courier') {
-        fd.append('preferred_meetup_spot', form.preferredMeetupSpot);
-        fd.append('meetup_location', form.meetupLocation);
-      }
-      if (form.isMultipleSubjects) fd.append('subjects', JSON.stringify(form.subjects));
+      const imageUrls = form.images.map(img => img.url).filter(Boolean) as string[];
+
+      const payload = {
+        title: form.title,
+        description: form.description,
+        course_code: form.isMultipleSubjects ? 'Multiple' : form.courseCode,
+        semester: form.semester,
+        condition: form.condition,
+        price: form.price,
+        location: finalLocation,
+        quantity: form.quantity,
+        material_type: typeMap[form.materialType] || 'other',
+        is_multiple_subjects: String(form.isMultipleSubjects),
+        imageUrls: JSON.stringify(imageUrls),
+        delivery_method: form.deliveryMethod,
+        preferred_meetup_spot: form.deliveryMethod !== 'courier' ? form.preferredMeetupSpot : undefined,
+        meetup_location: form.deliveryMethod !== 'courier' ? form.meetupLocation : undefined,
+        subjects: form.isMultipleSubjects ? JSON.stringify(form.subjects) : undefined,
+      };
 
       const res = await apiRequest('/api/listings', {
         method: 'POST',
-        body: fd,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
+      
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create listing');
       setSuccess(true);
@@ -289,29 +397,50 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-black text-text-main mb-1">Upload photos (Up to 3)</h2>
-                  <span className="text-xs font-bold text-text-muted">{form.imageFiles.length}/3 photos</span>
+                  <span className="text-xs font-bold text-text-muted">{form.images.length}/3 photos</span>
                 </div>
                 <p className="text-sm text-text-muted">Clear photos help buyers see what they're getting.</p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <AnimatePresence>
-                    {form.imagePreviews.map((preview, index) => (
+                    {form.images.map((img, index) => (
                       <motion.div
-                        key={preview}
+                        key={img.preview}
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.8 }}
                         className="relative aspect-square rounded-2xl overflow-hidden border border-border group"
                       >
-                        <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                        <img src={img.preview} alt={`Preview ${index + 1}`} className={`w-full h-full object-cover ${img.isUploading ? 'opacity-50 grayscale' : ''}`} />
+                        
+                        {/* Status Overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          {img.isUploading && (
+                            <div className="flex flex-col items-center gap-2">
+                              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                              <span className="text-[10px] font-bold text-white bg-black/40 px-2 py-0.5 rounded-full">Uploading...</span>
+                            </div>
+                          )}
+                          {!img.isUploading && img.url && (
+                            <div className="bg-emerald-500 p-1 rounded-full shadow-lg">
+                              <Check className="h-3 w-3 text-white" />
+                            </div>
+                          )}
+                          {img.error && (
+                            <div className="bg-red-500 p-1 rounded-full shadow-lg" title={img.error}>
+                              <X className="h-3 w-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+
                         <button
                           onClick={() => removeImage(index)}
-                          className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                          className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                         {index === 0 && (
-                          <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-primary text-black text-[10px] font-black rounded-md">
+                          <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-primary text-black text-[10px] font-black rounded-md z-10">
                             Main Photo
                           </div>
                         )}
@@ -319,7 +448,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                     ))}
                   </AnimatePresence>
 
-                  {form.imageFiles.length < 3 && (
+                  {form.images.length < 3 && (
                     <label
                       htmlFor="img-upload"
                       className="aspect-square border-2 border-dashed border-border hover:border-primary dark:hover:border-primary rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center gap-2 group bg-surface/50"

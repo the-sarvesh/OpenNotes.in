@@ -114,6 +114,24 @@ router.get("/", async (req, res, next) => {
 
 // Create a new listing
 router.post(
+  "/upload-image",
+  authenticate as any,
+  upload.single("image") as any,
+  async (req: AuthRequest, res, next) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No image provided" });
+      }
+      const url = getFileUrl(req.file);
+      res.json({ url });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Create a new listing
+router.post(
   "/",
   authenticate as any,
   upload.array("images", 3) as any,
@@ -137,8 +155,24 @@ router.post(
         meetup_location,
       } = req.body;
 
-      const files = (req.files as any[]) || [];
-      const imageUrls = files.map(file => getFileUrl(file));
+      // Handle both pre-uploaded image URLs (JSON) and direct uploads (Multipart)
+      let imageUrls: string[] = [];
+      if (req.body.imageUrls) {
+        try {
+          // If it's a string, try parsing it, otherwise use it if it's an array
+          imageUrls = typeof req.body.imageUrls === 'string' 
+            ? JSON.parse(req.body.imageUrls) 
+            : req.body.imageUrls;
+        } catch (e) {
+          imageUrls = [];
+        }
+      }
+
+      // If no pre-uploaded URLs, check if files were uploaded in this request
+      if (imageUrls.length === 0) {
+        const files = (req.files as any[]) || [];
+        imageUrls = files.map(file => getFileUrl(file));
+      }
       
       // Fallback if no images provided
       if (imageUrls.length === 0) {

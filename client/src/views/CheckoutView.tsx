@@ -90,6 +90,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
+
   const activeCart = cart || contextCart;
 
   const [buyerLocation, setBuyerLocation] = useState("Noida / Delhi NCR");
@@ -191,8 +195,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
     }
   };
 
-  const goToStep2 = () => { setStep(2); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const goToStep1 = () => { setStep(1); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const goToStep2 = () => { setStep(2); };
+  const goToStep1 = () => { setStep(1); };
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-36 lg:pb-24 overflow-x-hidden">
