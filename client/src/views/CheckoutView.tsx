@@ -85,7 +85,7 @@ const PaymentSplitBanner: React.FC<{ platformFee: number; cashAmount: number }> 
 
 export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onBack }) => {
   const navigate = useNavigate();
-  const { cart: contextCart, clearCart } = useCart();
+  const { cart: contextCart, clearCart, validateCart } = useCart();
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -93,6 +93,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   React.useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [step]);
+
+  // Re-validate cart freshness when the checkout page is first opened (FE-4)
+  React.useEffect(() => {
+    if (user && contextCart.length > 0) {
+      validateCart();
+    }
+  }, []);
 
   const activeCart = cart || contextCart;
 

@@ -109,17 +109,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <div className="max-w-3xl">
 
             {/* Greeting pill */}
-            <motion.div
-              initial={{ opacity: 0, y: -12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="inline-flex items-center gap-2.5 bg-surface border border-border rounded-full px-4 py-2 mb-6 shadow-sm"
-            >
-              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-sm font-bold text-text-muted">
-                {greeting}, Dear Student 👋
-              </span>
-            </motion.div>
+            <div className="flex flex-wrap items-center gap-3 mb-6">
+              <motion.div
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                className="inline-flex items-center gap-2.5 bg-surface border border-border rounded-full px-4 py-2 shadow-sm"
+              >
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-sm font-bold text-text-muted">
+                  {greeting}, Dear Student 👋
+                </span>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.12, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5 shadow-sm"
+              >
+                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none">
+                  Launch Promo: Free for BITSians 🚀
+                </span>
+              </motion.div>
+            </div>
 
             {/* Main headline — staggered word reveal */}
             <div className="mb-6 overflow-hidden">
@@ -206,7 +219,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="flex flex-wrap items-center gap-5 mt-12 pt-10 border-t border-border/60"
             >
               {[
-                { label: 'Free to list', icon: CheckCircle2 },
+                { label: '0% Platform Fee', icon: CheckCircle2 },
                 { label: 'Escrow protected', icon: ShieldCheck },
                 { label: 'All locations', icon: MapPin },
               ].map(({ label, icon: Icon }, i) => (

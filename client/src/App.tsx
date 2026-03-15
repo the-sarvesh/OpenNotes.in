@@ -42,11 +42,6 @@ const App: React.FC = () => {
   const [profileTab, setProfileTab] = useState<'listings' | 'earnings' | 'settings'>('listings');
 
   const navigateTo = (view: View, tab?: string) => {
-    // Re-validate cart when entering cart or checkout pages
-    if ((view === "cart" || view === "checkout") && user && cart.length > 0) {
-      validateCart();
-    }
-
     if (view === 'profile' && tab) {
       setProfileTab(tab as any);
       navigate('/profile');
@@ -83,7 +78,9 @@ const App: React.FC = () => {
   // ── UI state ──────────────────────────────────────────────────────────
   const [showAuth, setShowAuth] = useState(false);
   const [showProfileCompletion, setShowProfileCompletion] = useState(false);
-  const [hasDismissedProfileModal, setHasDismissedProfileModal] = useState(false);
+  const [hasDismissedProfileModal, setHasDismissedProfileModal] = useState(() => {
+    return localStorage.getItem("dismissedProfileModal") === "true";
+  });
   const [authMode, setAuthMode] = useState<
     "login" | "register" | "forgot" | "reset"
   >("login");
@@ -523,6 +520,7 @@ const App: React.FC = () => {
           onClose={() => {
             setShowProfileCompletion(false);
             setHasDismissedProfileModal(true);
+            localStorage.setItem("dismissedProfileModal", "true");
           }}
         />
 

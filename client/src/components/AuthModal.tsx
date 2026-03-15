@@ -324,6 +324,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               onSubmit={handleLoginRegister}
               className="p-6 space-y-4"
             >
+              {/* Promo Banner */}
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-tight">
+                  Enjoy 0% platform fees during our launch phase! 🎉
+                </p>
+              </div>
+
               {error && (
                 <div className="space-y-3">
                   {error.includes("Google Login") ? (
