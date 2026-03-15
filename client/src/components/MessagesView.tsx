@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   CheckCheck,
   Check,
+  ChevronRight,
 } from "lucide-react";
 import { getSocket } from "../utils/socket.js";
 import { Socket } from "socket.io-client";
@@ -114,10 +115,15 @@ const MeetupBubble: React.FC<{
   onDecline: (id: string, mid: string) => void;
   onCancel: (id: string, mid: string) => void;
 }> = ({ msg, isMe, timeAgo, onAccept, onDecline, onCancel }) => {
-  const metadata = JSON.parse(msg.metadata || "{}");
+  let metadata: any = {};
+  try {
+    metadata = typeof msg.metadata === 'string' ? JSON.parse(msg.metadata || "{}") : (msg.metadata || {});
+  } catch (e) {
+    console.error("Failed to parse meetup metadata:", e);
+  }
   const { location, proposedTime, proposalId } = metadata;
   const status = metadata.status || "pending";
-  const date = new Date(proposedTime);
+  const date = proposedTime ? new Date(proposedTime) : new Date();
   return (
     <div className={`flex flex-col gap-1.5 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
       <div className={`w-full rounded-2xl border overflow-hidden shadow-sm ${status === "accepted" ? "border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20" :
@@ -174,12 +180,42 @@ const PurchaseNoticeBubble: React.FC<{
   isMe: boolean;
   timeAgo: (d: string) => string;
   onVerify: (id: string) => void;
-}> = ({ msg, isMe, timeAgo, onVerify }) => {
-  const metadata = JSON.parse(msg.metadata || "{}");
-  const { listingTitle, listingImage, orderItemId, meetupPin, buyerLocation, buyerAvailability, buyerNote } = metadata;
+  onAcknowledge: (id: string) => void;
+  onGoToOrders?: () => void;
+  onGoToSales?: () => void;
+}> = ({ msg, isMe, timeAgo, onVerify, onAcknowledge, onGoToOrders, onGoToSales }) => {
+  let metadata: any = {};
+  try {
+    metadata = typeof msg.metadata === 'string' ? JSON.parse(msg.metadata || "{}") : (msg.metadata || {});
+  } catch (e) {
+    console.error("Failed to parse purchase notice metadata:", e);
+  }
+  const { 
+    listingTitle, listingImage, orderItemId, meetupPin, 
+    buyerLocation, buyerPreferredSpot, buyerAvailability, 
+    buyerNote, buyerMeetupDetails, totalToCollect, quantity 
+  } = metadata;
+  const status = metadata.status || "pending_meetup";
+
+  const handleDetailsClick = () => {
+    if (isMe) {
+      onGoToOrders?.();
+    } else {
+      onGoToSales?.();
+    }
+  };
+
   return (
     <div className={`flex flex-col gap-1.5 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
-      <div className="rounded-2xl border-2 border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/10 overflow-hidden shadow-sm">
+      <div 
+        onClick={handleDetailsClick}
+        className={`rounded-2xl border-2 overflow-hidden shadow-sm cursor-pointer hover:scale-[1.01] transition-transform ${status === "completed" 
+          ? "border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/10"
+          : status === "acknowledged"
+          ? "border-primary/20 bg-primary/5"
+          : "border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/10"
+        }`}
+      >
         <div className="p-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="relative shrink-0">
@@ -188,39 +224,92 @@ const PurchaseNoticeBubble: React.FC<{
                 <ShieldCheck className="h-2.5 w-2.5" />
               </div>
             </div>
-            <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Order Placed</p>
-              <p className="text-sm font-bold text-text-main line-clamp-1">{listingTitle}</p>
-            </div>
-          </div>
-          <div className="space-y-1.5 mb-4 text-xs text-text-muted">
-            <p className="flex items-center gap-1.5"><MapPin className="h-3 w-3 shrink-0" /> {buyerLocation || "BITS"}</p>
-            <p className="flex items-center gap-1.5"><Clock className="h-3 w-3 shrink-0" /> {buyerAvailability}</p>
-            {buyerNote && <p className="border-l-2 border-emerald-300 dark:border-emerald-700 pl-2 italic mt-1">"{buyerNote}"</p>}
-          </div>
-          {!isMe && metadata.status !== "completed" && (
-            <button onClick={() => onVerify(orderItemId)}
-              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95">
-              Verify Exchange PIN
-            </button>
-          )}
-          {!isMe && metadata.status === "completed" && (
-            <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
-              <ShieldCheck className="h-3.5 w-3.5" /> Verified & Completed
-            </div>
-          )}
-          {isMe && metadata.status !== "completed" && (
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-full py-3 bg-emerald-500/10 rounded-xl text-center border border-emerald-500/20">
-                <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Your Exchange PIN</p>
-                <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300 tracking-[0.35em]">{meetupPin}</p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                  {status === "acknowledged" ? "Order Acknowledged" : "Order Placed"}
+                </p>
+                <ChevronRight className="h-3 w-3 text-emerald-500 opacity-50" />
               </div>
-              <p className="text-[9px] text-text-muted text-center">Share this PIN with the seller at meetup.</p>
+              <p className="text-sm font-bold text-text-main line-clamp-1">{listingTitle}</p>
+              {quantity && <p className="text-[9px] text-text-muted font-bold">Quantity: {quantity}</p>}
+            </div>
+          </div>
+          
+          <div className="space-y-2 mb-4 text-xs">
+            <div className="p-2.5 bg-background/50 rounded-xl border border-border/50 space-y-1.5">
+              <p className="flex items-center gap-1.5 text-text-muted"><MapPin className="h-3 w-3 shrink-0" /> {buyerLocation || "BITS"}</p>
+              {buyerPreferredSpot && <p className="flex items-center gap-1.5 text-text-main font-bold"><Circle className="h-1.5 w-1.5 fill-primary text-primary" /> {buyerPreferredSpot}</p>}
+              <p className="flex items-center gap-1.5 text-text-muted"><Clock className="h-3 w-3 shrink-0" /> {buyerAvailability}</p>
+              {buyerMeetupDetails && <p className="text-[10px] text-text-main bg-primary/5 px-2 py-1 rounded-md">"{buyerMeetupDetails}"</p>}
+              {buyerNote && <p className="border-l-2 border-emerald-300 dark:border-emerald-700 pl-2 italic mt-1 text-text-muted">"{buyerNote}"</p>}
+            </div>
+
+            {totalToCollect !== undefined && (
+              <div className="p-2.5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl flex justify-between items-center">
+                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Cash to collect</span>
+                <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">₹{totalToCollect}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="mb-3">
+            <p className="text-[9px] font-black text-primary uppercase text-center tracking-widest hover:underline decoration-primary/30 underline-offset-4">
+              View Full Details →
+            </p>
+          </div>
+
+          {!isMe && (
+            <div className="space-y-2" onClick={e => e.stopPropagation()}>
+              {status === "pending_meetup" && (
+                <button 
+                  onClick={() => onAcknowledge(orderItemId)}
+                  className="w-full py-2.5 bg-primary hover:bg-primary-hover text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95"
+                >
+                  Acknowledge Order
+                </button>
+              )}
+              
+              {status === "acknowledged" && (
+                <button 
+                  onClick={() => onVerify(orderItemId)}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95"
+                >
+                  Verify Exchange PIN
+                </button>
+              )}
+              
+              {status === "completed" && (
+                <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Verified & Completed
+                </div>
+              )}
             </div>
           )}
-          {isMe && metadata.status === "completed" && (
-            <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
-              <ShieldCheck className="h-3.5 w-3.5" /> Exchange Completed
+
+          {isMe && (
+            <div className="space-y-3" onClick={e => e.stopPropagation()}>
+              {status === "pending_meetup" && (
+                <div className="py-2.5 bg-primary/10 rounded-xl text-center border border-primary/20">
+                  <p className="text-[10px] font-black text-primary uppercase tracking-widest">Waiting for Seller Acknowledgment</p>
+                </div>
+              )}
+              
+              {(status === "acknowledged" || status === "pending_meetup") && (
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-full py-3 bg-emerald-500/10 rounded-xl text-center border border-emerald-500/20">
+                    <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Your Exchange PIN</p>
+                    <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300 tracking-[0.35em]">{meetupPin}</p>
+                  </div>
+                  <p className="text-[9px] text-text-muted text-center">Share this PIN with the seller at meetup.</p>
+                </div>
+              )}
+              
+              {status === "completed" && (
+                <div className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500/10 rounded-xl text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Exchange Completed
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -349,6 +438,9 @@ interface ChatPanelProps {
   onDeclineMeetup: (id: string, mid: string) => void;
   onCancelMeetup: (id: string, mid: string) => void;
   onVerifyPin: (id: string) => void;
+  onAcknowledgeOrder: (id: string) => void;
+  onGoToOrders?: () => void;
+  onGoToSales?: () => void;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -357,11 +449,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   scrollContainerRef, messagesEndRef,
   onBack, onProfileClick, onMeetupModalOpen, onArrived,
   onInputChange, onKeyDown, onInputBlur, onSend, timeAgo,
-  onAcceptMeetup, onDeclineMeetup, onCancelMeetup, onVerifyPin
+  onAcceptMeetup, onDeclineMeetup, onCancelMeetup, onVerifyPin,
+  onAcknowledgeOrder, onGoToOrders, onGoToSales
 }) => {
   const hasPendingPin = messages.some((m) => {
-    const meta = JSON.parse(m.metadata || "{}");
-    return m.type === "meetup_proposal" && meta.status === "accepted";
+    try {
+      const meta = typeof m.metadata === 'string' ? JSON.parse(m.metadata || "{}") : (m.metadata || {});
+      return m.type === "meetup_proposal" && meta.status === "accepted";
+    } catch {
+      return false;
+    }
   });
 
   return (
@@ -448,7 +545,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           if (msg.type === "purchase_notice") {
             return (
               <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                <PurchaseNoticeBubble msg={msg} isMe={isMe} timeAgo={timeAgo} onVerify={onVerifyPin} />
+                <PurchaseNoticeBubble 
+                  msg={msg} 
+                  isMe={isMe} 
+                  timeAgo={timeAgo} 
+                  onVerify={onVerifyPin} 
+                  onAcknowledge={onAcknowledgeOrder} 
+                  onGoToOrders={onGoToOrders}
+                  onGoToSales={onGoToSales}
+                />
               </div>
             );
           }
@@ -520,7 +625,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 export const MessagesView: React.FC<{
   initialConversationId?: string | null;
   onBack?: () => void;
-}> = ({ initialConversationId, onBack }) => {
+  onGoToOrders?: () => void;
+  onGoToSales?: () => void;
+}> = ({ initialConversationId, onBack, onGoToOrders, onGoToSales }) => {
   const { user } = useAuth();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -562,16 +669,40 @@ export const MessagesView: React.FC<{
 
   const scrollToBottom = useCallback((smooth = false) => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({
-        top: scrollContainerRef.current.scrollHeight,
-        behavior: smooth ? "smooth" : "auto",
-      });
+      const container = scrollContainerRef.current;
+      
+      const performScroll = () => {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: smooth ? "smooth" : "auto",
+        });
+      };
+
+      // Execute immediately
+      performScroll();
+      
+      // And again after a short delay to account for image/layout shifts
+      setTimeout(performScroll, 50);
+      setTimeout(performScroll, 150);
     }
   }, []);
 
   useEffect(() => {
+    // Immediate scroll
     scrollToBottom();
-  }, [messages, otherUserTyping, scrollToBottom]);
+    // Delayed scroll for any dynamic content/images that might still be expanding
+    const t = setTimeout(() => scrollToBottom(), 50);
+    const t2 = setTimeout(() => scrollToBottom(), 150);
+    const t3 = setTimeout(() => scrollToBottom(), 300);
+    return () => { clearTimeout(t); clearTimeout(t2); clearTimeout(t3); };
+  }, [messages, otherUserTyping, activeConvo?.conversationId, scrollToBottom]);
+
+  // Handle image loads to preserve scroll position
+  useEffect(() => {
+    const handleLoad = () => scrollToBottom();
+    window.addEventListener('load', handleLoad, true);
+    return () => window.removeEventListener('load', handleLoad, true);
+  }, [scrollToBottom]);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -658,7 +789,10 @@ export const MessagesView: React.FC<{
       setMessages((prev) =>
         prev.map((m) => {
           if (m.id === messageId) {
-            const metadata = JSON.parse(m.metadata || "{}");
+            let metadata = {};
+            try {
+              metadata = typeof m.metadata === 'string' ? JSON.parse(m.metadata || "{}") : (m.metadata || {});
+            } catch (e) {}
             return { ...m, metadata: JSON.stringify({ ...metadata, status }) };
           }
           return m;
@@ -910,6 +1044,23 @@ export const MessagesView: React.FC<{
     }
   };
 
+  const handleAcknowledgeOrder = async (itemId: string) => {
+    try {
+      const res = await apiRequest(`/api/orders/items/${itemId}/acknowledge`, {
+        method: "POST"
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Order acknowledged! You can now coordinate meetup.");
+        setTimeout(() => fetchMessages(activeConvo!.conversationId), 100);
+      } else {
+        toast.error(data.error || "Failed to acknowledge order");
+      }
+    } catch (err) {
+      toast.error("Network error. Please try again.");
+    }
+  };
+
   const handleArrived = () => {
     const socket = socketRef.current;
     if (socket && socket.connected && activeConvo && user) {
@@ -951,6 +1102,7 @@ export const MessagesView: React.FC<{
         <div className="flex-1 flex flex-col">
           {activeConvo ? (
             <ChatPanel
+              key={activeConvo.conversationId}
               activeConvo={activeConvo}
               messages={messages}
               user={user}
@@ -975,6 +1127,9 @@ export const MessagesView: React.FC<{
               onDeclineMeetup={handleDeclineMeetup}
               onCancelMeetup={handleCancelMeetup}
               onVerifyPin={(id) => { setActiveOrderItemId(id); setShowPinModal(true); }}
+              onAcknowledgeOrder={handleAcknowledgeOrder}
+              onGoToOrders={onGoToOrders}
+              onGoToSales={onGoToSales}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
@@ -1021,6 +1176,7 @@ export const MessagesView: React.FC<{
               className="h-full flex flex-col"
             >
               <ChatPanel
+                key={activeConvo.conversationId}
                 activeConvo={activeConvo}
                 messages={messages}
                 user={user}
@@ -1045,6 +1201,9 @@ export const MessagesView: React.FC<{
                 onDeclineMeetup={handleDeclineMeetup}
                 onCancelMeetup={handleCancelMeetup}
                 onVerifyPin={(id) => { setActiveOrderItemId(id); setShowPinModal(true); }}
+                onAcknowledgeOrder={handleAcknowledgeOrder}
+                onGoToOrders={onGoToOrders}
+                onGoToSales={onGoToSales}
               />
             </motion.div>
           )}
