@@ -351,15 +351,15 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       </div>
 
       {/* Selling Guide Note */}
-      <div className="mb-8 p-5 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/40 rounded-2xl">
+      <div className="mb-8 p-5 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/40 rounded-2xl">
         <div className="flex items-center gap-2 mb-3">
-          <div className="p-1.5 bg-[#003366] rounded-lg">
+          <div className="p-1.5 bg-emerald-600 rounded-lg">
             <Shield className="h-3.5 w-3.5 text-white" />
           </div>
-          <p className="text-xs font-black text-blue-700 dark:text-blue-400 uppercase tracking-wider">Selling safely</p>
+          <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Launch Promo: 0% Fee</p>
         </div>
         <p className="text-xs text-text-muted leading-relaxed">
-          List your notes for free. You keep <strong>90% of the listing price</strong> which the buyer pays you in <strong>cash</strong> during the hand-over. We charge a small 10% platform fee to coordinate the exchange, which the buyer pays online.
+          List your notes for free. During our launch, we've <strong>waived the platform fee</strong>. You keep <strong>100% of your listing price</strong> which the buyer pays you in <strong>cash</strong> during the hand-over.
         </p>
       </div>
 
@@ -661,21 +661,26 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
 
               {form.price && priceNum > 0 && (
                 <div className="p-4 bg-surface/50 rounded-xl border border-border space-y-2.5">
-                  <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-3">Price Breakdown</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Price Breakdown</p>
+                    <span className="bg-emerald-500/10 text-emerald-600 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border border-emerald-500/20">
+                      Launch Promo: 0% Fee
+                    </span>
+                  </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-text-muted">Listing Price (Total)</span>
                     <span className="font-bold text-text-main">₹{priceNum}</span>
                   </div>
-                  <div className="flex justify-between text-sm text-blue-700 dark:text-blue-400">
-                    <span className="font-medium">Platform Fee (10% - Paid Online)</span>
-                    <span className="font-bold">-₹{Math.round(priceNum * 0.1)}</span>
+                  <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
+                    <span className="font-medium">Platform Fee (Online)</span>
+                    <span className="font-bold">₹0</span>
                   </div>
                   <div className="flex justify-between text-sm pt-2.5 border-t border-border">
                     <span className="font-bold text-text-main">You receive at meetup</span>
-                    <span className="font-black text-emerald-600 dark:text-emerald-400">₹{priceNum - Math.round(priceNum * 0.1)}</span>
+                    <span className="font-black text-emerald-600 dark:text-emerald-400">₹{priceNum}</span>
                   </div>
                   <p className="text-[11px] text-text-muted leading-relaxed pt-1">
-                    Buyer pays ₹{Math.round(priceNum * 0.1)} platform fee online to unlock seller details, then hands you ₹{priceNum - Math.round(priceNum * 0.1)} cash at meetup.
+                    Buyer pays <strong>₹0 online</strong> to unlock seller details, then hands you the <strong>full ₹{priceNum} cash</strong> at the meetup. You keep 100% of the sale!
                   </p>
                 </div>
               )}
