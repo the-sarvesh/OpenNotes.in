@@ -262,6 +262,11 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                       📍 {note.preferredMeetupSpot}
                     </p>
                   )}
+                  {note.meetupLocation && (
+                    <p className="text-[11px] text-text-muted mt-1 italic">
+                      ({note.meetupLocation})
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -271,6 +276,23 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               <div className="p-4 bg-background border border-border rounded-2xl">
                 <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-2">About this material</p>
                 <p className="text-xs text-text-muted leading-relaxed italic">"{note.description}"</p>
+              </div>
+            )}
+
+            {/* ── Subjects (Multiple) ────────────────────────────────── */}
+            {note.isMultipleSubjects && note.subjects && note.subjects.length > 0 && (
+              <div className="p-4 bg-background border border-border rounded-2xl">
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-3">Included Subjects</p>
+                <div className="flex flex-wrap gap-2">
+                  {note.subjects.map((subject, idx) => (
+                    <span 
+                      key={idx}
+                      className="px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-xl text-[11px] font-bold text-text-main"
+                    >
+                      {subject}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 

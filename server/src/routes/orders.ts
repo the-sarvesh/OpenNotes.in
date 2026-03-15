@@ -253,7 +253,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           buyerPreferredSpot: buyer_preferred_spot,
           buyerAvailability: buyer_availability,
           buyerNote: buyer_note,
-          buyerMeetupDetails: buyer_meetup_details
+          buyerMeetupDetails: buyer_meetup_details,
+          price: orderItem.price_at_purchase,
+          quantity: orderItem.quantity,
+          totalToCollect: orderItem.price_at_purchase * orderItem.quantity
         });
 
         await tx.execute({
@@ -345,7 +348,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             buyerPreferredSpot: buyer_preferred_spot,
             buyerAvailability: buyer_availability,
             buyerNote: buyer_note,
-            buyerMeetupDetails: buyer_meetup_details
+            buyerMeetupDetails: buyer_meetup_details,
+            price: orderItem.price_at_purchase,
+            quantity: orderItem.quantity,
+            totalToCollect: orderItem.price_at_purchase * orderItem.quantity
           }),
 
           is_read: false,
@@ -358,14 +364,18 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
     }
 
     res.status(201).json({
-
       message: "Order created successfully",
       orderId,
       totalAmount,
       platformFee,
       feeWaived,
       couponApplied: appliedCouponCode,
-      items: orderItemsToInsert, // contains meetup_pin per item
+      items: orderItemsToInsert,
+      buyer_location: buyer_location || null,
+      buyer_preferred_spot: buyer_preferred_spot || null,
+      buyer_availability: buyer_availability,
+      buyer_note: buyer_note || null,
+      buyer_meetup_details: buyer_meetup_details || null,
     });
   } catch (error) {
     next(error);
@@ -481,6 +491,89 @@ router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
   }
 });
 
+// ─── POST /api/orders/items/:itemId/acknowledge (seller) ────────────────────
+router.post(
+  "/items/:itemId/acknowledge",
+  authenticate,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const sellerId = req.user!.id;
+      const { itemId } = req.params;
+
+      const itemRes = await db.execute({
+        sql: `
+          SELECT oi.*, o.id as order_id, o.buyer_id, l.title
+          FROM order_items oi
+          JOIN orders o ON oi.order_id = o.id
+          JOIN listings l ON oi.listing_id = l.id
+          WHERE oi.id = ? AND oi.seller_id = ?
+        `,
+        args: [itemId as string, sellerId as string],
+      });
+
+      const item = itemRes.rows[0];
+
+      if (!item) {
+        return res.status(404).json({
+          error: "Order item not found or you are not the seller",
+        });
+      }
+
+      if (item.status !== "pending_meetup") {
+        return res
+          .status(400)
+          .json({ error: `This item is already ${item.status}` });
+      }
+
+      // Mark this item as acknowledged
+      await db.execute({
+        sql: "UPDATE order_items SET status = 'acknowledged' WHERE id = ?",
+        args: [itemId as string],
+      });
+
+      // Update the associated purchase_notice message status to 'acknowledged'
+      const convoId = getConversationId(item.buyer_id as string, sellerId as string);
+      const msgRes = await db.execute({
+        sql: "SELECT id, metadata FROM messages WHERE conversation_id = ? AND type = 'purchase_notice'",
+        args: [convoId]
+      });
+
+      for (const row of msgRes.rows as any[]) {
+        const meta = JSON.parse(row.metadata || '{}');
+        if (meta.orderItemId === itemId) {
+          meta.status = 'acknowledged';
+          await db.execute({
+            sql: "UPDATE messages SET metadata = ? WHERE id = ?",
+            args: [JSON.stringify(meta), row.id]
+          });
+          
+          if (io) {
+            io.to(`conv:${convoId}`).emit("meetup_status_changed", { 
+              proposalId: itemId,
+              status: 'acknowledged', 
+              messageId: row.id 
+            });
+          }
+          break;
+        }
+      }
+
+      // Notify buyer
+      await createNotification(
+        item.buyer_id as string,
+        "order_update",
+        "Order Acknowledged! ✅",
+        `The seller has acknowledged your purchase of "${item.title}". You can now coordinate the meetup.`,
+        "/orders",
+      );
+
+      res.json({ message: "Order acknowledged successfully" });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // ─── POST /api/orders/items/:itemId/verify-pin (seller) ──────────────────────
 router.post(
   "/items/:itemId/verify-pin",
@@ -514,10 +607,10 @@ router.post(
         });
       }
 
-      if (item.status !== "pending_meetup") {
+      if (item.status !== "pending_meetup" && item.status !== "acknowledged") {
         return res
           .status(400)
-          .json({ error: "This item is not pending meetup" });
+          .json({ error: "This item is not ready for PIN verification" });
       }
 
       if (item.meetup_pin !== pin) {

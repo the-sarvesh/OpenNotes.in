@@ -15,7 +15,7 @@ import { Order, OrderItem } from '../types';
 const StatusIcon = ({ status }: { status: string }) => {
   if (status === 'completed') return <CheckCircle2 className="h-3.5 w-3.5" />;
   if (status === 'cancelled') return <XCircle className="h-3.5 w-3.5" />;
-  if (status === 'pending_meetup') return <MapPin className="h-3.5 w-3.5" />;
+  if (status === 'pending_meetup' || status === 'acknowledged') return <MapPin className="h-3.5 w-3.5" />;
   if (status === 'processing') return <Truck className="h-3.5 w-3.5" />;
   return <Clock className="h-3.5 w-3.5" />;
 };
@@ -148,15 +148,16 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
 
                 <div className="p-4 sm:p-6 space-y-4">
                   {/* Delivery / collection / meetup banner */}
-                  {(selectedOrder.delivery_details || selectedOrder.collection_date || selectedOrder.buyer_preferred_spot) && (
+                  {(selectedOrder.delivery_details || selectedOrder.buyer_availability || selectedOrder.buyer_preferred_spot || selectedOrder.buyer_location) && (
                     <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/40 rounded-2xl px-4 py-3.5 shadow-sm shadow-blue-500/5">
                       <Truck className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
                       <div className="text-xs font-medium text-blue-800 dark:text-blue-200 space-y-1">
-                        {selectedOrder.delivery_details && <p><span className="font-black">Delivery Details:</span> {selectedOrder.delivery_details}</p>}
-                        {selectedOrder.collection_date && <p><span className="font-black">Your Availability:</span> {selectedOrder.collection_date}</p>}
-                        {selectedOrder.buyer_location && <p><span className="font-black">Your Region:</span> {selectedOrder.buyer_location}</p>}
-                        {selectedOrder.buyer_preferred_spot && <p><span className="font-black uppercase tracking-wider text-[9px]">Your Preferred Spot:</span> {selectedOrder.buyer_preferred_spot}</p>}
-                        {selectedOrder.buyer_meetup_details && <p className="text-[11px] italic opacity-80 mt-1 mt-0.5">"{selectedOrder.buyer_meetup_details}"</p>}
+                        {selectedOrder.delivery_details && <p><span className="font-black uppercase tracking-wider text-[9px]">Delivery:</span> {selectedOrder.delivery_details}</p>}
+                        {selectedOrder.buyer_availability && <p><span className="font-black uppercase tracking-wider text-[9px]">Preferred Time:</span> {selectedOrder.buyer_availability}</p>}
+                        {selectedOrder.buyer_location && <p><span className="font-black uppercase tracking-wider text-[9px]">Region:</span> {selectedOrder.buyer_location}</p>}
+                        {selectedOrder.buyer_preferred_spot && <p><span className="font-black uppercase tracking-wider text-[9px]">Meetup Spot:</span> {selectedOrder.buyer_preferred_spot}</p>}
+                        {selectedOrder.buyer_meetup_details && <p className="text-[11px] italic opacity-80 mt-1 border-l-2 border-blue-200 dark:border-blue-800 pl-2">"{selectedOrder.buyer_meetup_details}"</p>}
+                        {selectedOrder.buyer_note && <p className="text-[11px] italic opacity-80 mt-1 border-l-2 border-amber-200 dark:border-amber-800 pl-2">Note: "{selectedOrder.buyer_note}"</p>}
                       </div>
                     </div>
                   )}
@@ -229,7 +230,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                           )}
 
                           {/* Meetup PIN */}
-                          {selectedOrder.status === 'pending_meetup' && (item as any).meetup_pin && (
+                          {(selectedOrder.status === 'pending_meetup' || selectedOrder.status === 'acknowledged') && (item as any).meetup_pin && (
                             <button
                               onClick={() => setPinVisible(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
                               className="w-full flex items-center justify-between bg-[#003366] hover:bg-[#002244] active:scale-[0.98] rounded-xl px-5 py-4 transition-all"
@@ -340,6 +341,9 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                       </div>
                       <p className="text-sm font-bold text-text-main line-clamp-1 group-hover:text-[#003366] dark:group-hover:text-blue-300 transition-colors">
                         {order.items?.map(i => i.title).join(', ')}
+                      </p>
+                      <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                        Total: ₹{order.total_amount}
                       </p>
                       <div className="flex items-center justify-between mt-1">
                         <p className="text-[10px] text-text-muted">

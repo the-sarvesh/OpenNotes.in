@@ -108,6 +108,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   const [buyerPreferredSpot, setBuyerPreferredSpot] = useState("HCL Office");
   const [buyerMeetupDetails, setBuyerMeetupDetails] = useState("");
   const [collectionDate, setCollectionDate] = useState("");
+  const [collectionPeriod, setCollectionPeriod] = useState("Morning");
   const [userNote, setUserNote] = useState("");
   const [agreedToDelivery, setAgreedToDelivery] = useState(false);
 
@@ -176,13 +177,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
     setLoading(true);
     try {
+      const formattedAvailability = `${collectionDate} (${collectionPeriod})`;
       const res = await apiRequest("/api/orders", {
         method: "POST",
         body: JSON.stringify({
           items: activeCart.map((item) => ({ listing_id: item.note.id, quantity: item.quantity })),
           buyer_location: buyerLocation === 'Other (Manual)' ? customBuyerLocation : buyerLocation,
           buyer_preferred_spot: buyerPreferredSpot,
-          buyer_availability: collectionDate || null,
+          buyer_availability: formattedAvailability,
           buyer_note: userNote || null,
           buyer_meetup_details: buyerMeetupDetails || null,
           agreed_to_delivery: agreedToDelivery,
@@ -346,23 +348,34 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
                     <div>
                       <label className="block text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">
-                        When are you free?
+                        Preferred Date for Meetup
                       </label>
-                      <div className="grid grid-cols-2 gap-2.5">
-                        {["Weekdays", "Weekends", "Evenings", "Flexible"].map((time) => (
+                      <input
+                        type="date"
+                        value={collectionDate}
+                        min={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setCollectionDate(e.target.value)}
+                        className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary transition-all mb-4 [color-scheme:dark]"
+                      />
+                      
+                      <label className="block text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">
+                        Preferred Time of Day
+                      </label>
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {["Morning", "Afternoon", "Evening"].map((time) => (
                           <label
                             key={time}
-                            className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${collectionDate === time ? "border-primary bg-primary/5" : "border-border bg-surface hover:border-border/80"}`}
+                            className={`flex items-center justify-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${collectionPeriod === time ? "border-primary bg-primary/5" : "border-border bg-surface hover:border-border/80"}`}
                           >
                             <input
                               type="radio"
                               name="availability"
                               value={time}
-                              checked={collectionDate === time}
-                              onChange={(e) => setCollectionDate(e.target.value)}
-                              className="w-4 h-4 text-primary focus:ring-primary bg-background border-border"
+                              checked={collectionPeriod === time}
+                              onChange={(e) => setCollectionPeriod(e.target.value)}
+                              className="hidden"
                             />
-                            <span className="text-sm font-semibold text-text-main">{time}</span>
+                            <span className="text-xs font-bold text-text-main">{time}</span>
                           </label>
                         ))}
                       </div>
@@ -530,10 +543,20 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                     <div className="flex items-start gap-2">
                       <MapPin className="h-3 w-3 text-primary mt-0.5 shrink-0" />
                       <div>
-                        <p className="text-[9px] font-black text-text-muted uppercase tracking-wider">Seller's Preferred Spot</p>
-                        <p className="text-[11px] font-semibold text-text-main leading-tight">
-                          {item.note.preferredMeetupSpot || item.note.location || "BITS Pilani Campus"}
+                        <p className="text-[9px] font-black text-text-muted uppercase tracking-wider">Exchange Location</p>
+                        <p className="text-[11px] font-bold text-text-main leading-tight">
+                          {item.note.location || "BITS Pilani Campus"}
                         </p>
+                        {item.note.preferredMeetupSpot && (
+                          <p className="text-[10px] text-primary font-black mt-1 leading-tight flex items-center gap-1">
+                            📍 {item.note.preferredMeetupSpot}
+                          </p>
+                        )}
+                        {item.note.meetupLocation && (
+                          <p className="text-[10px] text-text-muted mt-1 leading-tight italic">
+                            ({item.note.meetupLocation})
+                          </p>
+                        )}
                       </div>
                     </div>
                     {item.note.materialType && (

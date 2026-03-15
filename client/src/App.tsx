@@ -491,6 +491,8 @@ const App: React.FC = () => {
               <MessagesView
                 initialConversationId={selectedConversationId}
                 onBack={() => navigate(-1)}
+                onGoToOrders={() => navigate("/orders")}
+                onGoToSales={() => navigate("/profile", { state: { tab: "earnings" } })}
               />
             } />
             <Route path="/auth/callback" element={<div className="min-h-[50vh] flex items-center justify-center text-text-muted font-medium animate-pulse">Authenticating with Google...</div>} />

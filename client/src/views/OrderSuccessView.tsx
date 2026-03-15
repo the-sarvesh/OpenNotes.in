@@ -119,13 +119,23 @@ export const OrderSuccessView: React.FC<OrderSuccessViewProps> = ({ orderData, o
               <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 font-black flex items-center justify-center shrink-0 border border-emerald-500/20">
                 <MapPin className="h-4 w-4" />
               </div>
-              <div>
-                <h3 className="font-bold text-text-main mb-1">Exchange Location</h3>
+              <div className="space-y-1">
+                <h3 className="font-bold text-text-main">Exchange Details</h3>
                 <p className="text-sm text-text-muted leading-relaxed">
-                  Meet at <strong className="text-text-main font-black">{orderData.buyer_location || 'Campus'}</strong>.
+                  Region: <strong className="text-text-main font-black">{orderData.buyer_location || 'Campus'}</strong>
                 </p>
+                {orderData.buyer_preferred_spot && (
+                  <p className="text-sm text-text-muted leading-relaxed">
+                    Spot: <strong className="text-text-main font-black">{orderData.buyer_preferred_spot}</strong>
+                  </p>
+                )}
+                {orderData.buyer_availability && (
+                  <p className="text-sm text-text-muted leading-relaxed">
+                    Preferred Time: <strong className="text-text-main font-black">{orderData.buyer_availability}</strong>
+                  </p>
+                )}
                 {orderData.buyer_note && (
-                  <p className="text-[11px] text-text-muted mt-1 italic">
+                  <p className="text-[11px] text-text-muted mt-1 italic border-l-2 border-emerald-200 pl-2">
                     Note: "{orderData.buyer_note}"
                   </p>
                 )}

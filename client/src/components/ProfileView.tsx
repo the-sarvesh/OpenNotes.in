@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { statusColors, formatStatus } from '../utils/status';
 import { formatSemester } from '../utils/formatters';
@@ -126,12 +126,17 @@ export const ProfileView = ({
 }) => {
   const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
   
-  // Sync tab if prop changes externally (e.g. from navbar click)
+  // Sync tab if prop changes or location state changes (e.g. from navbar or chat)
   useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
+    if (location.state?.tab) {
+      setActiveTab(location.state.tab as ProfileTab);
+    } else {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, location.state]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -651,7 +656,7 @@ export const ProfileView = ({
                           </div>
 
                           {/* PIN verification — pending meetup */}
-                          {sale.status === 'pending_meetup' && (
+                          {(sale.status === 'pending_meetup' || sale.status === 'acknowledged') && (
                             <div className="mt-2 p-4 bg-primary/5 border-2 border-primary/20 rounded-xl flex flex-col sm:flex-row items-center gap-3">
                               <div className="flex-1 w-full relative">
                                 <label className="block text-xs font-black text-primary uppercase tracking-widest mb-1.5 ml-1">
