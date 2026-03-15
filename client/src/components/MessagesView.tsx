@@ -663,7 +663,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 <div className={`flex items-center gap-1 px-1 ${isMe ? "flex-row-reverse" : ""}`}>
                   <span className="text-[9px] text-text-muted font-medium">{timeAgo(msg.created_at)}</span>
                   {isMe && (msg.is_read
-                    ? <CheckCheck className="h-3 w-3 text-primary" />
+                    ? <CheckCheck className="h-3 w-3 text-[#FFC000]" />
                     : <Check className="h-3 w-3 text-text-muted" />
                   )}
                 </div>
@@ -698,7 +698,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           <button
             onClick={onSend}
             disabled={!newMessage.trim() || sending}
-            className="w-11 h-11 bg-primary text-black rounded-2xl font-bold flex items-center justify-center shadow-lg shadow-primary/20 hover:bg-primary-hover transition-all disabled:opacity-40 active:scale-95 shrink-0"
+            className="w-11 h-11 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 rounded-2xl font-bold flex items-center justify-center shadow-lg shadow-[#FFC000]/20 transition-all disabled:opacity-40 active:scale-95 shrink-0"
           >
             {sending
               ? <span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />
@@ -1221,7 +1221,7 @@ export const MessagesView: React.FC<{
               <button
                 onClick={handleProposeMeetup}
                 disabled={!meetupTime || !meetupLocation}
-                className="flex-[2] py-3.5 bg-primary hover:bg-primary-hover text-black rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-primary/20 disabled:opacity-50 active:scale-[0.98]"
+                className="flex-[2] py-3.5 bg-[#FFC000] hover:bg-[#e6ac00] text-black rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-[#FFC000]/20 disabled:opacity-50 active:scale-[0.98]"
               >
                 Send Proposal
               </button>
