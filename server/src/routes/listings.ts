@@ -134,7 +134,6 @@ router.post(
 router.post(
   "/",
   authenticate as any,
-  upload.array("images", 3) as any,
   async (req: AuthRequest, res, next) => {
     try {
       const sellerId = req.user!.id;
@@ -153,32 +152,32 @@ router.post(
         delivery_method,
         preferred_meetup_spot,
         meetup_location,
+        imageUrls: preUploadedUrls
       } = req.body;
 
-      // Handle both pre-uploaded image URLs (JSON) and direct uploads (Multipart)
+      // Handle pre-uploaded image URLs (JSON or Array)
       let imageUrls: string[] = [];
-      if (req.body.imageUrls) {
+      const rawImageUrls = req.body.imageUrls || preUploadedUrls;
+      if (rawImageUrls) {
         try {
-          // If it's a string, try parsing it, otherwise use it if it's an array
-          imageUrls = typeof req.body.imageUrls === 'string' 
-            ? JSON.parse(req.body.imageUrls) 
-            : req.body.imageUrls;
+          imageUrls = typeof rawImageUrls === 'string' 
+            ? JSON.parse(rawImageUrls) 
+            : rawImageUrls;
         } catch (e) {
-          imageUrls = [];
+          console.error('[Listings] Failed to parse imageUrls:', e);
         }
       }
-
-      // If no pre-uploaded URLs, check if files were uploaded in this request
-      if (imageUrls.length === 0) {
-        const files = (req.files as any[]) || [];
-        imageUrls = files.map(file => getFileUrl(file));
+      
+      // Ensure we have an array of strings
+      if (!Array.isArray(imageUrls)) {
+        imageUrls = typeof imageUrls === 'string' ? [imageUrls] : [];
       }
       
       // Fallback if no images provided
       if (imageUrls.length === 0) {
         imageUrls.push("https://images.unsplash.com/photo-1517842645767-c639042777db?q=80&w=800&auto=format&fit=crop");
       }
-
+      
       const mainImageUrl = imageUrls[0];
 
       if (
@@ -251,7 +250,10 @@ await db.execute({
 
       if (isMultiple && subjects) {
         try {
-          const subjectList = JSON.parse(subjects);
+          const subjectList = typeof subjects === 'string' 
+            ? JSON.parse(subjects) 
+            : subjects;
+          
           if (!Array.isArray(subjectList)) {
             throw new Error("Subjects must be an array");
           }
@@ -269,7 +271,8 @@ await db.execute({
       res
         .status(201)
         .json({ message: "Listing created successfully", id: listingId });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[Listings] ERROR creating listing:', error.message || error);
       next(error);
     }
   },

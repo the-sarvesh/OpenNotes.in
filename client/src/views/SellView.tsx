@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Camera, MapPin, ChevronRight, ChevronLeft, Check, PlusCircle, Upload, Info, Shield, X, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -276,12 +276,12 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
         location: finalLocation,
         quantity: form.quantity,
         material_type: typeMap[form.materialType] || 'other',
-        is_multiple_subjects: String(form.isMultipleSubjects),
-        imageUrls: JSON.stringify(imageUrls),
+        is_multiple_subjects: form.isMultipleSubjects, // Send as boolean
+        imageUrls: imageUrls, // Send as array
         delivery_method: form.deliveryMethod,
         preferred_meetup_spot: form.deliveryMethod !== 'courier' ? form.preferredMeetupSpot : undefined,
         meetup_location: form.deliveryMethod !== 'courier' ? form.meetupLocation : undefined,
-        subjects: form.isMultipleSubjects ? JSON.stringify(form.subjects) : undefined,
+        subjects: form.isMultipleSubjects ? form.subjects : undefined, // Send as array
       };
 
       const res = await apiRequest('/api/listings', {

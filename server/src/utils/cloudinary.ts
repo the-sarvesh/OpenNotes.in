@@ -30,7 +30,7 @@ const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
       allowed_formats: ['jpg', 'png', 'webp', 'jpeg'],
       public_id: `file-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
       transformation: [
-        { width: 1200, height: 1200, crop: 'limit', quality: 'auto', fetch_format: 'auto' }
+        { width: 1000, crop: 'limit', quality: 'auto', fetch_format: 'auto' }
       ]
     };
   },
@@ -59,6 +59,13 @@ export const upload = multer({
 export const getFileUrl = (file: any) => {
   if (isCloudinaryConfigured) {
     // In Cloudinary mode, 'path' is the full secure URL
+    // We append auto-optimization parameters for better delivery performance
+    if (file.path && file.path.includes('cloudinary.com')) {
+      const parts = file.path.split('/upload/');
+      if (parts.length === 2) {
+        return `${parts[0]}/upload/q_auto,f_auto/${parts[1]}`;
+      }
+    }
     return file.path;
   } else {
     // In Local mode, we return the relative web path
