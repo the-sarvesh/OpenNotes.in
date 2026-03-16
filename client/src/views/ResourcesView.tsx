@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, X, Download, FileText, Upload, Filter, 
@@ -41,15 +41,25 @@ export const ResourcesView: React.FC = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
-  // Navigation State: [] = root, ['Sem1'] = semester level, ['Sem1', 'midsem'] = category level
+  // Navigation Path: [] (Root) -> ['Sem1'] -> ['Sem1', 'Subject Name'] -> ['Sem1', 'Subject Name', 'midsem']
   const [navigationPath, setNavigationPath] = useState<string[]>([]);
 
+  // Get unique subjects for current semester
+  const availableSubjects = useMemo(() => {
+    if (navigationPath.length === 0) return [];
+    const sem = navigationPath[0];
+    const subjects = new Set<string>();
+    resources.filter(r => r.semester === sem).forEach(r => subjects.add(r.subject_name));
+    return Array.from(subjects).sort();
+  }, [resources, navigationPath]);
+
   // Statistics for folders
-  const getResourceCount = (sem?: string, cat?: string) => {
+  const getResourceCount = (sem?: string, sub?: string, cat?: string) => {
     return resources.filter(r => {
       const matchSem = !sem || r.semester === sem;
+      const matchSub = !sub || r.subject_name === sub;
       const matchCat = !cat || r.category === cat;
-      return matchSem && matchCat;
+      return matchSem && matchSub && matchCat;
     }).length;
   };
 
@@ -114,8 +124,8 @@ export const ResourcesView: React.FC = () => {
           title: '',
           description: '',
           semester: navigationPath[0] || 'Sem1',
-          category: navigationPath[1] || 'midsem',
-          subject_name: '',
+          category: navigationPath[navigationPath.length - 1] === 'midsem' ? 'midsem' : 'midsem', // placeholder logic
+          subject_name: navigationPath[1] || '',
           course_code: '',
         });
         setUploadFile(null);
@@ -139,26 +149,27 @@ export const ResourcesView: React.FC = () => {
              r.course_code?.toLowerCase().includes(s);
     }
     
-    if (navigationPath.length === 0) return true; // root
+    if (navigationPath.length === 0) return true;
     if (navigationPath.length === 1) return r.semester === navigationPath[0];
-    return r.semester === navigationPath[0] && r.category === navigationPath[1];
+    if (navigationPath.length === 2) return r.semester === navigationPath[0] && r.subject_name === navigationPath[1];
+    return r.semester === navigationPath[0] && r.subject_name === navigationPath[1] && r.category === navigationPath[2];
   });
 
   const renderBreadcrumbs = () => (
-    <div className="flex items-center gap-2 mb-8 text-xs font-bold text-slate-500">
+    <div className="flex items-center gap-2 mb-8 text-xs font-bold text-slate-500 overflow-x-auto whitespace-nowrap pb-2">
       <button 
         onClick={() => setNavigationPath([])}
-        className="hover:text-[#FFC000] flex items-center gap-1 transition-colors"
+        className="hover:text-[#FFC000] flex items-center gap-1 transition-colors shrink-0"
       >
         <FolderOpen className="h-3.5 w-3.5" />
         Resources
       </button>
       {navigationPath.map((path, idx) => (
-        <React.Fragment key={path}>
-          <ChevronRight className="h-3 w-3 opacity-30" />
+        <React.Fragment key={path + idx}>
+          <ChevronRight className="h-3 w-3 opacity-30 shrink-0" />
           <button 
             onClick={() => setNavigationPath(navigationPath.slice(0, idx + 1))}
-            className={`transition-colors ${idx === navigationPath.length - 1 ? 'text-white' : 'hover:text-[#FFC000]'}`}
+            className={`transition-colors shrink-0 ${idx === navigationPath.length - 1 ? 'text-white' : 'hover:text-[#FFC000]'}`}
           >
             {path.startsWith('Sem') ? path.replace('Sem', 'Semester ') : CATEGORIES.find(c => c.id === path)?.label || path}
           </button>
@@ -180,11 +191,11 @@ export const ResourcesView: React.FC = () => {
           <div className="flex items-center gap-2 mb-2">
             <span className="px-2 py-0.5 bg-[#FFC000]/10 text-[#FFC000] text-[10px] font-black uppercase tracking-wider rounded">Repository</span>
             <span className="w-1 h-1 rounded-full bg-slate-700" />
-            <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Tree Navigation</span>
+            <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Nested Folders</span>
           </div>
           <h1 className="text-4xl font-black text-white mb-2">Student Materials</h1>
           <p className="text-slate-400 text-sm max-w-2xl leading-relaxed">
-            Browse materials organized by semester and exam category. 
+            Browse materials organized by semester, subject, and category. 
             Contribute to the repository to help your peers.
           </p>
         </div>
@@ -230,11 +241,11 @@ export const ResourcesView: React.FC = () => {
             )}
           </motion.div>
         ) : navigationPath.length === 0 ? (
+          // Root level: Semester Folders
           <motion.div 
             key="root"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-4"
           >
             {SEMESTERS.slice(1).map(sem => (
@@ -247,30 +258,60 @@ export const ResourcesView: React.FC = () => {
             ))}
           </motion.div>
         ) : navigationPath.length === 1 ? (
+          // Semester level: Subject Folders
           <motion.div 
             key="semester"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            className="grid grid-cols-2 sm:grid-cols-4 gap-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"
           >
             <button 
               onClick={() => setNavigationPath([])}
               className="col-span-full flex items-center gap-2 text-xs font-black text-[#FFC000] uppercase mb-2 hover:opacity-80"
             >
-              <X className="h-3 w-3 rotate-45" /> Back to Resources
+              <X className="h-3 w-3 rotate-45" /> Back to All Semesters
+            </button>
+            {availableSubjects.map(sub => (
+              <FolderItem 
+                key={sub}
+                label={sub}
+                icon={<BookOpen className="h-8 w-8" />}
+                count={getResourceCount(navigationPath[0], sub)}
+                onClick={() => setNavigationPath([navigationPath[0], sub])}
+              />
+            ))}
+            {availableSubjects.length === 0 && (
+              <div className="col-span-full py-20 text-center bg-slate-900/30 rounded-3xl border border-dashed border-white/5 opacity-50">
+                No subjects found in this semester yet.
+              </div>
+            )}
+          </motion.div>
+        ) : navigationPath.length === 2 ? (
+          // Subject level: Category Folders
+          <motion.div 
+            key="subject"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="grid grid-cols-2 sm:grid-cols-4 gap-4"
+          >
+            <button 
+              onClick={() => setNavigationPath([navigationPath[0]])}
+              className="col-span-full flex items-center gap-2 text-xs font-black text-[#FFC000] uppercase mb-2 hover:opacity-80"
+            >
+              <X className="h-3 w-3 rotate-45" /> Back to Subjects
             </button>
             {CATEGORIES.slice(1).map(cat => (
               <FolderItem 
                 key={cat.id}
                 label={cat.label}
-                icon={<cat.icon className="h-5 w-5" />}
-                count={getResourceCount(navigationPath[0], cat.id)}
-                onClick={() => setNavigationPath([navigationPath[0], cat.id])}
+                icon={<cat.icon className="h-7 w-7" />}
+                count={getResourceCount(navigationPath[0], navigationPath[1], cat.id)}
+                onClick={() => setNavigationPath([navigationPath[0], navigationPath[1], cat.id])}
               />
             ))}
           </motion.div>
         ) : (
+          // Category level: Resource Cards
           <motion.div 
             key="category"
             initial={{ opacity: 0 }}
@@ -278,10 +319,10 @@ export const ResourcesView: React.FC = () => {
             className="space-y-6"
           >
             <button 
-              onClick={() => setNavigationPath([navigationPath[0]])}
+              onClick={() => setNavigationPath([navigationPath[0], navigationPath[1]])}
               className="flex items-center gap-2 text-xs font-black text-[#FFC000] uppercase mb-4 hover:opacity-80"
             >
-               Back to {navigationPath[0].replace('Sem', 'Semester ')}
+               Back to {navigationPath[1]}
             </button>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredResources.map(r => (
@@ -289,7 +330,7 @@ export const ResourcesView: React.FC = () => {
               ))}
               {filteredResources.length === 0 && (
                 <div className="col-span-full py-20 text-center bg-slate-900/30 rounded-3xl border border-dashed border-white/5 opacity-50">
-                  No materials uploaded in this folder yet.
+                  No materials uploaded in this category yet.
                 </div>
               )}
             </div>
@@ -420,7 +461,7 @@ const FolderItem: React.FC<{ label: string; count: number; icon?: React.ReactNod
         </span>
       )}
     </div>
-    <span className="text-xs font-black text-slate-400 group-hover:text-white transition-colors">{label}</span>
+    <span className="text-xs font-black text-slate-400 group-hover:text-white transition-colors text-center line-clamp-1">{label}</span>
   </button>
 );
 
