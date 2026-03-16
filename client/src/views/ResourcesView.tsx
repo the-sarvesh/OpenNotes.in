@@ -13,6 +13,7 @@ const CATEGORIES = [
   { id: 'All', label: 'All Materials', icon: FolderOpen },
   { id: 'midsem', label: 'Mid-Sem', icon: Clock },
   { id: 'endsem', label: 'End-Sem', icon: Calendar },
+  { id: 'ppt', label: 'BITS PPTs', icon: FileText },
   { id: 'assignment', label: 'Assignments', icon: FileText },
   { id: 'quiz', label: 'Quizzes', icon: BookOpen },
 ];
