@@ -140,6 +140,28 @@ export const AdminView: React.FC = () => {
   // Reset detail views on tab change
   useEffect(() => { setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); }, [tab]);
 
+  // Sync selected details when main lists update (to keep views reactive after doAction)
+  useEffect(() => {
+    if (selectedUser && users.length > 0) {
+      const updated = users.find(u => u.id === selectedUser.id);
+      if (updated) setSelectedUser(updated);
+    }
+  }, [users]);
+
+  useEffect(() => {
+    if (selectedListing && listings.length > 0) {
+      const updated = listings.find(l => l.id === selectedListing.id);
+      if (updated) setSelectedListing(updated);
+    }
+  }, [listings]);
+
+  useEffect(() => {
+    if (selectedResource && resources.length > 0) {
+      const updated = resources.find(r => r.id === selectedResource.id);
+      if (updated) setSelectedResource(updated);
+    }
+  }, [resources]);
+
   const doAction = async (url: string, method: string, body?: any) => {
     try {
       const res = await apiRequest(url, { method, body: body ? JSON.stringify(body) : undefined });
@@ -589,6 +611,7 @@ export const AdminView: React.FC = () => {
                           <InfoRow icon={<Layers className="h-3.5 w-3.5" />} label="Upload Limit" value={
                             <div className="flex items-center gap-2">
                               <input
+                                key={selectedUser.monthly_upload_limit}
                                 type="number"
                                 min="0"
                                 defaultValue={selectedUser.monthly_upload_limit ?? 10}
@@ -696,6 +719,7 @@ export const AdminView: React.FC = () => {
                                 )}
                                 <div className="flex flex-col items-center">
                                   <input
+                                    key={u.monthly_upload_limit}
                                     type="number"
                                     min="0"
                                     defaultValue={u.monthly_upload_limit ?? 10}

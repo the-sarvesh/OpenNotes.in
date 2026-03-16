@@ -117,7 +117,7 @@ router.get("/users", async (req, res, next) => {
     const users = await db.execute({
       sql: `
         SELECT
-          u.id, u.email, u.name, u.upi_id, u.role, u.status, u.created_at,
+          u.id, u.email, u.name, u.upi_id, u.role, u.status, u.created_at, u.monthly_upload_limit,
           (SELECT COUNT(*) FROM listings WHERE seller_id = u.id) as listings_count,
           (SELECT COUNT(*) FROM orders WHERE buyer_id = u.id) as buy_count,
           (SELECT COALESCE(SUM(price_at_purchase * quantity), 0) FROM order_items WHERE seller_id = u.id) as total_earnings
