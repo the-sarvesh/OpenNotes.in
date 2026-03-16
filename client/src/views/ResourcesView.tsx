@@ -377,7 +377,15 @@ export const ResourcesView: React.FC = () => {
                     <label className="text-[10px] font-black text-[#FFC000] uppercase tracking-widest ml-1">Semester</label>
                     <select 
                       value={uploadForm.semester}
-                      onChange={e => setUploadForm({...uploadForm, semester: e.target.value})}
+                      onChange={e => {
+                        const newSem = e.target.value;
+                        const subjects = SUBJECTS_BY_SEM[newSem] || [];
+                        setUploadForm({
+                          ...uploadForm, 
+                          semester: newSem,
+                          subject_name: subjects[0] || ''
+                        });
+                      }}
                       className="w-full bg-slate-950 border border-white/10 rounded-2xl p-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/20 appearance-none"
                     >
                       {SEMESTERS.slice(1).map(s => <option key={s} value={s}>{s}</option>)}
@@ -398,14 +406,17 @@ export const ResourcesView: React.FC = () => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-[#FFC000] uppercase tracking-widest ml-1">Subject Name</label>
-                    <input 
-                      type="text" 
+                    <select 
                       required
-                      placeholder="e.g. Mathematics II"
                       value={uploadForm.subject_name}
                       onChange={e => setUploadForm({...uploadForm, subject_name: e.target.value})}
-                      className="w-full bg-slate-950 border border-white/10 rounded-2xl p-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/20"
-                    />
+                      className="w-full bg-slate-950 border border-white/10 rounded-2xl p-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/20 appearance-none"
+                    >
+                      <option value="" disabled>Select subject...</option>
+                      {(SUBJECTS_BY_SEM[uploadForm.semester] || []).map(sub => (
+                        <option key={sub} value={sub}>{sub}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
