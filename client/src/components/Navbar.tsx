@@ -240,7 +240,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Desktop Nav Links */}
             <div className="hidden md:flex items-center gap-7 border-b border-transparent">
               {navLink('/browse', 'Browse Notes', true)}
-              {navLink('/resources', 'Soft Copies', true)}
+              {navLink('/resources', 'Study Material', true)}
               <button
                 onClick={() => {
                   if (!user) {
@@ -489,7 +489,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
                 {[
                   { icon: Search, label: 'Browse Notes', path: '/browse' },
-                  { icon: FileText, label: 'Soft Copies', path: '/resources' },
+                  { icon: FileText, label: 'Study Material', path: '/resources' },
                   { icon: PlusCircle, label: 'Sell Notes', path: '/sell' },
                   ...(user ? [
                     { icon: UserIcon, label: 'Dashboard', path: '/profile' },

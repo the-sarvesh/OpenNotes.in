@@ -176,7 +176,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               transition={{ delay: 0.38, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="text-lg sm:text-xl text-text-muted max-w-xl mb-10 leading-relaxed font-medium"
             >
-              Buy and sell course materials, or access our free soft copy repository for previous year papers, assignments, and BITS PPTs.
+              Buy and sell course materials, or access our free study material repository for previous year papers, assignments, and BITS PPTs.
             </motion.p>
 
             <motion.div
@@ -205,7 +205,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 className="inline-flex items-center justify-center gap-2.5 bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary px-8 py-4 rounded-2xl font-bold text-base transition-all shadow-sm"
               >
                 <FileText className="h-5 w-5" />
-                Soft Copies
+                Study Material
               </button>
               <button
                 onClick={onShowGuide}
@@ -446,7 +446,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-white/10 hover:bg-white/15 border border-white/20 text-white active:scale-[0.97] px-8 py-4 rounded-2xl font-black text-sm transition-all backdrop-blur-sm"
                   >
                     <BookOpen className="h-5 w-5" />
-                    Access Soft Copies (Free)
+                    Access Study Material (Free)
                   </button>
                 </div>
               </div>
