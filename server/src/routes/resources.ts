@@ -217,13 +217,19 @@ router.get("/:id/download", async (req, res, next) => {
       const https = await import('https');
       https.get(fileUrl, (response) => {
         if (response.statusCode === 200) {
-          // Copy headers from response if needed, or just pipe
+          // Transfer critical headers
+          if (response.headers['content-length']) {
+            res.setHeader('Content-Length', response.headers['content-length']);
+          }
           res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
+          res.status(200);
           response.pipe(res);
         } else {
+          console.error(`Cloudinary Error: ${response.statusCode}`);
           res.status(response.statusCode || 500).send('Error fetching file from storage');
         }
       }).on('error', (err) => {
+        console.error('Proxy Download Error:', err);
         next(err);
       });
     } else {

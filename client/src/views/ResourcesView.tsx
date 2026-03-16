@@ -5,7 +5,7 @@ import {
   ChevronRight, Calendar, BookOpen, Clock, 
   FolderOpen
 } from 'lucide-react';
-import { apiRequest } from '../utils/api.js';
+import { apiRequest, API_BASE_URL } from '../utils/api.js';
 import { useAuth } from '../contexts/AuthContext';
 import { SUBJECTS_BY_SEM } from '../utils/constants';
 import { toast } from 'react-hot-toast';
@@ -96,7 +96,9 @@ export const ResourcesView: React.FC = () => {
   const handleDownload = (resource: Resource) => {
     // Trigger the server-side proxy download. 
     // This handles both the download count and the file streaming with correct headers.
-    const downloadUrl = `/api/resources/${resource.id}/download`;
+    
+    // Use absolute URL if API_BASE_URL is set (production), otherwise use relative (local)
+    const downloadUrl = `${API_BASE_URL}/api/resources/${resource.id}/download`;
     
     // We use window.location.href for a direct GET request that triggers a download
     // across all browsers reliably.
