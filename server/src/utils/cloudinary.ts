@@ -66,6 +66,12 @@ export const getFileUrl = (file: any) => {
         if (parts.length === 2) {
           return `${parts[0]}/upload/q_auto,f_auto/${parts[1]}`;
         }
+      } else {
+        // For non-images (PDF, Zip, etc.), force download behavior
+        const parts = file.path.split('/upload/');
+        if (parts.length === 2) {
+          return `${parts[0]}/upload/fl_attachment/${parts[1]}`;
+        }
       }
     }
     return file.path;

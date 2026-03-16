@@ -93,14 +93,17 @@ export const ResourcesView: React.FC = () => {
     fetchResources();
   }, [fetchResources]);
 
-  const handleDownload = async (resource: Resource) => {
-    try {
-      await apiRequest(`/api/resources/${resource.id}/download`, { method: 'POST' });
-      window.open(resource.file_url, '_blank');
-      setResources(prev => prev.map(r => r.id === resource.id ? { ...r, download_count: r.download_count + 1 } : r));
-    } catch (error) {
-      console.error('Download failed:', error);
-    }
+  const handleDownload = (resource: Resource) => {
+    // Open URL immediately to avoid browser popup blockers
+    // most browsers block window.open if it happens after an async await
+    window.open(resource.file_url, '_blank');
+
+    // Notify backend in background
+    apiRequest(`/api/resources/${resource.id}/download`, { method: 'POST' })
+      .then(() => {
+        setResources(prev => prev.map(r => r.id === resource.id ? { ...r, download_count: r.download_count + 1 } : r));
+      })
+      .catch(error => console.error('Download tracking failed:', error));
   };
 
   const handleUpload = async (e: React.FormEvent) => {
