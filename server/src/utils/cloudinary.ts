@@ -27,7 +27,7 @@ const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
     const folder = req.baseUrl.includes('users') ? 'opennotes/profiles' : 'opennotes/listings';
     return {
       folder: folder,
-      allowed_formats: ['jpg', 'png', 'webp', 'jpeg'],
+      allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf', 'docx', 'doc', 'zip'],
       public_id: `file-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
       transformation: [
         { width: 1000, crop: 'limit', quality: 'auto', fetch_format: 'auto' }

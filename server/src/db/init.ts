@@ -184,6 +184,23 @@ const initDb = async () => {
         FOREIGN KEY (receiver_id) REFERENCES users(id),
         FOREIGN KEY (listing_id) REFERENCES listings(id)
       );
+
+      CREATE TABLE IF NOT EXISTS resources (
+        id TEXT PRIMARY KEY,
+        uploader_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        file_url TEXT NOT NULL,
+        file_type TEXT NOT NULL,
+        semester TEXT NOT NULL,
+        category TEXT NOT NULL,
+        subject_name TEXT NOT NULL,
+        course_code TEXT,
+        download_count INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (uploader_id) REFERENCES users(id)
+      );
     `);
 
     console.log("Core tables created or verified.");
@@ -246,6 +263,9 @@ const initDb = async () => {
       "CREATE INDEX IF NOT EXISTS idx_notifications_unread_composite ON notifications(user_id, is_read)",
       "CREATE INDEX IF NOT EXISTS idx_meetup_reminders_composite ON meetup_proposals(reminder_sent, proposed_time)",
       "CREATE INDEX IF NOT EXISTS idx_listing_subjects_name ON listing_subjects(subject_name)",
+      "CREATE TABLE IF NOT EXISTS resources (id TEXT PRIMARY KEY, uploader_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT, file_url TEXT NOT NULL, file_type TEXT NOT NULL, semester TEXT NOT NULL, category TEXT NOT NULL, subject_name TEXT NOT NULL, course_code TEXT, download_count INTEGER DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_resources_semester ON resources(semester)",
+      "CREATE INDEX IF NOT EXISTS idx_resources_category ON resources(category)",
     ];
 
     for (const migration of migrations) {

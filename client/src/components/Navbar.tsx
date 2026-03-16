@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, PlusCircle, ShoppingBag, Sun, Moon,
   ShoppingCart, MessageCircle, Menu, User as UserIcon, Bell,
-  ChevronDown, LogOut, X, HelpCircle
+  ChevronDown, LogOut, X, HelpCircle, FileText
 } from 'lucide-react';
 import { useNavigate, NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -228,6 +228,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Desktop Nav Links */}
             <div className="hidden md:flex items-center gap-7 border-b border-transparent">
               {navLink('/browse', 'Browse Notes')}
+              {navLink('/resources', 'Soft Copies')}
               <button
                 onClick={() => {
                   if (!user) {
@@ -476,6 +477,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
                 {[
                   { icon: Search, label: 'Browse Notes', path: '/browse' },
+                  { icon: FileText, label: 'Soft Copies', path: '/resources' },
                   { icon: PlusCircle, label: 'Sell Notes', path: '/sell' },
                   ...(user ? [
                     { icon: UserIcon, label: 'Dashboard', path: '/profile' },
