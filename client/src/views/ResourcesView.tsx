@@ -94,16 +94,18 @@ export const ResourcesView: React.FC = () => {
   }, [fetchResources]);
 
   const handleDownload = (resource: Resource) => {
-    // Open URL immediately to avoid browser popup blockers
-    // most browsers block window.open if it happens after an async await
-    window.open(resource.file_url, '_blank');
-
-    // Notify backend in background
-    apiRequest(`/api/resources/${resource.id}/download`, { method: 'POST' })
-      .then(() => {
-        setResources(prev => prev.map(r => r.id === resource.id ? { ...r, download_count: r.download_count + 1 } : r));
-      })
-      .catch(error => console.error('Download tracking failed:', error));
+    // Trigger the server-side proxy download. 
+    // This handles both the download count and the file streaming with correct headers.
+    const downloadUrl = `/api/resources/${resource.id}/download`;
+    
+    // We use window.location.href for a direct GET request that triggers a download
+    // across all browsers reliably.
+    window.location.href = downloadUrl;
+    
+    // Update local state for immediate UI feedback
+    setResources(prev => prev.map(r => 
+      r.id === resource.id ? { ...r, download_count: r.download_count + 1 } : r
+    ));
   };
 
   const handleUpload = async (e: React.FormEvent) => {

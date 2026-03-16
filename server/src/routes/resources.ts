@@ -158,16 +158,25 @@ router.post("/", authenticate as any, upload.single("file") as any, async (req: 
 });
 
 /**
- * @route POST /api/resources/:id/download
- * @desc Increment download count (Unique for registered users)
+ * @route GET /api/resources/:id/download
+ * @desc Proxy route to download from Cloudinary and stream with attachment headers
  */
-router.post("/:id/download", async (req, res, next) => {
+router.get("/:id/download", async (req, res, next) => {
   try {
     const { id } = req.params;
-    // We try to get the user from the cookie if they are logged in
+    const resourceResult = await db.execute({
+      sql: "SELECT * FROM resources WHERE id = ?",
+      args: [id]
+    });
+    const resource = resourceResult.rows[0] as any;
+
+    if (!resource) {
+      return res.status(404).json({ error: "Resource not found" });
+    }
+
+    // ── Handle Download Count (Copied from existing logic) ──────────────────
     const authHeaders = req.cookies.auth_token;
     let userId: string | null = null;
-    
     if (authHeaders) {
       try {
         const decoded = (await import('jsonwebtoken')).default.verify(
@@ -175,37 +184,74 @@ router.post("/:id/download", async (req, res, next) => {
           process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod"
         ) as any;
         userId = decoded.id;
-      } catch (err) {
-        // Invalid token, treat as guest
-      }
+      } catch (err) {}
     }
 
     if (userId) {
-      // Unique tracking for registered users
-      const result = await db.execute({
+      const trackResult = await db.execute({
         sql: "INSERT OR IGNORE INTO resource_downloads (user_id, resource_id) VALUES (?, ?)",
         args: [userId, id]
       });
-
-      if (result.rowsAffected > 0) {
+      if (trackResult.rowsAffected > 0) {
         await db.execute({
           sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
           args: [id]
         });
       }
     } else {
-      // For guests, we still increment for now, but without unique tracking
-      // (Optionally: add IP-based tracking or session-based tracking)
       await db.execute({
         sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
         args: [id]
       });
     }
 
-    res.json({ success: true });
+    // ── Streaming the file ───────────────────────────────────────────────────
+    const fileUrl = resource.file_url;
+    
+    // Set headers to force download
+    const filename = `${resource.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${resource.file_type}`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    if (fileUrl.startsWith('http')) {
+      // Proxying remote files (Cloudinary)
+      const https = await import('https');
+      https.get(fileUrl, (response) => {
+        if (response.statusCode === 200) {
+          // Copy headers from response if needed, or just pipe
+          res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
+          response.pipe(res);
+        } else {
+          res.status(response.statusCode || 500).send('Error fetching file from storage');
+        }
+      }).on('error', (err) => {
+        next(err);
+      });
+    } else {
+      // Local file fallback
+      const fs = await import('fs');
+      const path = await import('path');
+      const { fileURLToPath } = await import('url');
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      const filePath = path.join(__dirname, "../../", fileUrl);
+      
+      if (fs.existsSync(filePath)) {
+        res.download(filePath, filename);
+      } else {
+        res.status(404).send('File not found on server');
+      }
+    }
   } catch (error) {
     next(error);
   }
+});
+
+/**
+ * @route POST /api/resources/:id/download
+ * @desc (DEPRECATED) Increment download count
+ */
+router.post("/:id/download", async (req, res, next) => {
+  res.status(410).json({ error: "Use GET /api/resources/:id/download instead" });
 });
 
 /**
