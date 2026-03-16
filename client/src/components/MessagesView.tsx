@@ -1118,7 +1118,7 @@ export const MessagesView: React.FC<{
       {/* position:fixed + top:0 is overridden by the visualViewport hook on iOS */}
       <div
         ref={mobileRootRef}
-        className="lg:hidden flex flex-col bg-surface border-t border-border overflow-hidden"
+        className="lg:hidden flex flex-col bg-surface border-t border-border overflow-hidden relative"
         style={{ height: "calc(100dvh - 64px)", overscrollBehavior: "none" }}
       >
         <AnimatePresence mode="wait" initial={false}>
