@@ -69,6 +69,10 @@ router.post("/", authenticate as any, upload.single("file") as any, async (req: 
       'application/x-zip-compressed': 'zip',
       'application/msword': 'doc',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/vnd.ms-powerpoint': 'ppt',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+      'application/vnd.ms-excel': 'xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
       'application/octet-stream': 'file'
     };
     const fileType = mimeMap[req.file.mimetype] || req.file.mimetype.split('/')[1] || "file";

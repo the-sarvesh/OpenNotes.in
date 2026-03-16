@@ -28,7 +28,7 @@ const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
     return {
       folder: folder,
       resource_type: 'auto',
-      allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf', 'docx', 'doc', 'zip'],
+      allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf', 'docx', 'doc', 'zip', 'ppt', 'pptx', 'xls', 'xlsx', 'txt'],
       public_id: `file-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
     };
   },

@@ -69,7 +69,7 @@ export const ResourcesView: React.FC = () => {
     description: '',
     semester: 'Sem1',
     category: 'midsem',
-    subject_name: '',
+    subject_name: SUBJECTS_BY_SEM['Sem1'][0] || '',
     course_code: '',
   });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -126,18 +126,25 @@ export const ResourcesView: React.FC = () => {
           description: '',
           semester: navigationPath[0] || 'Sem1',
           category: navigationPath[navigationPath.length - 1] === 'midsem' ? 'midsem' : 'midsem',
-          subject_name: navigationPath[1] || '',
+          subject_name: SUBJECTS_BY_SEM[navigationPath[0] || 'Sem1']?.[0] || '',
           course_code: '',
         });
         setUploadFile(null);
         fetchResources();
       } else {
-        const data = await res.json();
-        toast.error(data.error || "Upload failed. Please try again.");
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          toast.error(data.error || "Upload failed. Please try again.");
+        } else {
+          const errorText = await res.text();
+          console.error("Non-JSON error response:", errorText);
+          toast.error(`Server error (${res.status}). Check console for details.`);
+        }
       }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      toast.error("An unexpected error occurred during upload.");
+    } catch (error: any) {
+      console.error('Full upload error details:', error);
+      toast.error(error.message || "Network error. Is the server running?");
     } finally {
       setIsUploading(false);
     }
@@ -206,7 +213,13 @@ export const ResourcesView: React.FC = () => {
         </div>
         
         <button 
-          onClick={() => setShowUploadModal(true)}
+          onClick={() => {
+            if (!user) {
+              toast.error("Please sign in to contribute materials");
+              return;
+            }
+            setShowUploadModal(true);
+          }}
           className="flex items-center gap-2 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 px-6 py-3.5 rounded-2xl font-black text-sm transition-all shadow-xl shadow-[#FFC000]/20 active:scale-95 shrink-0"
         >
           <Upload className="h-4 w-4 stroke-[3px]" />
@@ -427,16 +440,16 @@ export const ResourcesView: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-[#FFC000] uppercase tracking-widest ml-1">File (PDF, Docx)</label>
+                  <label className="text-[10px] font-black text-[#FFC000] uppercase tracking-widest ml-1">File (PDF, Docx, PPT, Excel, Images, Zip)</label>
                   <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-3xl p-8 hover:bg-white/5 transition-colors cursor-pointer group">
                     <Upload className="h-8 w-8 text-slate-600 group-hover:text-[#FFC000] transition-colors mb-2" />
                     <span className="text-sm font-bold text-slate-500 group-hover:text-slate-300">
-                      {uploadFile ? uploadFile.name : 'Select document here'}
+                      {uploadFile ? uploadFile.name : 'Select documents here'}
                     </span>
                     <input 
                       type="file" 
                       className="hidden" 
-                      accept=".pdf,.docx,.doc,.zip"
+                      accept=".pdf,.docx,.doc,.zip,.ppt,.pptx,.xls,.xlsx,.jpg,.png,.jpeg,.webp"
                       onChange={e => setUploadFile(e.target.files?.[0] || null)}
                     />
                   </label>
