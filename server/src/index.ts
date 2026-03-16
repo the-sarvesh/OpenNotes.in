@@ -84,6 +84,8 @@ initSocket(httpServer);
 export { io } from "./socket.js";
 
 // ── Express Middleware ───────────────────────────────────────────────────────
+app.use(cookieParser());
+
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
