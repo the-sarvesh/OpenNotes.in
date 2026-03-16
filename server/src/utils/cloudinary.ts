@@ -27,11 +27,9 @@ const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
     const folder = req.baseUrl.includes('users') ? 'opennotes/profiles' : 'opennotes/listings';
     return {
       folder: folder,
+      resource_type: 'auto',
       allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf', 'docx', 'doc', 'zip'],
       public_id: `file-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
-      transformation: [
-        { width: 1000, crop: 'limit', quality: 'auto', fetch_format: 'auto' }
-      ]
     };
   },
 }) : null;
@@ -61,9 +59,13 @@ export const getFileUrl = (file: any) => {
     // In Cloudinary mode, 'path' is the full secure URL
     // We append auto-optimization parameters for better delivery performance
     if (file.path && file.path.includes('cloudinary.com')) {
-      const parts = file.path.split('/upload/');
-      if (parts.length === 2) {
-        return `${parts[0]}/upload/q_auto,f_auto/${parts[1]}`;
+      // Only apply image transformations if it's actually an image
+      const isImage = file.mimetype && file.mimetype.startsWith('image/');
+      if (isImage) {
+        const parts = file.path.split('/upload/');
+        if (parts.length === 2) {
+          return `${parts[0]}/upload/q_auto,f_auto/${parts[1]}`;
+        }
       }
     }
     return file.path;

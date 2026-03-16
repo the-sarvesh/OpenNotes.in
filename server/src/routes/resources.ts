@@ -61,7 +61,17 @@ router.post("/", authenticate as any, upload.single("file") as any, async (req: 
     }
 
     const fileUrl = getFileUrl(req.file);
-    const fileType = req.file.mimetype.split('/')[1] || "file";
+    
+    // Better file type mapping
+    const mimeMap: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'application/zip': 'zip',
+      'application/x-zip-compressed': 'zip',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/octet-stream': 'file'
+    };
+    const fileType = mimeMap[req.file.mimetype] || req.file.mimetype.split('/')[1] || "file";
     const id = uuidv4();
 
     await db.execute({

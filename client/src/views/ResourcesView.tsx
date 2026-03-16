@@ -8,6 +8,7 @@ import {
 import { apiRequest } from '../utils/api.js';
 import { useAuth } from '../contexts/AuthContext';
 import { SUBJECTS_BY_SEM } from '../utils/constants';
+import { toast } from 'react-hot-toast';
 
 const SEMESTERS = ['All', 'Sem1', 'Sem2', 'Sem3', 'Sem4', 'Sem5', 'Sem6', 'Sem7', 'Sem8'];
 const CATEGORIES = [
@@ -118,20 +119,25 @@ export const ResourcesView: React.FC = () => {
       });
 
       if (res.ok) {
+        toast.success("Contribution submitted! Thank you.");
         setShowUploadModal(false);
         setUploadForm({
           title: '',
           description: '',
           semester: navigationPath[0] || 'Sem1',
-          category: navigationPath[navigationPath.length - 1] === 'midsem' ? 'midsem' : 'midsem', // placeholder logic
+          category: navigationPath[navigationPath.length - 1] === 'midsem' ? 'midsem' : 'midsem',
           subject_name: navigationPath[1] || '',
           course_code: '',
         });
         setUploadFile(null);
         fetchResources();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Upload failed. Please try again.");
       }
     } catch (error) {
       console.error('Upload failed:', error);
+      toast.error("An unexpected error occurred during upload.");
     } finally {
       setIsUploading(false);
     }
