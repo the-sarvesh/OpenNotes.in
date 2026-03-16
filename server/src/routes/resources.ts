@@ -8,6 +8,7 @@ const router = express.Router();
 
 /**
  * @route GET /api/resources
+
  * @desc Get all resources with filtering
  */
 router.get("/", async (req, res, next) => {
