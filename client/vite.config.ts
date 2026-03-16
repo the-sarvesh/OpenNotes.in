@@ -20,6 +20,8 @@ export default defineConfig(({mode}) => {
         '/api': {
           target: 'http://localhost:5000',
           changeOrigin: true,
+          timeout: 600000, // 10 minutes
+          proxyTimeout: 600000,
           configure: (proxy, _options) => {
             proxy.on('error', (err, _req, _res) => {
               console.log('[Vite Proxy] Error:', err);

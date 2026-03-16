@@ -17,6 +17,7 @@ if (isCloudinaryConfigured) {
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
+    timeout: 120000 // 120 seconds
   });
 }
 
@@ -24,13 +25,15 @@ if (isCloudinaryConfigured) {
 const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
+    console.log(`[Cloudinary Storage] Processing upload for: ${file.originalname} (${file.mimetype})`);
     const isProfile = req.baseUrl.includes('users');
     const folder = isProfile ? 'opennotes/profiles' : 'opennotes/resources';
     
     // Determine Cloudinary resource_type
-    // Images/PDFs can be 'image', docs/zips must be 'raw'
     const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf'];
     const resource_type = imageTypes.includes(file.mimetype) ? 'image' : 'raw';
+    
+    console.log(`[Cloudinary Storage] Folder: ${folder}, Type: ${resource_type}`);
 
     return {
       folder: folder,

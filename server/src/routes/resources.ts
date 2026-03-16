@@ -6,6 +6,128 @@ import { upload, getFileUrl } from "../utils/cloudinary.js";
 
 const router = express.Router();
 
+// Debug middleware for resources
+router.use((req, res, next) => {
+  console.log(`[Resources Debug] ${req.method} ${req.url}`);
+  next();
+});
+
+/**
+ * @route GET /api/resources/:id/download
+ * @desc Proxy route to download from Cloudinary and stream with attachment headers
+ */
+router.get("/:id/download", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    console.log(`[Resources Debug] Attempting download for ID: ${id}`);
+    
+    const resourceResult = await db.execute({
+      sql: "SELECT * FROM resources WHERE id = ?",
+      args: [id]
+    });
+    const resource = resourceResult.rows[0] as any;
+
+    if (!resource) {
+      console.log(`[Resources Debug] Resource NOT FOUND in DB for ID: ${id}`);
+      return res.status(404).json({ error: "Resource not found" });
+    }
+
+    console.log(`[Resources Debug] Found resource: ${resource.title}, URL: ${resource.file_url}`);
+
+    // ── Handle Download Count (Copied from existing logic) ──────────────────
+    const authHeaders = req.cookies.auth_token;
+    let userId: string | null = null;
+    if (authHeaders) {
+      try {
+        const decoded = (await import('jsonwebtoken')).default.verify(
+          authHeaders, 
+          process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod"
+        ) as any;
+        userId = decoded.id;
+      } catch (err) {}
+    }
+
+    if (userId) {
+      const trackResult = await db.execute({
+        sql: "INSERT OR IGNORE INTO resource_downloads (user_id, resource_id) VALUES (?, ?)",
+        args: [userId, id]
+      });
+      if (trackResult.rowsAffected > 0) {
+        await db.execute({
+          sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
+          args: [id]
+        });
+      }
+    } else {
+      await db.execute({
+        sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
+        args: [id]
+      });
+    }
+
+    // ── Streaming the file ───────────────────────────────────────────────────
+    const fileUrl = resource.file_url;
+    
+    // Debug Logs for Cloudinary path verification
+    console.log('[Download Debug] file_url from DB:', fileUrl);
+    console.log('[Download Debug] resource_type guess:', fileUrl.includes('/raw/') ? 'raw' : 'image');
+
+    // Set headers to force download
+    const filename = `${resource.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${resource.file_type}`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    if (fileUrl.startsWith('http')) {
+      // Proxying remote files (Cloudinary)
+      const https = await import('https');
+      
+      const streamFile = (url: string) => {
+        console.log(`[Resources Debug] Streaming from storage URL: ${url}`);
+        https.get(url, (response) => {
+          // Handle Redirects (Cloudinary sometimes does this)
+          if ((response.statusCode === 301 || response.statusCode === 302) && response.headers.location) {
+            console.log(`[Resources Debug] Following redirect to: ${response.headers.location}`);
+            return streamFile(response.headers.location);
+          }
+
+          if (response.statusCode === 200) {
+            // Transfer critical headers
+            if (response.headers['content-length']) {
+              res.setHeader('Content-Length', response.headers['content-length']);
+            }
+            res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
+            res.status(200);
+            response.pipe(res);
+          } else {
+            console.error(`Storage Error: ${response.statusCode} for ${url}`);
+            if (!res.headersSent) res.status(response.statusCode || 500).send('Error fetching file from storage');
+          }
+        }).on('error', (err) => {
+          console.error('Proxy Download Internal Error:', err);
+          if (!res.headersSent) res.status(500).send('Internal Storage Error');
+        });
+      };
+
+      streamFile(fileUrl);
+    } else {
+      // Local file fallback
+      const fs = await import('fs');
+      const path = await import('path');
+      const { fileURLToPath } = await import('url');
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      const filePath = path.join(__dirname, "../../", fileUrl);
+      
+      if (fs.existsSync(filePath)) {
+        res.download(filePath, filename);
+      } else {
+        res.status(404).send('File not found on server');
+      }
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
 /**
  * @route GET /api/resources
 
@@ -87,8 +209,12 @@ router.get("/quota", authenticate as any, async (req: AuthRequest, res, next) =>
  * @route POST /api/resources
  * @desc Upload a new resource
  */
-router.post("/", authenticate as any, upload.single("file") as any, async (req: AuthRequest, res, next) => {
+router.post("/", authenticate as any, (req, res, next) => {
+  console.log('[Resources Debug] Incoming upload request...');
+  next();
+}, upload.single("file") as any, async (req: AuthRequest, res, next) => {
   try {
+    console.log('[Resources Debug] File received by multer:', req.file?.originalname);
     const uploaderId = req.user!.id;
     const { title, description, semester, category, subject_name, course_code } = req.body;
 
@@ -157,114 +283,6 @@ router.post("/", authenticate as any, upload.single("file") as any, async (req: 
   }
 });
 
-/**
- * @route GET /api/resources/:id/download
- * @desc Proxy route to download from Cloudinary and stream with attachment headers
- */
-router.get("/:id/download", async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const resourceResult = await db.execute({
-      sql: "SELECT * FROM resources WHERE id = ?",
-      args: [id]
-    });
-    const resource = resourceResult.rows[0] as any;
-
-    if (!resource) {
-      return res.status(404).json({ error: "Resource not found" });
-    }
-
-    // ── Handle Download Count (Copied from existing logic) ──────────────────
-    const authHeaders = req.cookies.auth_token;
-    let userId: string | null = null;
-    if (authHeaders) {
-      try {
-        const decoded = (await import('jsonwebtoken')).default.verify(
-          authHeaders, 
-          process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod"
-        ) as any;
-        userId = decoded.id;
-      } catch (err) {}
-    }
-
-    if (userId) {
-      const trackResult = await db.execute({
-        sql: "INSERT OR IGNORE INTO resource_downloads (user_id, resource_id) VALUES (?, ?)",
-        args: [userId, id]
-      });
-      if (trackResult.rowsAffected > 0) {
-        await db.execute({
-          sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
-          args: [id]
-        });
-      }
-    } else {
-      await db.execute({
-        sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
-        args: [id]
-      });
-    }
-
-    // ── Streaming the file ───────────────────────────────────────────────────
-    const fileUrl = resource.file_url;
-    
-    // Debug Logs for Cloudinary path verification
-    console.log('[Download Debug] file_url from DB:', fileUrl);
-    console.log('[Download Debug] resource_type guess:', fileUrl.includes('/raw/') ? 'raw' : 'image');
-
-    // Set headers to force download
-    const filename = `${resource.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${resource.file_type}`;
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-    if (fileUrl.startsWith('http')) {
-      // Proxying remote files (Cloudinary)
-      const https = await import('https');
-      
-      const streamFile = (url: string) => {
-        https.get(url, (response) => {
-          // Handle Redirects (Cloudinary sometimes does this)
-          if ((response.statusCode === 301 || response.statusCode === 302) && response.headers.location) {
-            return streamFile(response.headers.location);
-          }
-
-          if (response.statusCode === 200) {
-            // Transfer critical headers
-            if (response.headers['content-length']) {
-              res.setHeader('Content-Length', response.headers['content-length']);
-            }
-            res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
-            res.status(200);
-            response.pipe(res);
-          } else {
-            console.error(`Storage Error: ${response.statusCode} for ${url}`);
-            res.status(response.statusCode || 500).send('Error fetching file from storage');
-          }
-        }).on('error', (err) => {
-          console.error('Proxy Download Internal Error:', err);
-          if (!res.headersSent) res.status(500).send('Internal Storage Error');
-        });
-      };
-
-      streamFile(fileUrl);
-    } else {
-      // Local file fallback
-      const fs = await import('fs');
-      const path = await import('path');
-      const { fileURLToPath } = await import('url');
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = path.dirname(__filename);
-      const filePath = path.join(__dirname, "../../", fileUrl);
-      
-      if (fs.existsSync(filePath)) {
-        res.download(filePath, filename);
-      } else {
-        res.status(404).send('File not found on server');
-      }
-    }
-  } catch (error) {
-    next(error);
-  }
-});
 
 /**
  * @route POST /api/resources/:id/download

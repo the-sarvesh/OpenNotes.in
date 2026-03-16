@@ -1,6 +1,14 @@
 // In local development, always use the Vite proxy (empty base URL)
 // This prevents accidental calls to production Render URLs from a local machine
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const isLocal = 
+  window.location.hostname === 'localhost' || 
+  window.location.hostname === '127.0.0.1' || 
+  window.location.hostname === '0.0.0.0' ||
+  !window.location.hostname.includes('.') || // Local hostnames like 'my-pc'
+  /^192\.168\./.test(window.location.hostname) ||
+  /^10\./.test(window.location.hostname) ||
+  /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(window.location.hostname);
+
 const envBaseUrl = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.VITE_API_BASE_URL;
 export const API_BASE_URL = isLocal ? '' : envBaseUrl || 'https://opennotes-in.onrender.com';
 
@@ -17,6 +25,8 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
   if (options.body && typeof options.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
+
+  console.log(`[API Request] Calling: ${options.method || 'GET'} ${fullUrl}`);
 
   const response = await fetch(fullUrl, {
     ...options,

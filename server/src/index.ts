@@ -86,6 +86,12 @@ export { io } from "./socket.js";
 // ── Express Middleware ───────────────────────────────────────────────────────
 app.use(cookieParser());
 
+// Global Request Logger
+app.use((req, res, next) => {
+  console.log(`[Server] ${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
