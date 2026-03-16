@@ -3,7 +3,7 @@ import { apiRequest } from '../utils/api.js';
 import { motion, useScroll, useTransform, useInView } from 'motion/react';
 import {
   Search, ShoppingBag, BookOpen, MapPin, ArrowRight, TrendingUp, Shield, Zap,
-  CheckCircle2, ShieldCheck, HelpCircle, Star, ArrowUpRight
+  CheckCircle2, ShieldCheck, HelpCircle, Star, ArrowUpRight, FileText, Clock, Calendar
 } from 'lucide-react';
 import { NoteCard } from '../components/NoteCard';
 import { useNavigate, Link } from 'react-router-dom';
@@ -176,8 +176,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               transition={{ delay: 0.38, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="text-lg sm:text-xl text-text-muted max-w-xl mb-10 leading-relaxed font-medium"
             >
-              Buy and sell course materials with fellow students — books, notes, PPTs and more.
-              Pass on what helped you, and find what you need.
+              Buy and sell course materials, or access our free soft copy repository for previous year papers, assignments, and BITS PPTs.
             </motion.p>
 
             {/* CTA buttons */}
@@ -400,6 +399,68 @@ export const HomeView: React.FC<HomeViewProps> = ({
               View all listings <ArrowRight className="h-4 w-4" />
             </button>
           </FadeUp>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════ RESOURCE CENTER CALLOUT ═══════════════════════════════ */}
+      <section className="py-24 bg-background overflow-hidden border-t border-border/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="relative rounded-[3rem] bg-gradient-to-br from-primary/5 via-surface to-transparent border border-primary/10 p-8 sm:p-12 lg:p-16 overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 sm:p-12 opacity-10 pointer-events-none">
+              <FileText className="h-64 w-64 text-primary" />
+            </div>
+            
+            <div className="relative z-10 grid lg:grid-cols-2 gap-12 items-center">
+              <div>
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  Free Resource Center
+                </motion.div>
+                <h2 className="text-4xl sm:text-5xl font-black text-text-main mb-6 leading-tight">
+                  Stop looking for <br />
+                  <span className="text-primary italic">shared links.</span>
+                </h2>
+                <p className="text-lg text-text-muted mb-10 leading-relaxed max-w-md">
+                  Download previous year papers, assignments, and BITS PPTs directly from our organized repository. No more digging through WhatsApp groups.
+                </p>
+                <button
+                  onClick={() => navigate('/resources')}
+                  className="inline-flex items-center gap-2.5 bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-primary/20 active:scale-95"
+                >
+                  <BookOpen className="h-5 w-5" />
+                  Access Repository
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Mid-Sem papers', icon: Clock },
+                  { label: 'End-Sem papers', icon: Calendar },
+                  { label: 'BITS PPTs', icon: FileText },
+                  { label: 'Assignments', icon: CheckCircle2 },
+                ].map((item, i) => (
+                  <motion.div 
+                    key={i}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.1 }}
+                    className="bg-surface border border-border p-6 rounded-[2rem] hover:border-primary/30 transition-colors group"
+                  >
+                    <item.icon className="h-6 w-6 text-primary mb-4 group-hover:scale-110 transition-transform" />
+                    <p className="text-sm font-bold text-text-main">{item.label}</p>
+                    <p className="text-[10px] text-text-muted uppercase tracking-tighter mt-1">Available Free</p>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
