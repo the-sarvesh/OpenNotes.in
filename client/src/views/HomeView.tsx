@@ -179,12 +179,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
               Buy and sell course materials, or access our free soft copy repository for previous year papers, assignments, and BITS PPTs.
             </motion.p>
 
-            {/* CTA buttons */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.48, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="flex flex-col sm:flex-row gap-3"
+              className="flex flex-wrap gap-4"
             >
               <button
                 onClick={() => navigate('/browse')}
@@ -200,6 +199,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
               >
                 <ShoppingBag className="h-5 w-5" />
                 Sell Your Notes
+              </button>
+              <button
+                onClick={() => navigate('/resources')}
+                className="inline-flex items-center justify-center gap-2.5 bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary px-8 py-4 rounded-2xl font-bold text-base transition-all shadow-sm"
+              >
+                <FileText className="h-5 w-5" />
+                Soft Copies
               </button>
               <button
                 onClick={onShowGuide}
@@ -402,71 +408,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </section>
 
-      {/* ═══════════════════════════════ RESOURCE CENTER CALLOUT ═══════════════════════════════ */}
-      <section className="py-24 bg-background overflow-hidden border-t border-border/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="relative rounded-[3rem] bg-gradient-to-br from-primary/5 via-surface to-transparent border border-primary/10 p-8 sm:p-12 lg:p-16 overflow-hidden">
-            <div className="absolute top-0 right-0 p-8 sm:p-12 opacity-10 pointer-events-none">
-              <FileText className="h-64 w-64 text-primary" />
-            </div>
-            
-            <div className="relative z-10 grid lg:grid-cols-2 gap-12 items-center">
-              <div>
-                <motion.div 
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  Free Resource Center
-                </motion.div>
-                <h2 className="text-4xl sm:text-5xl font-black text-text-main mb-6 leading-tight">
-                  Stop looking for <br />
-                  <span className="text-primary italic">shared links.</span>
-                </h2>
-                <p className="text-lg text-text-muted mb-10 leading-relaxed max-w-md">
-                  Download previous year papers, assignments, and BITS PPTs directly from our organized repository. No more digging through WhatsApp groups.
-                </p>
-                <button
-                  onClick={() => navigate('/resources')}
-                  className="inline-flex items-center gap-2.5 bg-primary hover:bg-primary-hover text-white px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-primary/20 active:scale-95"
-                >
-                  <BookOpen className="h-5 w-5" />
-                  Access Repository
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'Mid-Sem papers', icon: Clock },
-                  { label: 'End-Sem papers', icon: Calendar },
-                  { label: 'BITS PPTs', icon: FileText },
-                  { label: 'Assignments', icon: CheckCircle2 },
-                ].map((item, i) => (
-                  <motion.div 
-                    key={i}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.1 }}
-                    className="bg-surface border border-border p-6 rounded-[2rem] hover:border-primary/30 transition-colors group"
-                  >
-                    <item.icon className="h-6 w-6 text-primary mb-4 group-hover:scale-110 transition-transform" />
-                    <p className="text-sm font-bold text-text-main">{item.label}</p>
-                    <p className="text-[10px] text-text-muted uppercase tracking-tighter mt-1">Available Free</p>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* ═══════════════════════════════ BOTTOM CTA ═══════════════════════════════ */}
       <section className="py-20 bg-background">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
           <FadeUp>
             <div className="relative rounded-[2.5rem] overflow-hidden bg-slate-900 dark:bg-slate-800 p-10 sm:p-16 text-center shadow-2xl shadow-slate-900/40">
               {/* Subtle dot grid */}
@@ -482,17 +426,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
               {/* Accent glow — bottom right */}
               <div className="absolute bottom-0 right-0 w-64 h-64 bg-[#FFC000]/20 rounded-full blur-3xl translate-x-1/4 translate-y-1/4" />
               <div className="relative z-10">
-                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-4">Ready?</p>
-                <h2 className="text-3xl sm:text-4xl font-black text-white mb-4">Start selling today</h2>
-                <p className="text-slate-400 mb-8 max-w-md mx-auto font-medium leading-relaxed">Your study materials have already served you well. List them for free and help a fellow student pass their exams.</p>
-                <button
-                  onClick={() => checkAuth(() => navigate('/sell'))}
-                  className="inline-flex items-center gap-2.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 active:scale-[0.97] px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-[#FFC000]/25"
-                >
-                  <ShoppingBag className="h-5 w-5" />
-                  List for Free
-                  <ArrowUpRight className="h-4 w-4 opacity-70" />
-                </button>
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-4">Final Batch of Semester?</p>
+                <h2 className="text-3xl sm:text-4xl font-black text-white mb-4">Contribute or Earn</h2>
+                <p className="text-slate-400 mb-10 max-w-2xl mx-auto font-medium leading-relaxed">
+                  Sell your physical notes to earn back your costs, or access our free digital repository for PYQs, assignments, and BITS PPTs to help your peers.
+                </p>
+                
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                  <button
+                    onClick={() => checkAuth(() => navigate('/sell'))}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 active:scale-[0.97] px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-[#FFC000]/25"
+                  >
+                    <ShoppingBag className="h-5 w-5" />
+                    List Physical Notes
+                    <ArrowUpRight className="h-4 w-4 opacity-70" />
+                  </button>
+                  <button
+                    onClick={() => navigate('/resources')}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-white/10 hover:bg-white/15 border border-white/20 text-white active:scale-[0.97] px-8 py-4 rounded-2xl font-black text-sm transition-all backdrop-blur-sm"
+                  >
+                    <BookOpen className="h-5 w-5" />
+                    Access Soft Copies (Free)
+                  </button>
+                </div>
               </div>
             </div>
           </FadeUp>
