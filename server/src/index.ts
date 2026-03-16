@@ -84,10 +84,28 @@ initSocket(httpServer);
 export { io } from "./socket.js";
 
 // ── Express Middleware ───────────────────────────────────────────────────────
-app.use(cookieParser());
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  process.env.FRONTEND_URL
+].filter(Boolean) as string[];
+
+// Fallback if FRONTEND_URL is missing but we know the Vercel domain
+if (!allowedOrigins.includes("https://open-notes-in-client.vercel.app")) {
+  allowedOrigins.push("https://open-notes-in-client.vercel.app");
+}
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3001",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   }),
 );

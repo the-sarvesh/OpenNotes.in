@@ -100,9 +100,15 @@ export const ResourcesView: React.FC = () => {
     // Use absolute URL if API_BASE_URL is set (production), otherwise use relative (local)
     const downloadUrl = `${API_BASE_URL}/api/resources/${resource.id}/download`;
     
-    // We use window.location.href for a direct GET request that triggers a download
-    // across all browsers reliably.
-    window.location.href = downloadUrl;
+    // Create a temp anchor and click it — more reliable than window.location.href
+    // for cross-origin binary data and ensures the "download" attribute is respected.
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `${resource.title}.${resource.file_type}`;
+    a.target = '_blank'; // Opens in new tab if download attribute is not supported
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     
     // Update local state for immediate UI feedback
     setResources(prev => prev.map(r => 
