@@ -312,7 +312,7 @@ const getUrls = (req: any) => {
       const url = new URL(source);
       // Ensure we don't accidentally use the server URL (usually port 5000) as the frontend
       if (url.port !== "5000") {
-        frontendUrl = `${url.prototype || 'http:'}//${url.host}`;
+        frontendUrl = `${url.protocol || 'http:'}//${url.host}`;
       }
     } catch (e) {
       // Ignore URL parsing errors
