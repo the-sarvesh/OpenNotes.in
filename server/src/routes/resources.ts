@@ -208,6 +208,10 @@ router.get("/:id/download", async (req, res, next) => {
     // ── Streaming the file ───────────────────────────────────────────────────
     const fileUrl = resource.file_url;
     
+    // Debug Logs for Cloudinary path verification
+    console.log('[Download Debug] file_url from DB:', fileUrl);
+    console.log('[Download Debug] resource_type guess:', fileUrl.includes('/raw/') ? 'raw' : 'image');
+
     // Set headers to force download
     const filename = `${resource.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${resource.file_type}`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

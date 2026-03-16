@@ -24,10 +24,17 @@ if (isCloudinaryConfigured) {
 const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
-    const folder = req.baseUrl.includes('users') ? 'opennotes/profiles' : 'opennotes/listings';
+    const isProfile = req.baseUrl.includes('users');
+    const folder = isProfile ? 'opennotes/profiles' : 'opennotes/resources';
+    
+    // Determine Cloudinary resource_type
+    // Images/PDFs can be 'image', docs/zips must be 'raw'
+    const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf'];
+    const resource_type = imageTypes.includes(file.mimetype) ? 'image' : 'raw';
+
     return {
       folder: folder,
-      resource_type: 'auto',
+      resource_type: resource_type,
       allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf', 'docx', 'doc', 'zip', 'ppt', 'pptx', 'xls', 'xlsx', 'txt'],
       public_id: `file-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
     };
