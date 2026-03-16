@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../utils/api.js';
 import { useAuth } from '../contexts/AuthContext';
+import { SUBJECTS_BY_SEM } from '../utils/constants';
 
 const SEMESTERS = ['All', 'Sem1', 'Sem2', 'Sem3', 'Sem4', 'Sem5', 'Sem6', 'Sem7', 'Sem8'];
 const CATEGORIES = [
@@ -44,14 +45,12 @@ export const ResourcesView: React.FC = () => {
   // Navigation Path: [] (Root) -> ['Sem1'] -> ['Sem1', 'Subject Name'] -> ['Sem1', 'Subject Name', 'midsem']
   const [navigationPath, setNavigationPath] = useState<string[]>([]);
 
-  // Get unique subjects for current semester
+  // Get unique subjects for current semester from shared constants
   const availableSubjects = useMemo(() => {
     if (navigationPath.length === 0) return [];
     const sem = navigationPath[0];
-    const subjects = new Set<string>();
-    resources.filter(r => r.semester === sem).forEach(r => subjects.add(r.subject_name));
-    return Array.from(subjects).sort();
-  }, [resources, navigationPath]);
+    return SUBJECTS_BY_SEM[sem] || [];
+  }, [navigationPath]);
 
   // Statistics for folders
   const getResourceCount = (sem?: string, sub?: string, cat?: string) => {
