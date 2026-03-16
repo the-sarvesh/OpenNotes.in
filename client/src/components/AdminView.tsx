@@ -14,7 +14,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
 import { statusColors, formatStatus } from '../utils/status';
 
-type AdminTab = 'overview' | 'listings' | 'users' | 'orders' | 'chats';
+type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats';
 
 interface Stats {
   users: number;
@@ -24,6 +24,7 @@ interface Stats {
   orders: number;
   platformRevenue: number;
   platformVolume: number;
+  activeResources: number;
 }
 
 const fmt = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -77,6 +78,7 @@ export const AdminView: React.FC = () => {
   const [tab, setTab] = useState<AdminTab>('overview');
   const [stats, setStats] = useState<Stats | null>(null);
   const [listings, setListings] = useState<any[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
@@ -85,6 +87,7 @@ export const AdminView: React.FC = () => {
 
   // Detail views
   const [selectedListing, setSelectedListing] = useState<any | null>(null);
+  const [selectedResource, setSelectedResource] = useState<any | null>(null);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [userActivity, setUserActivity] = useState<{ listings: any[]; orders: any[] } | null>(null);
   const [loadingActivity, setLoadingActivity] = useState(false);
@@ -114,6 +117,9 @@ export const AdminView: React.FC = () => {
         const url = listingFilter ? `/api/admin/listings?status=${listingFilter}` : '/api/admin/listings';
         const res = await apiRequest(url);
         if (res.ok) setListings(await res.json());
+      } else if (tab === 'resources') {
+        const res = await apiRequest('/api/admin/resources');
+        if (res.ok) setResources(await res.json());
       } else if (tab === 'users') {
         const res = await apiRequest('/api/admin/users');
         if (res.ok) setUsers(await res.json());
@@ -132,7 +138,7 @@ export const AdminView: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [tab, listingFilter]);
   // Reset detail views on tab change
-  useEffect(() => { setSelectedListing(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); }, [tab]);
+  useEffect(() => { setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); }, [tab]);
 
   const doAction = async (url: string, method: string, body?: any) => {
     try {
@@ -181,6 +187,7 @@ export const AdminView: React.FC = () => {
   const TABS: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <BarChart3 className="h-4 w-4" /> },
     { id: 'listings', label: 'Listings', icon: <Package className="h-4 w-4" /> },
+    { id: 'resources', label: 'Study Material', icon: <BookOpen className="h-4 w-4" /> },
     { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
     { id: 'orders', label: 'Orders', icon: <ShoppingBag className="h-4 w-4" /> },
     { id: 'chats', label: 'Chats', icon: <MessageCircle className="h-4 w-4" /> },
@@ -251,9 +258,10 @@ export const AdminView: React.FC = () => {
               {/* ══ OVERVIEW ══════════════════════════════════════════════ */}
               {tab === 'overview' && stats && (
                 <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
-                  <div className="grid sm:grid-cols-3 gap-4">
+                  <div className="grid sm:grid-cols-4 gap-4">
                     <StatChip label="Total Users" value={stats.users} />
                     <StatChip label="Active Listings" value={stats.activeListings} />
+                    <StatChip label="Active Resources" value={stats.activeResources} />
                     <StatChip label="Total Orders" value={stats.orders} />
                   </div>
                   <div className="grid sm:grid-cols-3 gap-4">
@@ -424,6 +432,97 @@ export const AdminView: React.FC = () => {
                 </AnimatePresence>
               )}
 
+              {/* ══ STUDY MATERIAL ════════════════════════════════════════ */}
+              {tab === 'resources' && (
+                <AnimatePresence mode="wait">
+                  {selectedResource ? (
+                    <DetailPanel
+                      key="resource-detail"
+                      title={selectedResource.title}
+                      subtitle={`Uploaded by ${selectedResource.uploader_name}`}
+                      onBack={() => setSelectedResource(null)}
+                    >
+                      <div className="grid md:grid-cols-2 gap-5 mb-5">
+                        <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
+                          <InfoRow icon={<Hash className="h-3.5 w-3.5" />} label="ID" value={<span className="font-mono text-xs">{selectedResource.id}</span>} />
+                          <InfoRow icon={<Tag className="h-3.5 w-3.5" />} label="Course Code" value={selectedResource.course_code || '—'} />
+                          <InfoRow icon={<BookOpen className="h-3.5 w-3.5" />} label="Subject" value={selectedResource.subject_name} />
+                          <InfoRow icon={<Layers className="h-3.5 w-3.5" />} label="Semester" value={selectedResource.semester} />
+                          <InfoRow icon={<Tag className="h-3.5 w-3.5" />} label="Category" value={selectedResource.category} />
+                          <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Uploaded At" value={new Date(selectedResource.created_at).toLocaleString()} />
+                        </div>
+                        <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
+                          <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Uploader" value={`${selectedResource.uploader_name} (${selectedResource.uploader_email})`} />
+                          <InfoRow icon={<TrendingUp className="h-3.5 w-3.5" />} label="Downloads" value={selectedResource.download_count} />
+                          <InfoRow icon={<Shield className="h-3.5 w-3.5" />} label="Status" value={
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${statusColors[selectedResource.status] || 'bg-white/10 text-white'}`}>
+                              {fmt(selectedResource.status)}
+                            </span>
+                          } />
+                          <div className="mt-4">
+                            <a 
+                              href={`/api/resources/${selectedResource.id}/download`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 rounded-xl text-xs font-black transition-all"
+                            >
+                              <Eye className="h-4 w-4" /> View / Download File
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {selectedResource.status !== 'deleted' && (
+                          <button
+                            onClick={() => { if (confirm('Delete this study material?')) { doAction(`/api/resources/${selectedResource.id}`, 'DELETE'); setSelectedResource(null); } }}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-xl text-xs font-bold transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" /> Delete Resource
+                          </button>
+                        )}
+                        {selectedResource.status === 'deleted' && (
+                          <button
+                            onClick={() => { doAction(`/api/admin/resources/${selectedResource.id}`, 'PATCH', { status: 'active' }); setSelectedResource(null); }}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-bold transition-colors"
+                          >
+                            <RotateCcw className="h-4 w-4" /> Restore Resource
+                          </button>
+                        )}
+                      </div>
+                    </DetailPanel>
+                  ) : (
+                    <motion.div key="resource-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                      {resources.length === 0 ? (
+                        <p className="text-center py-16 text-slate-500 text-sm">No study material found</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {resources.map(r => (
+                            <div
+                              key={r.id}
+                              onClick={() => setSelectedResource(r)}
+                              className="flex items-center gap-4 p-3.5 rounded-xl border border-white/10 hover:border-[#FFC000]/30 hover:bg-white/5 transition-all cursor-pointer group"
+                            >
+                              <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 shrink-0">
+                                <BookOpen className="h-5 w-5" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-white truncate group-hover:text-[#FFC000] transition-colors">{r.title}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">{r.uploader_name} · {r.subject_name} · Sem {r.semester}</p>
+                              </div>
+                              <span className={`shrink-0 px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${statusColors[r.status] || 'bg-white/10 text-white'}`}>
+                                {fmt(r.status)}
+                              </span>
+                              <ChevronRight className="h-4 w-4 text-slate-600 group-hover:text-[#FFC000] transition-colors shrink-0" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              )}
+
               {/* ══ USERS ══════════════════════════════════════════════════ */}
               {tab === 'users' && (
                 <AnimatePresence mode="wait">
@@ -485,6 +584,23 @@ export const AdminView: React.FC = () => {
                                   Unblock
                                 </button>
                               )}
+                            </div>
+                          } />
+                          <InfoRow icon={<Layers className="h-3.5 w-3.5" />} label="Upload Limit" value={
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                defaultValue={selectedUser.monthly_upload_limit ?? 10}
+                                onBlur={e => {
+                                  const val = parseInt(e.target.value);
+                                  if (!isNaN(val) && val !== selectedUser.monthly_upload_limit) {
+                                    doAction(`/api/admin/users/${selectedUser.id}/upload-limit`, 'PATCH', { limit: val });
+                                  }
+                                }}
+                                className="w-16 text-xs bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-white focus:outline-none focus:ring-1 focus:ring-[#FFC000]/50"
+                              />
+                              <span className="text-[10px] text-slate-500">per month</span>
                             </div>
                           } />
                         </div>
@@ -578,6 +694,22 @@ export const AdminView: React.FC = () => {
                                 ) : (
                                   <button onClick={() => doAction(`/api/admin/users/${u.id}/status`, 'PATCH', { status: 'active' })} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors">Unblock</button>
                                 )}
+                                <div className="flex flex-col items-center">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    defaultValue={u.monthly_upload_limit ?? 10}
+                                    onBlur={e => {
+                                      const val = parseInt(e.target.value);
+                                      if (!isNaN(val) && val !== u.monthly_upload_limit) {
+                                        doAction(`/api/admin/users/${u.id}/upload-limit`, 'PATCH', { limit: val });
+                                      }
+                                    }}
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-12 text-[10px] bg-white/5 border border-white/10 rounded px-1 py-0.5 text-white focus:outline-none"
+                                    title="Monthly upload limit"
+                                  />
+                                </div>
                               </div>
                               <ChevronRight className="h-4 w-4 text-slate-600 group-hover:text-[#FFC000] transition-colors shrink-0" />
                             </div>

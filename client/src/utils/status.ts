@@ -10,6 +10,7 @@ export const statusColors: Record<string, string> = {
   acknowledged: 'bg-primary/10 text-primary border-primary/20',
   active: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
   archived: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400',
+  deleted: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
   rejected: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
   flagged: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
   resolved: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',

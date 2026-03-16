@@ -22,7 +22,8 @@ router.get("/stats", async (_req, res, next) => {
         (SELECT COUNT(*) FROM listings WHERE status = 'active' AND quantity = 0) as out_of_stock,
         (SELECT COUNT(*) FROM orders) as orders,
         (SELECT COALESCE(SUM(platform_fee), 0) FROM orders) as platform_revenue,
-        (SELECT COALESCE(SUM(total_amount), 0) FROM orders) as platform_volume
+        (SELECT COALESCE(SUM(total_amount), 0) FROM orders) as platform_volume,
+        (SELECT COUNT(*) FROM resources WHERE status = 'active') as active_resources
     `);
 
     const row = stats.rows[0];
@@ -34,6 +35,7 @@ router.get("/stats", async (_req, res, next) => {
       orders: Number(row.orders),
       platformRevenue: Number(row.platform_revenue),
       platformVolume: Number(row.platform_volume),
+      activeResources: Number(row.active_resources),
     });
   } catch (error) {
     next(error);
@@ -205,6 +207,63 @@ router.patch("/users/:id/upload-limit", async (req, res, next) => {
       args: [limit, req.params.id],
     });
     res.json({ message: `User upload limit updated to ${limit}` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/admin/resources — all resources with uploader info
+router.get("/resources", async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    let query = `
+      SELECT r.*, u.name as uploader_name, u.email as uploader_email 
+      FROM resources r 
+      JOIN users u ON r.uploader_id = u.id
+    `;
+    const args: any[] = [];
+
+    if (status) {
+      query += " WHERE r.status = ?";
+      args.push(status);
+    }
+
+    query += " ORDER BY r.created_at DESC";
+
+    const resources = await db.execute({ sql: query, args });
+    res.json(resources.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /api/admin/resources/:id — update resource details
+router.patch("/resources/:id", async (req, res, next) => {
+  try {
+    const { title, description, semester, category, subject_name, course_code, status } = req.body;
+    
+    const updates: string[] = [];
+    const args: any[] = [];
+
+    if (title !== undefined) { updates.push("title = ?"); args.push(title); }
+    if (description !== undefined) { updates.push("description = ?"); args.push(description); }
+    if (semester !== undefined) { updates.push("semester = ?"); args.push(semester); }
+    if (category !== undefined) { updates.push("category = ?"); args.push(category); }
+    if (subject_name !== undefined) { updates.push("subject_name = ?"); args.push(subject_name); }
+    if (course_code !== undefined) { updates.push("course_code = ?"); args.push(course_code); }
+    if (status !== undefined) { updates.push("status = ?"); args.push(status); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
+
+    args.push(req.params.id);
+    await db.execute({
+      sql: `UPDATE resources SET ${updates.join(", ")} WHERE id = ?`,
+      args,
+    });
+
+    res.json({ message: "Resource updated successfully" });
   } catch (error) {
     next(error);
   }
