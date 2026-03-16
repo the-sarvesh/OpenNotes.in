@@ -193,6 +193,23 @@ router.patch("/users/:id/status", async (req, res, next) => {
   }
 });
 
+// PATCH /api/admin/users/:id/upload-limit — change user monthly upload limit
+router.patch("/users/:id/upload-limit", async (req, res, next) => {
+  try {
+    const { limit } = req.body;
+    if (typeof limit !== 'number' || limit < 0) {
+      return res.status(400).json({ error: "Invalid limit" });
+    }
+    await db.execute({
+      sql: "UPDATE users SET monthly_upload_limit = ? WHERE id = ?",
+      args: [limit, req.params.id],
+    });
+    res.json({ message: `User upload limit updated to ${limit}` });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/admin/orders — all orders
 router.get("/orders", async (req, res, next) => {
   try {

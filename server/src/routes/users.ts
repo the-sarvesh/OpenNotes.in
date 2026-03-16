@@ -17,7 +17,7 @@ import { upload, getFileUrl } from "../utils/cloudinary.js";
 router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const result = await db.execute({
-      sql: 'SELECT id, email, name, upi_id, role, mobile_number, location, profile_image_url, created_at FROM users WHERE id = ?',
+      sql: 'SELECT id, email, name, upi_id, role, mobile_number, location, profile_image_url, monthly_upload_limit, created_at FROM users WHERE id = ?',
       args: [req.user!.id]
     });
 

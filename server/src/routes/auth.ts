@@ -293,24 +293,41 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const getUrls = (req: any) => {
-  const origin = req.get("origin") || req.get("referer");
+  const referer = req.get("referer") || "";
+  const origin = req.get("origin") || "";
 
+  // Priority 1: Environment variable
   let frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
+
+  // Priority 2: Use referer/origin if it looks like a local dev environment
+  // This helps when testing from different ports or devices on the same network
+  const source = origin || referer;
+  if (
+    source &&
+    (source.includes("localhost") ||
+      source.includes("127.0.0.1") ||
+      source.match(/\d+\.\d+\.\d+\.\d+/))
+  ) {
+    try {
+      const url = new URL(source);
+      // Ensure we don't accidentally use the server URL (usually port 5000) as the frontend
+      if (url.port !== "5000") {
+        frontendUrl = `${url.prototype || 'http:'}//${url.host}`;
+      }
+    } catch (e) {
+      // Ignore URL parsing errors
+    }
+  }
+
+  // Ensure no trailing slash
+  frontendUrl = frontendUrl.replace(/\/$/, "");
+
+  // Callback URL for Google
   const host = req.get("host");
-  const protocol = req.protocol;
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
   let callbackUrl =
     process.env.GOOGLE_CALLBACK_URL ||
     `${protocol}://${host}/api/auth/google/callback`;
-
-  if (
-    origin &&
-    (origin.includes("localhost") ||
-      origin.includes("127.0.0.1") ||
-      origin.match(/\d+\.\d+\.\d+\.\d+/))
-  ) {
-    const url = new URL(origin);
-    frontendUrl = `${url.protocol}//${url.host}`;
-  }
 
   return { frontendUrl, callbackUrl };
 };
@@ -330,6 +347,7 @@ router.get("/google", (req, res, next) => {
 // ── GET /api/auth/google/callback ────────────────────────────────────────────
 router.get("/google/callback", (req, res, next) => {
   const { frontendUrl, callbackUrl } = getUrls(req);
+  console.log("[Auth Callback] Initiation", { frontendUrl, callbackUrl, referer: req.get("referer") });
 
   passport.authenticate(
     "google",
@@ -338,7 +356,7 @@ router.get("/google/callback", (req, res, next) => {
       callbackURL: callbackUrl,
     } as any,
     (err: any, user: any, info: any) => {
-      console.log("[Auth Callback] Start", { hasUser: !!user, hasErr: !!err, info });
+      console.log("[Auth Callback] Result", { hasUser: !!user, hasErr: !!err, info });
       if (err) {
         console.error("[Auth Callback] Error:", err);
         return next(err);

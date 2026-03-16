@@ -45,6 +45,45 @@ router.get("/", async (req, res, next) => {
 });
 
 /**
+ * @route GET /api/resources/quota
+ * @desc Get current month's upload quota status
+ */
+router.get("/quota", authenticate as any, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.user!.id;
+    const userResult = await db.execute({
+      sql: "SELECT role, monthly_upload_limit FROM users WHERE id = ?",
+      args: [userId]
+    });
+    const user = userResult.rows[0] as any;
+    
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const limit = user.monthly_upload_limit || 10;
+    const isAdmin = user.role === 'admin';
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const countResult = await db.execute({
+      sql: "SELECT COUNT(*) as count FROM resources WHERE uploader_id = ? AND created_at >= ?",
+      args: [userId, startOfMonth.toISOString()]
+    });
+    const used = Number((countResult.rows[0] as any).count);
+
+    res.json({
+      used,
+      limit: isAdmin ? 999999 : limit,
+      remaining: isAdmin ? 999999 : Math.max(0, limit - used),
+      isAdmin
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * @route POST /api/resources
  * @desc Upload a new resource
  */
@@ -60,6 +99,33 @@ router.post("/", authenticate as any, upload.single("file") as any, async (req: 
     if (!title || !semester || !category || !subject_name) {
       return res.status(400).json({ error: "Missing required fields" });
     }
+
+    // ── Monthly Upload Quota Check ──────────────────────────────────────────
+    const userResult = await db.execute({
+      sql: "SELECT role, monthly_upload_limit FROM users WHERE id = ?",
+      args: [uploaderId]
+    });
+    const user = userResult.rows[0] as any;
+    
+    if (user && user.role !== 'admin') {
+      const limit = user.monthly_upload_limit || 10;
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const countResult = await db.execute({
+        sql: "SELECT COUNT(*) as count FROM resources WHERE uploader_id = ? AND created_at >= ?",
+        args: [uploaderId, startOfMonth.toISOString()]
+      });
+      const uploadCount = Number((countResult.rows[0] as any).count);
+
+      if (uploadCount >= limit) {
+        return res.status(403).json({ 
+          error: `Monthly upload limit reached (${limit}). Please contact an admin to increase your quota.` 
+        });
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     const fileUrl = getFileUrl(req.file);
     
@@ -93,15 +159,49 @@ router.post("/", authenticate as any, upload.single("file") as any, async (req: 
 
 /**
  * @route POST /api/resources/:id/download
- * @desc Increment download count
+ * @desc Increment download count (Unique for registered users)
  */
 router.post("/:id/download", async (req, res, next) => {
   try {
     const { id } = req.params;
-    await db.execute({
-      sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
-      args: [id]
-    });
+    // We try to get the user from the cookie if they are logged in
+    const authHeaders = req.cookies.auth_token;
+    let userId: string | null = null;
+    
+    if (authHeaders) {
+      try {
+        const decoded = (await import('jsonwebtoken')).default.verify(
+          authHeaders, 
+          process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod"
+        ) as any;
+        userId = decoded.id;
+      } catch (err) {
+        // Invalid token, treat as guest
+      }
+    }
+
+    if (userId) {
+      // Unique tracking for registered users
+      const result = await db.execute({
+        sql: "INSERT OR IGNORE INTO resource_downloads (user_id, resource_id) VALUES (?, ?)",
+        args: [userId, id]
+      });
+
+      if (result.rowsAffected > 0) {
+        await db.execute({
+          sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
+          args: [id]
+        });
+      }
+    } else {
+      // For guests, we still increment for now, but without unique tracking
+      // (Optionally: add IP-based tracking or session-based tracking)
+      await db.execute({
+        sql: "UPDATE resources SET download_count = download_count + 1 WHERE id = ?",
+        args: [id]
+      });
+    }
+
     res.json({ success: true });
   } catch (error) {
     next(error);

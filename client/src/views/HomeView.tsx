@@ -186,7 +186,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="flex flex-wrap gap-4"
             >
               <button
-                onClick={() => navigate('/browse')}
+                onClick={() => checkAuth(() => navigate('/browse'))}
                 className="group inline-flex items-center justify-center gap-2.5 bg-primary hover:bg-primary-hover active:scale-[0.97] text-white px-8 py-4 rounded-2xl font-bold text-base transition-all shadow-xl shadow-[#003366]/25 dark:shadow-[#FFC000]/15"
               >
                 <Search className="h-5 w-5" />
@@ -201,7 +201,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 Sell Your Notes
               </button>
               <button
-                onClick={() => navigate('/resources')}
+                onClick={() => checkAuth(() => navigate('/resources'))}
                 className="inline-flex items-center justify-center gap-2.5 bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary px-8 py-4 rounded-2xl font-bold text-base transition-all shadow-sm"
               >
                 <FileText className="h-5 w-5" />
@@ -359,7 +359,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <h2 className="text-3xl sm:text-4xl font-black text-text-main">Notes from your peers</h2>
               </div>
               <button
-                onClick={() => navigate('/browse')}
+                onClick={() => checkAuth(() => navigate('/browse'))}
                 className="hidden sm:inline-flex items-center gap-1.5 text-sm font-black text-primary hover:underline underline-offset-4"
               >
                 View all <ArrowRight className="h-4 w-4" />
@@ -399,7 +399,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           <FadeUp>
             <button
-              onClick={() => navigate('/browse')}
+              onClick={() => checkAuth(() => navigate('/browse'))}
               className="w-full mt-8 sm:hidden py-4 bg-surface border border-border rounded-2xl text-sm font-bold text-text-muted flex items-center justify-center gap-2 hover:border-primary/20 transition-colors"
             >
               View all listings <ArrowRight className="h-4 w-4" />
@@ -442,7 +442,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <ArrowUpRight className="h-4 w-4 opacity-70" />
                   </button>
                   <button
-                    onClick={() => navigate('/resources')}
+                    onClick={() => checkAuth(() => navigate('/resources'))}
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-white/10 hover:bg-white/15 border border-white/20 text-white active:scale-[0.97] px-8 py-4 rounded-2xl font-black text-sm transition-all backdrop-blur-sm"
                   >
                     <BookOpen className="h-5 w-5" />

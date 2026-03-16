@@ -167,28 +167,31 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const navLink = (to: string, label: string) => (
-    <NavLink
-      to={to}
-      className={({ isActive }) => 
-        `relative text-sm font-semibold tracking-tight transition-colors duration-150 py-1 ${
+  const navLink = (to: string, label: string, needsAuth = false) => {
+    const isActive = location.pathname === to;
+    return (
+      <button
+        onClick={() => {
+          if (needsAuth && !user) {
+            setShowAuth(true);
+          } else {
+            navigate(to);
+          }
+        }}
+        className={`relative text-sm font-semibold tracking-tight transition-colors duration-150 py-1 ${
           isActive ? 'text-[#FFC000]' : 'text-slate-400 hover:text-white'
-        }`
-      }
-    >
-      {({ isActive }) => (
-        <>
-          {label}
-          {isActive && (
-            <motion.span
-              layoutId="nav-indicator"
-              className="absolute -bottom-[1px] left-0 right-0 h-0.5 bg-[#FFC000] rounded-full"
-            />
-          )}
-        </>
-      )}
-    </NavLink>
-  );
+        }`}
+      >
+        {label}
+        {isActive && (
+          <motion.span
+            layoutId="nav-indicator"
+            className="absolute -bottom-[1px] left-0 right-0 h-0.5 bg-[#FFC000] rounded-full"
+          />
+        )}
+      </button>
+    );
+  };
 
   const iconBtn = (onClick: () => void, children: React.ReactNode, badge?: number, title?: string) => (
     <button
@@ -214,7 +217,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex justify-between h-16 items-center gap-4 py-3">
 
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2 group shrink-0">
+            <button
+              onClick={() => {
+                if (location.pathname === '/') {
+                  window.location.reload();
+                } else {
+                  navigate('/');
+                }
+              }}
+              className="flex items-center gap-2 group shrink-0"
+            >
               <img 
                 src="/logo192.png" 
                 alt="OpenNotes Logo" 
@@ -223,12 +235,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="font-black text-lg tracking-tight text-white">
                 Open<span className="text-[#FFC000]">Notes</span>.in
               </span>
-            </Link>
+            </button>
 
             {/* Desktop Nav Links */}
             <div className="hidden md:flex items-center gap-7 border-b border-transparent">
-              {navLink('/browse', 'Browse Notes')}
-              {navLink('/resources', 'Soft Copies')}
+              {navLink('/browse', 'Browse Notes', true)}
+              {navLink('/resources', 'Soft Copies', true)}
               <button
                 onClick={() => {
                   if (!user) {
@@ -482,18 +494,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ...(user ? [
                     { icon: UserIcon, label: 'Dashboard', path: '/profile' },
                     { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
-                    { icon: Bell, label: 'Notifications', path: null, onClick: () => toggleNotifications(), badge: unreadNotificationCount },
-                    { 
-                      icon: MessageCircle, 
-                      label: 'Messages', 
-                      path: '/messages', 
-                      badge: unreadMessageCount,
-                      onClick: () => {
-                        if (onMessagesClick) onMessagesClick();
-                        else navigate('/messages');
-                        setIsMenuOpen(false);
-                      }
-                    },
                   ] : []),
                   { icon: isDark ? Sun : Moon, label: `${isDark ? 'Light' : 'Dark'} Mode`, path: null, onClick: () => toggleDark() },
                   { icon: HelpCircle, label: 'How it Works', path: null, onClick: () => { onShowGuide?.(); setIsMenuOpen(false); } },
@@ -506,7 +506,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                         if (onClick) {
                           onClick();
                         } else {
-                          if (path === '/sell' && !user) {
+                          const needsAuth = ['/sell', '/browse', '/resources', '/profile', '/orders', '/cart', '/messages'].includes(path);
+                          if (needsAuth && !user) {
                             setShowAuth(true);
                           } else {
                             navigate(path);
