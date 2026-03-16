@@ -439,6 +439,7 @@ interface ChatPanelProps {
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onInputBlur: () => void;
+  onInputFocus?: () => void;
   onSend: () => void;
   timeAgo: (d: string) => string;
   onAcceptMeetup: (id: string, mid: string) => void;
@@ -454,7 +455,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   activeConvo, messages, user, isConnected, arrivedUsers,
   otherUserTyping, newMessage, sending, errorMsg, loadingMessages,
   onBack, onProfileClick, onMeetupModalOpen, onArrived,
-  onInputChange, onKeyDown, onInputBlur, onSend, timeAgo,
+  onInputChange, onKeyDown, onInputBlur, onInputFocus, onSend, timeAgo,
   onAcceptMeetup, onDeclineMeetup, onCancelMeetup,
   onVerifyPin, onAcknowledgeOrder, onGoToOrders, onGoToSales,
 }) => {
@@ -690,6 +691,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             onChange={onInputChange}
             onKeyDown={onKeyDown}
             onBlur={onInputBlur}
+            onFocus={() => {
+              onInputFocus?.();
+              // Small delay to ensure keyboard is fully up or viewport settled
+              setTimeout(() => snapToBottom(), 300);
+            }}
             placeholder="Type a message…"
             className="flex-1 px-4 py-3 bg-background border border-border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main transition-all"
             disabled={sending}
@@ -818,6 +824,8 @@ export const MessagesView: React.FC<{
         setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
         socket.emit("mark_read", { conversationId: curr.conversationId });
         setOtherUserTyping(false);
+        // Reset loading state if we were the sender
+        setSending(false);
       }
       fetchConversations();
     };
@@ -929,7 +937,8 @@ export const MessagesView: React.FC<{
         listingId: activeConvo.listingIds[0],
         content: trimmed,
       });
-      setTimeout(() => { socket.off("message_error", onError); setSending(false); }, 3000);
+      // Shorten fallback timeout to 1s
+      setTimeout(() => { socket.off("message_error", onError); setSending(false); }, 1000);
     } else {
       try {
         const res = await apiRequest("/api/messages", { method: "POST", body: JSON.stringify({ receiver_id: activeConvo.otherUserId, listing_id: activeConvo.listingIds[0], content: trimmed }) });
@@ -1032,15 +1041,26 @@ export const MessagesView: React.FC<{
     if (!el || !window.visualViewport) return;
 
     const onViewportChange = () => {
-      const vv = window.visualViewport!;
-      // On mobile, the Navbar is 64px. We want to fill the area between Navbar and keyboard.
-      // If vv.height is already small (keyboard open), we adjust the container height.
-      // We don't use fixed/top anymore to avoid "jumpy" iOS behavior.
+      const vv = window.visualViewport;
+      if (!vv) return;
+      
       const isMobile = window.innerWidth < 1024;
       if (isMobile) {
-        // We subtract the navbar height (approx 64px)
-        // Adjust for visual viewport height
-        el.style.height = `${vv.height - 64}px`;
+        // We Use the visual viewport height directly but also account for any top offset 
+        // if the browser doesn't automatically shift the body.
+        // We use fixed positioning to prevent the background from scrolling away.
+        el.style.height = `${vv.height}px`;
+        
+        // On some iOS versions or browsers, we need to explicitly offset the element
+        // if the visual viewport is offset from the layout viewport.
+        if (vv.offsetTop > 0) {
+          el.style.transform = `translateY(${vv.offsetTop}px)`;
+        } else {
+          el.style.transform = "none";
+        }
+      } else {
+        el.style.height = "";
+        el.style.transform = "none";
       }
     };
 
@@ -1065,6 +1085,7 @@ export const MessagesView: React.FC<{
     onInputChange: handleInputChange,
     onKeyDown: handleKeyDown,
     onInputBlur: emitTypingStop,
+    onInputFocus: emitTypingStart,
     onSend: sendMessage,
     timeAgo,
     onAcceptMeetup: handleAcceptMeetup,
@@ -1118,8 +1139,8 @@ export const MessagesView: React.FC<{
       {/* position:fixed + top:0 is overridden by the visualViewport hook on iOS */}
       <div
         ref={mobileRootRef}
-        className="lg:hidden flex flex-col bg-surface border-t border-border overflow-hidden relative"
-        style={{ height: "calc(100dvh - 64px)", overscrollBehavior: "none" }}
+        className="lg:hidden fixed inset-0 z-50 flex flex-col bg-surface border-t border-border overflow-hidden"
+        style={{ overscrollBehavior: "none", top: 0, height: "100%" }}
       >
         <AnimatePresence mode="wait" initial={false}>
           {!activeConvo ? (
