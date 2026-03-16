@@ -215,23 +215,33 @@ router.get("/:id/download", async (req, res, next) => {
     if (fileUrl.startsWith('http')) {
       // Proxying remote files (Cloudinary)
       const https = await import('https');
-      https.get(fileUrl, (response) => {
-        if (response.statusCode === 200) {
-          // Transfer critical headers
-          if (response.headers['content-length']) {
-            res.setHeader('Content-Length', response.headers['content-length']);
+      
+      const streamFile = (url: string) => {
+        https.get(url, (response) => {
+          // Handle Redirects (Cloudinary sometimes does this)
+          if ((response.statusCode === 301 || response.statusCode === 302) && response.headers.location) {
+            return streamFile(response.headers.location);
           }
-          res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
-          res.status(200);
-          response.pipe(res);
-        } else {
-          console.error(`Cloudinary Error: ${response.statusCode}`);
-          res.status(response.statusCode || 500).send('Error fetching file from storage');
-        }
-      }).on('error', (err) => {
-        console.error('Proxy Download Error:', err);
-        next(err);
-      });
+
+          if (response.statusCode === 200) {
+            // Transfer critical headers
+            if (response.headers['content-length']) {
+              res.setHeader('Content-Length', response.headers['content-length']);
+            }
+            res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
+            res.status(200);
+            response.pipe(res);
+          } else {
+            console.error(`Storage Error: ${response.statusCode} for ${url}`);
+            res.status(response.statusCode || 500).send('Error fetching file from storage');
+          }
+        }).on('error', (err) => {
+          console.error('Proxy Download Internal Error:', err);
+          if (!res.headersSent) res.status(500).send('Internal Storage Error');
+        });
+      };
+
+      streamFile(fileUrl);
     } else {
       // Local file fallback
       const fs = await import('fs');

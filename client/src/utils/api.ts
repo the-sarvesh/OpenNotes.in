@@ -1,7 +1,8 @@
 // In local development, always use the Vite proxy (empty base URL)
 // This prevents accidental calls to production Render URLs from a local machine
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-export const API_BASE_URL = isLocal ? '' : (import.meta as any).env.VITE_API_URL || '';
+const envBaseUrl = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.VITE_API_BASE_URL;
+export const API_BASE_URL = isLocal ? '' : envBaseUrl || 'https://opennotes-in.onrender.com';
 
 console.log(`[API] Initialized with BASE_URL: "${API_BASE_URL}" (Local: ${isLocal})`);
 
