@@ -272,7 +272,7 @@ const PurchaseNoticeBubble: React.FC<{
             {totalToCollect !== undefined && (
               <div className="p-2.5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl flex justify-between items-center">
                 <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Cash to collect</span>
-                <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">₹{totalToCollect}</span>
+                <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">{totalToCollect === 0 ? 'FREE' : `₹${totalToCollect}`}</span>
               </div>
             )}
           </div>

@@ -122,7 +122,7 @@ export const NoteCard = ({
           </div>
           <div className="text-right">
             <p className="text-xs text-text-muted mb-0.5">Price</p>
-            <p className="text-lg font-bold text-primary">₹{note.price}</p>
+            <p className="text-lg font-bold text-primary">{note.price === 0 ? 'FREE' : `₹${note.price}`}</p>
           </div>
         </div>
         

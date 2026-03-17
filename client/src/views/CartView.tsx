@@ -120,7 +120,9 @@ export const CartView: React.FC<CartViewProps> = ({
                     
                     <div className="text-right">
                       <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider mb-0.5">Price</p>
-                      <p className="text-xl font-black text-text-main">₹{item.note.price * item.quantity}</p>
+                      <p className="text-xl font-black text-text-main">
+                        {item.note.price === 0 ? 'FREE' : `₹${item.note.price * item.quantity}`}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -141,11 +143,11 @@ export const CartView: React.FC<CartViewProps> = ({
             <div className="space-y-4 mb-8">
               <div className="flex justify-between text-text-muted text-sm font-semibold">
                 <span>Notes Price (Cash)</span>
-                <span className="text-text-main">₹{cashAtMeetup}</span>
+                <span className="text-text-main">{cashAtMeetup === 0 ? 'FREE' : `₹${cashAtMeetup}`}</span>
               </div>
               <div className="flex justify-between text-text-muted text-sm font-semibold">
                 <span>Platform Fee (Online)</span>
-                <span className="text-primary">+₹{platformFee}</span>
+                <span className="text-primary">{platformFee === 0 ? 'FREE' : `+₹${platformFee}`}</span>
               </div>
             </div>
             
@@ -153,7 +155,7 @@ export const CartView: React.FC<CartViewProps> = ({
               <div className="flex justify-between items-end">
                 <div>
                   <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Total Amount</p>
-                  <p className="text-3xl font-black text-text-main">₹{total}</p>
+                  <p className="text-3xl font-black text-text-main">{total === 0 ? 'FREE' : `₹${total}`}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-black text-primary uppercase tracking-widest bg-surface bg-accent px-2 py-1 rounded-lg">

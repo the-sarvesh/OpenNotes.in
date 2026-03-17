@@ -535,7 +535,8 @@ export const sendTelegramMessage = async (chatId: string, text: string, reply_ma
 };
 
 const formatOrderDetails = (item: string, price: string | number, qty: string | number, otherParty: string, role: 'Buyer' | 'Seller') => {
-  return `📦 <b>Item:</b> ${item}\n💰 <b>Price:</b> ₹${price} x ${qty}\n👤 <b>${role === 'Seller' ? 'Buyer' : 'Seller'}:</b> ${otherParty}`;
+  const priceDisplay = Number(price) === 0 ? 'FREE' : `₹${price}`;
+  return `📦 <b>Item:</b> ${item}\n💰 <b>Price:</b> ${priceDisplay} x ${qty}\n👤 <b>${role === 'Seller' ? 'Buyer' : 'Seller'}:</b> ${otherParty}`;
 };
 
 const formatMeetupCard = (location: string, spot: string, availability: string, note?: string, details?: string) => {

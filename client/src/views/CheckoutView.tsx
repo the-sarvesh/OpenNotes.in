@@ -70,7 +70,7 @@ const PaymentSplitBanner: React.FC<{ platformFee: number; cashAmount: number }> 
           <Banknote className="h-3 w-3 text-text-muted shrink-0" />
           <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">Cash at Meetup</span>
         </div>
-        <p className="text-2xl font-black text-text-main">₹{cashAmount}</p>
+        <p className="text-2xl font-black text-text-main">{cashAmount === 0 ? 'FREE' : `₹${cashAmount}`}</p>
         <p className="text-[10px] text-text-muted leading-tight">To seller · after inspecting notes</p>
       </div>
     </div>
@@ -498,7 +498,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                       </svg>
                     </div>
                     <span className="text-xs font-medium text-text-muted leading-relaxed">
-                      I agree: I'll pay <strong className="text-text-main">₹0 online (Waived)</strong> as the platform fee, and <strong className="text-text-main">₹{total} cash</strong> to the seller at the meetup after inspecting the notes.
+                      I agree: I'll pay <strong className="text-text-main">₹0 online (Waived)</strong> as the platform fee, {total === 0 ? 'and ' : `and `}
+                      <strong className="text-text-main">{total === 0 ? 'nothing' : `₹${total} cash`}</strong> to the seller at the meetup after inspecting the notes.
                     </span>
                   </label>
                 </Card>
@@ -529,7 +530,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                       <p className="text-[9px] font-black text-primary uppercase tracking-wider mb-0.5">{item.note.courseCode}</p>
                       <p className="text-xs font-bold text-text-main leading-snug line-clamp-2 mb-1">{item.note.title}</p>
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-text-main">₹{item.note.price * item.quantity}</span>
+                        <span className="text-[10px] font-black text-text-main">{item.note.price === 0 ? 'FREE' : `₹${item.note.price * item.quantity}`}</span>
                         <div className="flex gap-1.5">
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.semester}</span>
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.condition}</span>
@@ -576,7 +577,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
             <div className="pt-4 border-t border-border space-y-3">
               <div className="flex justify-between text-xs font-semibold text-text-muted">
                 <span>Cash to seller (at meetup)</span>
-                <span className="font-bold text-text-main">₹{subtotal}</span>
+                <span className="font-bold text-text-main">{subtotal === 0 ? 'FREE' : `₹${subtotal}`}</span>
               </div>
               <div className="flex justify-between text-xs font-semibold text-text-muted">
                 <span>Platform fee (online)</span>

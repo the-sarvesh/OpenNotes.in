@@ -331,7 +331,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             {/* Price line */}
             <div className="flex items-baseline justify-between">
               <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Total Price</span>
-              <span className="text-3xl font-black text-text-main tracking-tight">₹{note.price}</span>
+              <span className="text-3xl font-black text-text-main tracking-tight">{note.price === 0 ? 'FREE' : `₹${note.price}`}</span>
             </div>
 
             {/* Action buttons — single row on both mobile and desktop */}

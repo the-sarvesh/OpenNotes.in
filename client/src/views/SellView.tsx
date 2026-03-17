@@ -36,6 +36,7 @@ interface FormData {
   deliveryMethod: string;
   preferredMeetupSpot: string;
   meetupLocation: string;
+  isDonation: boolean;
 }
 
 const INITIAL_FORM: FormData = {
@@ -55,6 +56,7 @@ const INITIAL_FORM: FormData = {
   deliveryMethod: 'in_person',
   preferredMeetupSpot: STANDARD_SPOTS[0],
   meetupLocation: '',
+  isDonation: false,
 };
 
 const STEPS = [
@@ -225,13 +227,13 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       return !!form.courseCode;
     }
     if (step === 3) {
-      if (!form.price) return false;
       if (form.location === 'Other (Manual)' && !form.customLocation.trim()) return false;
       if (form.deliveryMethod !== 'courier') {
         if (!form.preferredMeetupSpot) return false;
         if (!form.meetupLocation.trim()) return false;
       }
-      return true;
+      if (form.isDonation) return true;
+      return !!form.price && Number(form.price) > 0;
     }
     return false;
   };
@@ -567,12 +569,35 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                 <p className="text-sm text-text-muted">Set your price and exchange details.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-surface/50 rounded-xl border border-border flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-sm font-semibold text-text-main">Mark as Donation?</p>
+                  <p className="text-xs text-text-muted mt-0.5">List this item for FREE (₹0)</p>
+                </div>
+                <button type="button" onClick={() => { 
+                  const newDonation = !form.isDonation;
+                  set('isDonation', newDonation);
+                  if (newDonation) set('price', '0');
+                  else if (form.price === '0') set('price', '');
+                }}
+                  className={`w-11 h-6 rounded-full p-1 transition-all ${form.isDonation ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                  <div className={`w-4 h-4 bg-surface rounded-full shadow transition-transform ${form.isDonation ? 'translate-x-5' : ''}`} />
+                </button>
+              </div>
+
+              <div className={`grid grid-cols-2 gap-4 transition-all ${form.isDonation ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div>
                   <Label>Price (₹)</Label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-semibold text-sm pointer-events-none">₹</span>
-                    <input type="number" value={form.price} onChange={e => set('price', e.target.value)} placeholder="250" className={`${inputClass} pl-8`} />
+                    <input 
+                      type="number" 
+                      value={form.price} 
+                      onChange={e => set('price', e.target.value)} 
+                      placeholder="250" 
+                      disabled={form.isDonation}
+                      className={`${inputClass} pl-8`} 
+                    />
                   </div>
                 </div>
                 <div>
@@ -612,12 +637,29 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
               <div>
                 <Label>Delivery Method</Label>
                 <div className="grid grid-cols-3 gap-2">
-                  {[{ value: 'in_person', label: 'In-Person' }, { value: 'courier', label: 'Courier' }, { value: 'both', label: 'Both' }].map(opt => (
-                    <button key={opt.value} type="button" onClick={() => set('deliveryMethod', opt.value)}
-                      className={`py-3 rounded-xl text-xs font-bold border transition-all ${form.deliveryMethod === opt.value ? 'bg-[#003366] text-white border-transparent shadow-sm' : 'bg-surface/80 border-border text-text-muted hover:border-slate-300 dark:hover:border-slate-600'}`}>
-                      {opt.label}
-                    </button>
-                  ))}
+                  {[{ value: 'in_person', label: 'In-Person' }, { value: 'courier', label: 'Courier' }, { value: 'both', label: 'Both' }].map(opt => {
+                    const isComingSoon = opt.value === 'courier' || opt.value === 'both';
+                    return (
+                      <button 
+                        key={opt.value} 
+                        type="button" 
+                        onClick={() => !isComingSoon && set('deliveryMethod', opt.value)}
+                        disabled={isComingSoon}
+                        className={`py-3 rounded-xl text-xs font-bold border transition-all relative overflow-hidden ${
+                          form.deliveryMethod === opt.value 
+                            ? 'bg-[#003366] text-white border-transparent shadow-sm' 
+                            : 'bg-surface/80 border-border text-text-muted hover:border-slate-300 dark:hover:border-slate-600'
+                        } ${isComingSoon ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        {opt.label}
+                        {isComingSoon && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/5 backdrop-blur-[1px]">
+                            <span className="text-[8px] rotate-12 bg-amber-500 text-black px-1 rounded font-black uppercase">Soon</span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -651,7 +693,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                 </div>
               )}
 
-              {form.price && priceNum > 0 && (
+              {form.price && (
                 <div className="p-4 bg-surface/50 rounded-xl border border-border space-y-2.5">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Price Breakdown</p>
@@ -661,18 +703,26 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-text-muted">Listing Price (Total)</span>
-                    <span className="font-bold text-text-main">₹{priceNum}</span>
+                    <span className="font-bold text-text-main">{priceNum === 0 ? 'FREE' : `₹${priceNum}`}</span>
                   </div>
                   <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
                     <span className="font-medium">Platform Fee (Online)</span>
                     <span className="font-bold">₹0</span>
                   </div>
                   <div className="flex justify-between text-sm pt-2.5 border-t border-border">
-                    <span className="font-bold text-text-main">You receive at meetup</span>
-                    <span className="font-black text-emerald-600 dark:text-emerald-400">₹{priceNum}</span>
+                    <span className="font-bold text-text-main">
+                      {priceNum === 0 ? 'Buyer pays' : 'You receive at meetup'}
+                    </span>
+                    <span className="font-black text-emerald-600 dark:text-emerald-400">
+                      {priceNum === 0 ? 'FREE' : `₹${priceNum}`}
+                    </span>
                   </div>
                   <p className="text-[11px] text-text-muted leading-relaxed pt-1">
-                    Buyer pays <strong>₹0 online</strong> to unlock seller details, then hands you the <strong>full ₹{priceNum} cash</strong> at the meetup. You keep 100% of the sale!
+                    {priceNum === 0 ? (
+                      <>Buyer pays <strong>₹0 online</strong> to unlock seller details. This is a <strong>donation</strong> - no money will be exchanged.</>
+                    ) : (
+                      <>Buyer pays <strong>₹0 online</strong> to unlock seller details, then hands you the <strong>full ₹{priceNum} cash</strong> at the meetup. You keep 100% of the sale!</>
+                    )}
                   </p>
                 </div>
               )}

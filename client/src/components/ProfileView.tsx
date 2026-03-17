@@ -452,7 +452,7 @@ export const ProfileView = ({
                           <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-tight">Sold to {sale.buyer_name}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-black text-text-main">₹{sale.listing_price}</p>
+                          <p className="text-sm font-black text-text-main">{sale.listing_price === 0 ? 'FREE' : `₹${sale.listing_price}`}</p>
                           <p className="text-[9px] font-medium text-text-muted">{new Date(sale.order_date).toLocaleDateString()}</p>
                         </div>
                       </div>
@@ -520,7 +520,7 @@ export const ProfileView = ({
                         </div>
                         <div className="flex items-center justify-between mt-2">
                           <div className="flex items-center gap-3">
-                            <span className="text-base font-black text-primary">₹{listing.price}</span>
+                            <span className="text-base font-black text-primary">{listing.price === 0 ? 'FREE' : `₹${listing.price}`}</span>
                             <span className="flex items-center gap-1 text-[10px] font-bold text-text-muted">
                               <Eye className="h-3 w-3" /> {(listing as any).views || 0}
                             </span>
@@ -645,7 +645,7 @@ export const ProfileView = ({
                                 {sale.status === 'pending_meetup' ? 'Arrange Meetup' : sale.status?.replace('_', ' ')}
                               </span>
                               <span className="text-sm font-black text-primary">
-                                +₹{sale.price_at_purchase * sale.quantity}
+                                {sale.price_at_purchase === 0 ? 'FREE' : `+₹${sale.price_at_purchase * sale.quantity}`}
                               </span>
                               <button
                                 onClick={e => { e.stopPropagation(); onContactSeller?.(sale.buyer_id, sale.listing_id, sale.title); }}
