@@ -10,6 +10,12 @@ let bot: Telegraf | null = null;
 // Key: chatId, Value: { type: 'awaiting_pin', itemId: string }
 const botState = new Map<string, any>();
 
+// Helper to generate a consistent conversation ID between two users
+const getConversationId = (userId1: string, userId2: string) => {
+  const sorted = [userId1, userId2].sort();
+  return `${sorted[0]}_${sorted[1]}`;
+};
+
 export const initTelegramBot = () => {
   if (!botToken) {
     console.warn('[Telegram] TELEGRAM_BOT_TOKEN not found in environment. Telegram notifications will be disabled.');
@@ -91,22 +97,55 @@ export const initTelegramBot = () => {
         await ctx.answerCbQuery();
       } 
       else if (action === 'ack_ord') {
-        const result = await db.execute({
-          sql: `SELECT oi.*, u.name as buyer_name, s.name as seller_name FROM order_items oi 
+        const itemRes = await db.execute({
+          sql: `SELECT oi.*, o.buyer_id, u.name as buyer_name, s.id as seller_id, s.name as seller_name 
+                FROM order_items oi 
                 JOIN orders o ON oi.order_id = o.id 
                 JOIN users u ON o.buyer_id = u.id 
                 JOIN users s ON oi.seller_id = s.id 
                 WHERE oi.id = ?`,
           args: [id]
         });
-        const item = result.rows[0] as any;
+        const item = itemRes.rows[0] as any;
         if (!item) return ctx.answerCbQuery('Order not found.');
+
+        if (item.status !== "pending_meetup") {
+          return ctx.answerCbQuery(`Order is already ${item.status}`);
+        }
 
         // Update DB
         await db.execute({
           sql: "UPDATE order_items SET status = 'acknowledged' WHERE id = ?",
           args: [id]
         });
+
+        // Update chat metadata
+        const convoId = getConversationId(item.buyer_id as string, item.seller_id as string);
+        const msgRes = await db.execute({
+          sql: "SELECT id, metadata FROM messages WHERE conversation_id = ? AND type = 'purchase_notice'",
+          args: [convoId]
+        });
+
+        for (const row of msgRes.rows as any[]) {
+          const meta = JSON.parse(row.metadata || '{}');
+          if (meta.orderItemId === id) {
+            meta.status = 'acknowledged';
+            await db.execute({
+              sql: "UPDATE messages SET metadata = ? WHERE id = ?",
+              args: [JSON.stringify(meta), row.id]
+            });
+            
+            const { io } = await import('../socket.js');
+            if (io) {
+              io.to(`conv:${convoId}`).emit("meetup_status_changed", { 
+                proposalId: id,
+                status: 'acknowledged', 
+                messageId: row.id 
+              });
+            }
+            break;
+          }
+        }
 
         // Notify Buyer on website
         const { createNotification } = await import('./notifications.js');
@@ -187,7 +226,7 @@ export const initTelegramBot = () => {
       }
     } catch (err) {
       console.error('[Telegram] Interaction error:', err);
-      await ctx.answerCbQuery('An error occurred.');
+      try { await ctx.answerCbQuery('An error occurred.'); } catch(e) {}
     }
   });
 
@@ -197,31 +236,95 @@ export const initTelegramBot = () => {
     const state = botState.get(chatId);
     if (!state) return;
 
-    const text = ctx.message.text;
+    const text = ctx.message.text.trim();
 
     if (state.type === 'awaiting_pin') {
-      const pin = text.trim();
-      if (!/^\d{4}$/.test(pin)) {
-        return ctx.reply('❌ Invalid format. Please enter a 4-digit PIN:');
+      // Lenient validation: find the first 4-digit number
+      const digitsMatch = text.match(/\d{4}/);
+      if (!digitsMatch) {
+        return ctx.reply('❌ Invalid format. Please enter a 4-digit PIN (e.g., 1234):');
       }
+      const pin = digitsMatch[0];
 
       try {
-        const res = await fetch(`${process.env.BACKEND_URL || 'http://localhost:5000'}/api/orders/items/${state.itemId}/verify-pin`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin })
+        const itemRes = await db.execute({
+          sql: `SELECT oi.*, l.title, o.buyer_id, o.id as order_id 
+                FROM order_items oi 
+                JOIN listings l ON oi.listing_id = l.id 
+                JOIN orders o ON oi.order_id = o.id
+                WHERE oi.id = ?`,
+          args: [state.itemId]
         });
-        
-        const data = await res.json() as any;
-        if (res.ok) {
-          botState.delete(chatId);
-          return ctx.reply(`✅ PIN Verified! Order completed successfully.`);
-        } else {
-          return ctx.reply(`❌ Verification failed: ${data.error || 'Incorrect PIN'}. Please try again:`);
+        const item = itemRes.rows[0] as any;
+
+        if (!item) return ctx.reply('❌ Order item not found.');
+
+        if (item.meetup_pin !== pin) {
+          return ctx.reply('❌ Incorrect PIN. Please ask the buyer to show their PIN and try again:');
         }
+
+        // Mark as completed
+        await db.execute({
+          sql: "UPDATE order_items SET status = 'completed' WHERE id = ?",
+          args: [state.itemId]
+        });
+
+        // Update chat metadata
+        const convoId = getConversationId(item.buyer_id as string, item.seller_id as string);
+        const msgRes = await db.execute({
+          sql: "SELECT id, metadata FROM messages WHERE conversation_id = ? AND type = 'purchase_notice'",
+          args: [convoId]
+        });
+
+        for (const row of msgRes.rows as any[]) {
+          const meta = JSON.parse(row.metadata || '{}');
+          if (meta.orderItemId === state.itemId) {
+            meta.status = 'completed';
+            await db.execute({
+              sql: "UPDATE messages SET metadata = ? WHERE id = ?",
+              args: [JSON.stringify(meta), row.id]
+            });
+            
+            const { io } = await import('../socket.js');
+            if (io) {
+              io.to(`conv:${convoId}`).emit("meetup_status_changed", { 
+                proposalId: state.itemId,
+                status: 'completed', 
+                messageId: row.id 
+              });
+            }
+            break;
+          }
+        }
+
+        // Check if entire order is complete
+        const allItems = await db.execute({
+          sql: "SELECT status FROM order_items WHERE order_id = ?",
+          args: [item.order_id]
+        });
+        const allCompleted = (allItems.rows as any[]).every(r => r.status === 'completed');
+        if (allCompleted) {
+          await db.execute({
+            sql: "UPDATE orders SET status = 'completed' WHERE id = ?",
+            args: [item.order_id]
+          });
+        }
+
+        // Trigger notifications
+        const { createNotification } = await import('./notifications.js');
+        await createNotification(
+          item.buyer_id,
+          "order_update",
+          "Exchange Completed! ✅",
+          `"${item.title}" has been handed over. ${allCompleted ? "Your full order is now complete!" : "Waiting for remaining items."}`,
+          "/orders"
+        );
+
+        botState.delete(chatId);
+        return ctx.reply(`✅ PIN Verified! Order completed successfully. ${allCompleted ? 'The entire order is now complete.' : ''}`);
       } catch (err) {
         console.error('[Telegram] PIN verification error:', err);
-        return ctx.reply('❌ An error occurred.');
+        return ctx.reply('❌ An error occurred during verification.');
       }
     }
 
