@@ -31,8 +31,8 @@ export const TelegramConnect: React.FC = () => {
       const res = await apiRequest('/api/telegram/generate-token');
       const data = await res.json();
       if (res.ok && data.link) {
-        window.location.href = data.link;
-        toast.success('Redirecting to Telegram...');
+        window.open(data.link, '_blank');
+        toast.success('Opening Telegram...');
       } else {
         toast.error(data.error || 'Failed to generate linking token');
       }

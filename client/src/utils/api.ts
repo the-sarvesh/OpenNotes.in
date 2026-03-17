@@ -9,7 +9,7 @@ const isLocal =
   /^10\./.test(window.location.hostname) ||
   /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(window.location.hostname);
 
-const envBaseUrl = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.VITE_API_BASE_URL;
+const envBaseUrl = ((import.meta as any).env.VITE_API_URL || (import.meta as any).env.VITE_API_BASE_URL)?.replace(/\/$/, "");
 export const API_BASE_URL = isLocal ? '' : envBaseUrl || 'https://opennotes-in.onrender.com';
 
 console.log(`[API] Initialized with BASE_URL: "${API_BASE_URL}" (Local: ${isLocal})`);
