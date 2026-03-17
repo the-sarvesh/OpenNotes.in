@@ -17,7 +17,7 @@ import { sendTelegramMessage } from './telegram.js';
 /**
  * Utility function to create a notification and trigger web push
  */
-export const createNotification = async (userId: string, type: string, title: string, message: string, link: string = '', tx?: any) => {
+export const createNotification = async (userId: string, type: string, title: string, message: string, link: string = '', tx?: any, metadata?: any) => {
   try {
     const notificationId = uuidv4();
     const createdAt = new Date().toISOString();
@@ -37,12 +37,11 @@ export const createNotification = async (userId: string, type: string, title: st
         message,
         link,
         is_read: 0,
-        created_at: createdAt
+        created_at: createdAt,
+        metadata
       });
       // Also update unread count for badge
       io.to(`user:${userId}`).emit('unread_count_changed');
-    } else {
-      console.warn('[Socket] Global io instance is undefined in createNotification');
     }
 
     // Trigger Web Push
@@ -59,14 +58,23 @@ export const createNotification = async (userId: string, type: string, title: st
     try {
       const appUrl = process.env.FRONTEND_URL || 'https://open-notes-in-client.vercel.app';
       const telegramResult = await db.execute({
-        sql: 'SELECT telegram_chat_id FROM users WHERE id = ?',
+        sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?',
         args: [userId],
       });
-      const chatId = (telegramResult.rows[0] as any)?.telegram_chat_id;
-      if (chatId) {
-        const linkUrl = link ? `${appUrl}${link}` : appUrl;
-        const text = `<b>${title}</b>\n\n${message}${link ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : ''}`;
-        await sendTelegramMessage(chatId, text);
+      const user = telegramResult.rows[0] as any;
+      if (user?.telegram_chat_id) {
+        const { telegramTemplates } = await import('./telegram.js');
+        
+        let template: any;
+        if (type === 'message' && metadata?.conversationId) {
+          template = telegramTemplates.newMessage(user.name, metadata.senderName || 'Someone', metadata.content || '...', metadata.conversationId);
+        } else {
+          const linkUrl = link ? `${appUrl}${link}` : appUrl;
+          const text = `<b>${title}</b>\n\n${message}${link ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : ''}`;
+          template = { text };
+        }
+        
+        await sendTelegramMessage(user.telegram_chat_id, template.text, template.reply_markup);
       }
     } catch (err) {
       console.error('[Telegram] Notification send failed:', err);
