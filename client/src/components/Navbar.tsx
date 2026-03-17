@@ -60,6 +60,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const [telegramLinked, setTelegramLinked] = useState(true); // Default to true to avoid flicker
+
+  useEffect(() => {
+    if (user) {
+      apiRequest('/api/telegram/status')
+        .then(res => res.json())
+        .then(data => setTelegramLinked(data.isLinked))
+        .catch(() => { });
+    }
+  }, [user]);
+
   const isMobile = () => typeof window !== 'undefined' && window.innerWidth < 768;
 
   // Desktop only: close dropdown on outside click
@@ -282,6 +293,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="hidden md:flex items-center gap-1">
                 {iconBtn(onShowGuide || (() => { }), <HelpCircle className="h-4 w-4" />, undefined, 'How it works')}
                 {iconBtn(toggleDark, isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />, undefined, 'Toggle theme')}
+                {user && !telegramLinked && iconBtn(() => navigate('/profile?tab=settings'), <MessageCircle className="h-4 w-4 text-[#FFC000]" />, undefined, 'Connect Telegram')}
               </div>
 
               {user && (
@@ -494,10 +506,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ...(user ? [
                     { icon: UserIcon, label: 'Dashboard', path: '/profile' },
                     { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
+                    ...(!telegramLinked ? [{ icon: MessageCircle, label: 'Connect Telegram', path: '/profile?tab=settings', color: '#FFC000' }] : []),
                   ] : []),
                   { icon: isDark ? Sun : Moon, label: `${isDark ? 'Light' : 'Dark'} Mode`, path: null, onClick: () => toggleDark() },
                   { icon: HelpCircle, label: 'How it Works', path: null, onClick: () => { onShowGuide?.(); setIsMenuOpen(false); } },
-                ].map(({ icon: Icon, label, path, badge, onClick }: any) => {
+                ].map((item: any) => {
+                  const { icon: Icon, label, path, badge, onClick, color } = item;
                   const isActive = path ? location.pathname === path : false;
                   return (
                     <button
@@ -519,8 +533,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                         }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon className="h-5 w-5 opacity-70" />
-                        <span className="text-sm font-bold">{label}</span>
+                        <Icon className={`h-5 w-5 ${color ? '' : 'opacity-70'}`} style={color ? { color: color } : {}} />
+                        <span className={`text-sm font-bold ${color ? 'text-white' : ''}`}>{label}</span>
                       </div>
                       {badge > 0 && (
                         <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-md">{badge}</span>

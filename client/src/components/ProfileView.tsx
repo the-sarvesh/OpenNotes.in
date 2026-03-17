@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { TelegramConnect } from '../components/TelegramConnect';
 import { statusColors, formatStatus } from '../utils/status';
 import { formatSemester } from '../utils/formatters';
 import { View, Listing, Order, OrderItem } from '../types';
@@ -176,6 +177,7 @@ export const ProfileView = ({
   // Detail modal
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
+
 
   useEffect(() => {
     if (!user) return;
@@ -792,6 +794,8 @@ export const ProfileView = ({
                   Change Password
                 </button>
               </div>
+
+              <TelegramConnect />
 
               {/* PWA Install */}
               {!window.matchMedia('(display-mode: standalone)').matches && (
