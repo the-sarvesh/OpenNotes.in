@@ -347,6 +347,22 @@ export const initTelegramBot = () => {
         const listingId = msgRes.rows[0]?.listing_id;
 
         if (userId && receiverId && listingId) {
+          // Check for active order before sending
+          const activeOrder = await db.execute({
+            sql: `SELECT oi.id FROM order_items oi
+                  JOIN orders o ON o.id = oi.order_id
+                  WHERE ((o.buyer_id = ? AND oi.seller_id = ?) OR (o.buyer_id = ? AND oi.seller_id = ?))
+                    AND oi.listing_id = ?
+                    AND oi.status NOT IN ('completed', 'cancelled')
+                  LIMIT 1`,
+            args: [userId, receiverId, receiverId, userId, listingId]
+          });
+
+          if (activeOrder.rows.length === 0) {
+            botState.delete(chatId);
+            return ctx.reply('❌ This conversation is closed because the transaction is complete or cancelled.');
+          }
+
           const messageId = uuidv4();
           await db.execute({
             sql: `INSERT INTO messages (id, conversation_id, sender_id, receiver_id, listing_id, content) 

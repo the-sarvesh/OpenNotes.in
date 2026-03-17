@@ -122,17 +122,18 @@ export const initSocket = (httpServer: HttpServer) => {
         try {
           // Verify order exists (any order between these two)
           const orderCheck = await db.execute({
-            sql: `SELECT o.id FROM orders o
-                  JOIN order_items oi ON o.id = oi.order_id
-                  WHERE (o.buyer_id = ? AND oi.seller_id = ?) 
-                     OR (o.buyer_id = ? AND oi.seller_id = ?)
+            sql: `SELECT oi.id FROM order_items oi
+                  JOIN orders o ON o.id = oi.order_id
+                  WHERE ((o.buyer_id = ? AND oi.seller_id = ?) 
+                     OR (o.buyer_id = ? AND oi.seller_id = ?))
+                     AND oi.status NOT IN ('completed', 'cancelled')
                   LIMIT 1`,
             args: [userId, receiverId, receiverId, userId],
           });
 
           if (orderCheck.rows.length === 0) {
             socket.emit("message_error", {
-              message: "You can only message users after purchasing an item from them",
+              message: "This conversation is closed. You can only message while a transaction is active.",
             });
             return;
           }
@@ -230,6 +231,23 @@ export const initSocket = (httpServer: HttpServer) => {
 
     socket.on("propose_meetup", async ({ conversationId, receiverId, listingId, proposedTime, location }) => {
       try {
+        // Verify active order exists for this specific listing
+        const orderCheck = await db.execute({
+          sql: `SELECT oi.id FROM order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                WHERE ((o.buyer_id = ? AND oi.seller_id = ?) 
+                   OR (o.buyer_id = ? AND oi.seller_id = ?))
+                   AND oi.listing_id = ?
+                   AND oi.status NOT IN ('completed', 'cancelled')
+                LIMIT 1`,
+          args: [userId, receiverId, receiverId, userId, listingId],
+        });
+
+        if (orderCheck.rows.length === 0) {
+          socket.emit("message_error", { message: "Cannot propose meetup for non-active orders." });
+          return;
+        }
+
         const { v4: uuidv4 } = await import("uuid");
         const proposalId = uuidv4();
         const messageId = uuidv4();
@@ -370,12 +388,29 @@ export const initSocket = (httpServer: HttpServer) => {
       }
     });
 
-    socket.on("arrived_at_meetup", ({ conversationId }: { conversationId: string }) => {
+    socket.on("arrived_at_meetup", async ({ conversationId }: { conversationId: string }) => {
       if (!conversationId) return;
-      const [u1, u2] = conversationId.split('_');
-      if (userId !== u1 && userId !== u2) return;
+      try {
+        const [u1, u2] = conversationId.split('_');
+        if (userId !== u1 && userId !== u2) return;
 
-      io.to(`conv:${conversationId}`).emit("other_user_arrived", { userId });
+        // Verify active order exists in the conversation
+        const orderCheck = await db.execute({
+          sql: `SELECT oi.id FROM order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                WHERE ((o.buyer_id = ? AND oi.seller_id = ?) 
+                   OR (o.buyer_id = ? AND oi.seller_id = ?))
+                   AND oi.status NOT IN ('completed', 'cancelled')
+                LIMIT 1`,
+          args: [u1, u2, u1, u2],
+        });
+
+        if (orderCheck.rows.length > 0) {
+          io.to(`conv:${conversationId}`).emit("other_user_arrived", { userId });
+        }
+      } catch (err) {
+        console.error("[Socket] arrived_at_meetup error:", err);
+      }
     });
 
     socket.on("disconnect", (reason) => {

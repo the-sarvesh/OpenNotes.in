@@ -82,7 +82,12 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
                 ORDER BY created_at DESC LIMIT 1) as last_message,
                (SELECT sender_id FROM messages m4 
                 WHERE m4.conversation_id = m.conversation_id 
-                ORDER BY created_at DESC LIMIT 1) as last_sender_id
+                ORDER BY created_at DESC LIMIT 1) as last_sender_id,
+               (SELECT COUNT(*) FROM order_items oi
+                JOIN orders o ON oi.order_id = o.id
+                WHERE ((o.buyer_id = m.sender_id AND oi.seller_id = m.receiver_id) 
+                    OR (o.buyer_id = m.receiver_id AND oi.seller_id = m.sender_id))
+                  AND oi.status NOT IN ('completed', 'cancelled')) as active_order_count
         FROM messages m
         JOIN listings l ON m.listing_id = l.id
         JOIN users u ON u.id = (CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END)
@@ -105,7 +110,8 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
       unreadCount: Number(convo.unread_count || 0),
       lastMessage: String(convo.last_message || ""),
       lastMessageAt: convo.last_message_at,
-      lastMessageIsMe: convo.last_sender_id === userId
+      lastMessageIsMe: convo.last_sender_id === userId,
+      hasActiveOrder: Number(convo.active_order_count || 0) > 0
     }));
 
     res.json(results);
@@ -185,21 +191,23 @@ router.post('/', async (req: AuthRequest, res, next) => {
       return res.status(400).json({ error: 'Cannot message yourself' });
     }
 
-    // NEW PREFERENCE: Verify that an order exists between these two users for this listing
+    // NEW PREFERENCE: Verify that an active order exists between these two users for this listing
+    // Active = status is NOT 'completed' and NOT 'cancelled'
     const orderCheck = await db.execute({
       sql: `
-        SELECT o.id 
-        FROM orders o 
-        JOIN order_items oi ON o.id = oi.order_id 
+        SELECT oi.id 
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id 
         WHERE oi.listing_id = ? 
           AND ((o.buyer_id = ? AND oi.seller_id = ?) OR (o.buyer_id = ? AND oi.seller_id = ?))
+          AND oi.status NOT IN ('completed', 'cancelled')
         LIMIT 1
       `,
       args: [listing_id, senderId, receiver_id, receiver_id, senderId]
     });
 
     if (orderCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'You can only message users after purchasing their item' });
+      return res.status(403).json({ error: 'This conversation is closed. You can only message if there is an active transaction.' });
     }
 
     const conversationId = getConversationId(senderId, receiver_id);

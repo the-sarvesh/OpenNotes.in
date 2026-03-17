@@ -33,8 +33,9 @@ interface Conversation {
   otherUserProfileImage?: string;
   unreadCount: number;
   lastMessage: string;
-  lastMessageIsMe: boolean;
+  lastMessageMe: boolean;
   lastMessageAt: string;
+  hasActiveOrder: boolean;
 }
 
 interface Message {
@@ -449,6 +450,7 @@ interface ChatPanelProps {
   onAcknowledgeOrder: (id: string) => void;
   onGoToOrders?: () => void;
   onGoToSales?: () => void;
+  hasActiveOrder: boolean;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -458,6 +460,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onInputChange, onKeyDown, onInputBlur, onInputFocus, onSend, timeAgo,
   onAcceptMeetup, onDeclineMeetup, onCancelMeetup,
   onVerifyPin, onAcknowledgeOrder, onGoToOrders, onGoToSales,
+  hasActiveOrder,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -571,7 +574,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             </div>
           )}
 
-          {hasPendingPin && (
+          {hasActiveOrder && hasPendingPin && (
             <button
               onClick={onArrived}
               disabled={user ? arrivedUsers[user.id] : false}
@@ -585,13 +588,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             </button>
           )}
 
-          <button
-            onClick={onMeetupModalOpen}
-            className="p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all active:scale-95"
-            title="Schedule meetup"
-          >
-            <Clock className="h-4 w-4" />
-          </button>
+          {hasActiveOrder && (
+            <button
+              onClick={onMeetupModalOpen}
+              className="p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all active:scale-95"
+              title="Schedule meetup"
+            >
+              <Clock className="h-4 w-4" />
+            </button>
+          )}
 
           <ConnectionBadge isConnected={isConnected} />
         </div>
@@ -679,6 +684,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       {/* ── Input bar ── */}
       <div className="px-3 sm:px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border bg-surface shrink-0">
+        {!hasActiveOrder && (
+          <div className="mb-3 p-3 bg-background rounded-2xl border border-border text-center">
+            <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest">
+              This conversation is closed because the transaction is complete.
+            </p>
+          </div>
+        )}
         {errorMsg && (
           <div className="mb-2 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 text-xs px-3 py-2 rounded-xl font-medium">
             {errorMsg}
@@ -696,14 +708,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               // Small delay to ensure keyboard is fully up or viewport settled
               setTimeout(() => snapToBottom(), 300);
             }}
-            placeholder="Type a message…"
-            className="flex-1 px-4 py-3 bg-background border border-border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main transition-all"
-            disabled={sending}
+            placeholder={hasActiveOrder ? "Type a message…" : "Chat disabled"}
+            className={`flex-1 px-4 py-3 bg-background border border-border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main transition-all ${!hasActiveOrder ? "opacity-50 cursor-not-allowed" : ""}`}
+            disabled={sending || !hasActiveOrder}
             autoComplete="off"
           />
           <button
             onClick={onSend}
-            disabled={!newMessage.trim() || sending}
+            disabled={!newMessage.trim() || sending || !hasActiveOrder}
             className="w-11 h-11 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 rounded-2xl font-bold flex items-center justify-center shadow-lg shadow-[#FFC000]/20 transition-all disabled:opacity-40 active:scale-95 shrink-0"
           >
             {sending
@@ -1095,6 +1107,7 @@ export const MessagesView: React.FC<{
     onAcknowledgeOrder: handleAcknowledgeOrder,
     onGoToOrders,
     onGoToSales,
+    hasActiveOrder: activeConvo?.hasActiveOrder ?? false,
   };
 
   // ── Render ────────────────────────────────────────────────────────
