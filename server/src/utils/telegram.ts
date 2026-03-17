@@ -441,10 +441,10 @@ export const initTelegramBot = () => {
         sql: 'SELECT balance FROM users WHERE telegram_chat_id = ?',
         args: [chatId]
       });
-      const balance = userRes.rows[0] as any;
-      if (!balance) return ctx.reply('Please link your account first using /start.');
+      const user = userRes.rows[0] as any;
+      if (!user) return ctx.reply('Please link your account first using /start.');
 
-      return ctx.reply(`💳 <b>Your Current Balance</b>\n\n₹<b>${balance.balance || 0}</b>`, { parse_mode: 'HTML' });
+      return ctx.reply(`💳 <b>Your Current Balance</b>\n\n₹<b>${user.balance || 0}</b>`, { parse_mode: 'HTML' });
     } catch (err) {
       return ctx.reply('Error fetching balance.');
     }
@@ -452,7 +452,14 @@ export const initTelegramBot = () => {
 
   // NOTE: In production (Railway), we use webhooks. In local dev, we use polling.
   const appUrl = process.env.BACKEND_URL;
-  if (!appUrl || !appUrl.startsWith('https://')) {
+  if (appUrl && appUrl.startsWith('https://')) {
+    const webhookUrl = `${appUrl}/api/telegram/webhook`;
+    bot.telegram.setWebhook(webhookUrl).then(() => {
+      console.log(`[Telegram] Webhook set to: ${webhookUrl}`);
+    }).catch(err => {
+      console.error('[Telegram] Failed to set webhook:', err);
+    });
+  } else {
     bot.launch().then(() => {
       console.log('[Telegram] Bot started in polling mode (Local Development)');
     }).catch(err => {
