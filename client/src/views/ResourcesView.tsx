@@ -218,7 +218,7 @@ export const ResourcesView: React.FC = () => {
             <span className="w-1 h-1 rounded-full bg-slate-700" />
             <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">Nested Folders</span>
           </div>
-          <h1 className="text-4xl font-black text-white mb-2">Student Materials</h1>
+          <h1 className="text-4xl font-black text-white mb-2">Free Study Materials</h1>
           <p className="text-slate-400 text-sm max-w-2xl leading-relaxed">
             Browse materials organized by semester, subject, and category. 
             Contribute to the repository to help your peers.

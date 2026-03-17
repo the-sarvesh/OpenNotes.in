@@ -43,7 +43,7 @@ export const OrderSuccessView: React.FC<OrderSuccessViewProps> = ({ orderData, o
         className="text-center space-y-2 mb-10"
       >
         <h1 className="text-3xl font-black text-text-main tracking-tight">Order Confirmed!</h1>
-        <p className="text-text-muted">Your payment of <span className="font-bold text-text-main">₹{orderData.platformFee}</span> (Platform Fee) is successful.</p>
+        <p className="text-text-muted">Your payment of <span className="font-bold text-text-main">{orderData.platformFee === 0 ? 'FREE' : `₹${orderData.platformFee}`}</span> (Platform Fee) is successful.</p>
       </motion.div>
 
       <motion.div
@@ -109,7 +109,7 @@ export const OrderSuccessView: React.FC<OrderSuccessViewProps> = ({ orderData, o
               <div>
                 <h3 className="font-bold text-text-main mb-1">Cash Payment Due</h3>
                 <p className="text-sm text-text-muted leading-relaxed">
-                  Hand over <strong className="text-text-main font-black">₹{cashDue}</strong> to the seller at the meetup. The remaining balance was settled via the online platform fee.
+                  Hand over <strong className="text-text-main font-black">{cashDue === 0 ? 'FREE' : `₹${cashDue}`}</strong> to the seller at the meetup. The remaining balance was settled via the online platform fee.
                 </p>
               </div>
             </div>

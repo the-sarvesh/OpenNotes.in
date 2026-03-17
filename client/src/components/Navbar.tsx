@@ -501,7 +501,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
                 {[
                   { icon: Search, label: 'Browse Notes', path: '/browse' },
-                  { icon: FileText, label: 'Study Material', path: '/resources' },
+                  { icon: FileText, label: 'Free Study Materials', path: '/resources' },
                   { icon: PlusCircle, label: 'Sell Notes', path: '/sell' },
                   ...(user ? [
                     { icon: UserIcon, label: 'Dashboard', path: '/profile' },

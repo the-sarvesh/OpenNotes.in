@@ -185,7 +185,7 @@ router.post(
         !course_code ||
         !semester ||
         !condition ||
-        !price ||
+        (price === undefined || price === null || price === '') ||
         !location ||
         !material_type
       ) {
@@ -196,8 +196,8 @@ router.post(
       const parsedPrice = parseInt(price);
       const parsedQuantity = quantity !== undefined ? parseInt(quantity) : 1;
 
-      if (isNaN(parsedPrice) || parsedPrice <= 0) {
-        return res.status(400).json({ error: "Price must be a positive number" });
+      if (isNaN(parsedPrice) || parsedPrice < 0) {
+        return res.status(400).json({ error: "Price must be 0 or a positive number" });
       }
       if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
         return res.status(400).json({ error: "Quantity must be a positive number" });
