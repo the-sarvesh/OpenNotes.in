@@ -385,7 +385,8 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             location: buyer_location,
             spot: buyer_preferred_spot,
             availability: buyer_availability,
-            note: buyer_note
+            note: buyer_note,
+            details: buyer_meetup_details
           };
           const template = telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin, orderItem.id, meetupObj);
           await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
@@ -397,7 +398,8 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             location: buyer_location,
             spot: buyer_preferred_spot,
             availability: buyer_availability,
-            note: buyer_note
+            note: buyer_note,
+            details: buyer_meetup_details
           };
           const template = telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name, orderItem.id, meetupObj);
           await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
@@ -546,7 +548,7 @@ router.post(
 
       const itemRes = await db.execute({
         sql: `
-          SELECT oi.*, o.id as order_id, o.buyer_id, l.title
+          SELECT oi.*, o.id as order_id, o.buyer_id, o.buyer_location, o.buyer_preferred_spot, o.buyer_availability, o.buyer_note, o.buyer_meetup_details, l.title
           FROM order_items oi
           JOIN orders o ON oi.order_id = o.id
           JOIN listings l ON oi.listing_id = l.id
@@ -620,11 +622,25 @@ router.post(
         const seller = sellerRow.rows[0] as any;
 
         if (buyer?.telegram_chat_id) {
-          const template = telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name, itemId);
+          const meetupObj = {
+            location: item.buyer_location,
+            spot: item.buyer_preferred_spot,
+            availability: item.buyer_availability,
+            note: item.buyer_note,
+            details: item.buyer_meetup_details
+          };
+          const template = telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name, itemId, meetupObj);
           await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
         }
         if (seller?.telegram_chat_id) {
-          const template = telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name, itemId);
+          const meetupObj = {
+            location: item.buyer_location,
+            spot: item.buyer_preferred_spot,
+            availability: item.buyer_availability,
+            note: item.buyer_note,
+            details: item.buyer_meetup_details
+          };
+          const template = telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name, itemId, meetupObj);
           await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
         }
       } catch (tgErr) {

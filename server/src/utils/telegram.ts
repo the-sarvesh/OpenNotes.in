@@ -98,7 +98,10 @@ export const initTelegramBot = () => {
       } 
       else if (action === 'ack_ord') {
         const itemRes = await db.execute({
-          sql: `SELECT oi.*, o.buyer_id, u.name as buyer_name, s.id as seller_id, s.name as seller_name 
+          sql: `SELECT oi.*, 
+                       o.buyer_id, o.buyer_location, o.buyer_preferred_spot, o.buyer_availability, o.buyer_note, o.buyer_meetup_details,
+                       u.name as buyer_name, u.telegram_chat_id as buyer_chat,
+                       s.id as seller_id, s.name as seller_name, s.telegram_chat_id as seller_chat
                 FROM order_items oi 
                 JOIN orders o ON oi.order_id = o.id 
                 JOIN users u ON o.buyer_id = u.id 
@@ -157,7 +160,29 @@ export const initTelegramBot = () => {
           "/orders"
         );
 
-        await ctx.reply('✅ Order acknowledged! Coordination can continue.');
+        // Notify via Telegram (Buyer & Seller)
+        try {
+          const meetupObj = {
+            location: item.buyer_location,
+            spot: item.buyer_preferred_spot,
+            availability: item.buyer_availability,
+            note: item.buyer_note,
+            details: item.buyer_meetup_details
+          };
+
+          if (item.buyer_chat) {
+            const template = telegramTemplates.orderAcknowledged(item.buyer_name, item.title, item.price_at_purchase, item.quantity, 'Buyer', item.seller_name, id, meetupObj);
+            await sendTelegramMessage(item.buyer_chat, template.text, template.reply_markup);
+          }
+          if (item.seller_chat) {
+            const template = telegramTemplates.orderAcknowledged(item.seller_name, item.title, item.price_at_purchase, item.quantity, 'Seller', item.buyer_name, id, meetupObj);
+            await sendTelegramMessage(item.seller_chat, template.text, template.reply_markup);
+          }
+        } catch (tgErr) {
+          console.error('[Telegram] Acknowledge notification failed:', tgErr);
+        }
+
+        await ctx.reply('✅ Order acknowledged! coordination details sent.');
         await ctx.answerCbQuery('Order Acknowledged');
       }
       else if (action === 'im_here') {
@@ -231,10 +256,10 @@ export const initTelegramBot = () => {
   });
 
   // Handle Text Messages (for PIN entry and Chat Replies)
-  bot.on('text', async (ctx) => {
+  bot.on('text', async (ctx, next) => {
     const chatId = ctx.chat.id.toString();
     const state = botState.get(chatId);
-    if (!state) return;
+    if (!state) return next();
 
     const text = ctx.message.text.trim();
 
@@ -500,13 +525,16 @@ const formatOrderDetails = (item: string, price: string | number, qty: string | 
   return `📦 <b>Item:</b> ${item}\n💰 <b>Price:</b> ₹${price} x ${qty}\n👤 <b>${role === 'Seller' ? 'Buyer' : 'Seller'}:</b> ${otherParty}`;
 };
 
-const formatMeetupCard = (location: string, spot: string, availability: string, note?: string) => {
-  return `\n📍 <b>Location:</b> ${location || 'BITS'}\n📍 <b>Spot:</b> ${spot || 'Not specified'}\n🕒 <b>Availability:</b> ${availability}\n${note ? `📝 <b>Note:</b> ${note}\n` : ''}`;
+const formatMeetupCard = (location: string, spot: string, availability: string, note?: string, details?: string) => {
+  let card = `\n📍 <b>Location:</b> ${location || 'BITS'}\n📍 <b>Spot:</b> ${spot || 'Not specified'}\n🕒 <b>Availability:</b> ${availability}`;
+  if (note) card += `\n📝 <b>Note:</b> ${note}`;
+  if (details) card += `\nℹ️ <b>Instructions:</b> ${details}`;
+  return card + '\n';
 };
 
 export const telegramTemplates = {
   orderPlaced: (name: string, item: string, price: number, qty: number, sellerName: string, pin: string, itemId: string, meetup: any) => ({
-    text: `🆕 <b>Order Placed</b>\n\nHi <b>${name}</b>, your order is pending confirmation.\n\n${formatOrderDetails(item, price, qty, sellerName, 'Buyer')}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note)}\n<i>Coordinate the meetup via chat once acknowledged.</i>`,
+    text: `🆕 <b>Order Placed</b>\n\nHi <b>${name}</b>, your order is pending confirmation.\n\n${formatOrderDetails(item, price, qty, sellerName, 'Buyer')}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n<i>Coordinate the meetup via chat once acknowledged.</i>`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -520,7 +548,7 @@ export const telegramTemplates = {
   }),
   
   newOrder: (name: string, item: string, price: number, qty: number, buyerName: string, itemId: string, meetup: any) => ({
-    text: `🔔 <b>New Order Received!</b>\n\nHi <b>${name}</b>, you have a new request.\n\n${formatOrderDetails(item, price, qty, buyerName, 'Seller')}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note)}\n📨 <i>Coordinate the meetup via chat.</i>`,
+    text: `🔔 <b>New Order Received!</b>\n\nHi <b>${name}</b>, you have a new request.\n\n${formatOrderDetails(item, price, qty, buyerName, 'Seller')}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n📨 <i>Coordinate the meetup via chat.</i>`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -533,8 +561,8 @@ export const telegramTemplates = {
     }
   }),
   
-  orderAcknowledged: (name: string, item: string, price: number, qty: number, role: 'Buyer' | 'Seller', otherParty: string, itemId: string) => ({
-    text: `✅ <b>Meetup Confirmed</b>\n\nHi <b>${name}</b>, the ${role === 'Seller' ? 'buyer' : 'seller'} (${otherParty}) is ready.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer')}\n\n🤝 <i>Meetup is now in progress.</i>`,
+  orderAcknowledged: (name: string, item: string, price: number, qty: number, role: 'Buyer' | 'Seller', otherParty: string, itemId: string, meetup: any) => ({
+    text: `✅ <b>Meetup Confirmed</b>\n\nHi <b>${name}</b>, the ${role === 'Seller' ? 'buyer' : 'seller'} (${otherParty}) is ready.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer')}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n🤝 <i>Meetup is now in progress.</i>`,
     reply_markup: {
       inline_keyboard: [
         [
