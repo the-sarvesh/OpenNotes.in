@@ -268,6 +268,9 @@ const initDb = async () => {
       "ALTER TABLE users ADD COLUMN monthly_upload_limit INTEGER DEFAULT 10",
       "CREATE TABLE IF NOT EXISTS resource_downloads (user_id TEXT NOT NULL, resource_id TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, resource_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE)",
       "CREATE INDEX IF NOT EXISTS idx_res_downloads_res_id ON resource_downloads(resource_id)",
+      "ALTER TABLE users ADD COLUMN telegram_chat_id TEXT",
+      "ALTER TABLE users ADD COLUMN telegram_link_token TEXT",
+      "CREATE INDEX IF NOT EXISTS idx_users_telegram_token ON users(telegram_link_token)",
     ];
 
     for (const migration of migrations) {
@@ -349,13 +352,21 @@ const initDb = async () => {
             google_id TEXT,
             role TEXT NOT NULL DEFAULT 'user',
             status TEXT NOT NULL DEFAULT 'active',
+            rating_avg REAL DEFAULT 0,
+            rating_count INTEGER DEFAULT 0,
+            monthly_upload_limit INTEGER DEFAULT 10,
+            telegram_chat_id TEXT,
+            telegram_link_token TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );
-          INSERT INTO users_new (id, email, name, password_hash, upi_id, google_id, role, status, created_at)
-          SELECT id, email, name, password_hash, upi_id, google_id, role, status, created_at FROM users;
+          INSERT INTO users_new (id, email, name, password_hash, upi_id, google_id, role, status, rating_avg, rating_count, monthly_upload_limit, telegram_chat_id, telegram_link_token, created_at)
+          SELECT id, email, name, password_hash, upi_id, google_id, role, status, 
+                 COALESCE(rating_avg, 0), COALESCE(rating_count, 0), COALESCE(monthly_upload_limit, 10),
+                 telegram_chat_id, telegram_link_token, created_at FROM users;
           DROP TABLE users;
           ALTER TABLE users_new RENAME TO users;
           CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;
+          CREATE INDEX IF NOT EXISTS idx_users_telegram_token ON users(telegram_link_token) WHERE telegram_link_token IS NOT NULL;
         `);
         await db.execute("PRAGMA foreign_keys = ON");
         console.log("Users table migration completed successfully.");

@@ -12,6 +12,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 }
 
 import { io } from '../socket.js';
+import { sendTelegramMessage } from './telegram.js';
 
 /**
  * Utility function to create a notification and trigger web push
@@ -53,6 +54,23 @@ export const createNotification = async (userId: string, type: string, title: st
       badge: '/logo192.png',
       tag: type
     });
+
+    // Send Telegram Notification
+    try {
+      const appUrl = process.env.FRONTEND_URL || 'https://open-notes-in-client.vercel.app';
+      const telegramResult = await db.execute({
+        sql: 'SELECT telegram_chat_id FROM users WHERE id = ?',
+        args: [userId],
+      });
+      const chatId = (telegramResult.rows[0] as any)?.telegram_chat_id;
+      if (chatId) {
+        const linkUrl = link ? `${appUrl}${link}` : appUrl;
+        const text = `<b>${title}</b>\n\n${message}${link ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : ''}`;
+        await sendTelegramMessage(chatId, text);
+      }
+    } catch (err) {
+      console.error('[Telegram] Notification send failed:', err);
+    }
 
     return true;
   } catch (err) {

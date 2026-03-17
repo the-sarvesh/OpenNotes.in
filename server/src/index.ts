@@ -25,6 +25,8 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 import authRoutes from "./routes/auth.js";
+import telegramRoutes from "./routes/telegram.js";
+import { initTelegramBot } from "./utils/telegram.js";
 import listingsRoutes from "./routes/listings.js";
 import ordersRoutes from "./routes/orders.js";
 import usersRoutes from "./routes/users.js";
@@ -162,6 +164,7 @@ app.use("/api/notifications", notificationsRoutes);
 app.use("/api/reviews", reviewsRoutes);
 app.use("/api/push", pushRoutes);
 app.use("/api/resources", resourcesRoutes);
+app.use("/api/telegram", telegramRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", message: "OpenNotes.in API is running" });
@@ -180,10 +183,43 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
+// ── Telegram Webhook Registration ───────────────────────────────────────────
+const registerTelegramWebhook = async () => {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const appUrl = process.env.BACKEND_URL;
+  if (!token || !appUrl) {
+    console.warn('[Telegram] Skipping webhook registration: TELEGRAM_BOT_TOKEN or BACKEND_URL missing');
+    return;
+  }
+
+  if (!appUrl.startsWith('https://')) {
+    console.info('[Telegram] Local development detected (non-HTTPS). Skipping webhook registration. Bot will use polling if enabled.');
+    return;
+  }
+
+  try {
+    const webhookUrl = `${appUrl}/api/telegram/webhook`;
+    const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: webhookUrl }),
+    });
+    const data = (await res.json()) as any;
+    console.log(
+      "[Telegram] Webhook:",
+      data.ok ? `registered at ${webhookUrl}` : data.description,
+    );
+  } catch (err) {
+    console.error("[Telegram] Webhook error:", err);
+  }
+};
+
 // ── Start HTTP + WebSocket server ────────────────────────────────────────────
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Socket.IO ready for real-time messaging`);
+  initTelegramBot();
+  registerTelegramWebhook();
 });
 
 // ── Auto-archive out-of-stock listings every 1 hour ─────────────────────────

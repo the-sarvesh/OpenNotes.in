@@ -25,6 +25,7 @@ import { CartView } from "./views/CartView.tsx";
 import { CheckoutView } from "./views/CheckoutView.tsx";
 import { OrderSuccessView } from "./views/OrderSuccessView";
 import { UserGuideModal } from "./components/UserGuideModal";
+import { TelegramNudge } from "./components/TelegramNudge";
 import ScrollToTop from "./components/ScrollToTop";
 import { apiRequest } from "./utils/api";
 import { NotificationManager } from "./utils/NotificationManager";
@@ -541,6 +542,7 @@ const App: React.FC = () => {
           />
         )}
 
+        <TelegramNudge key="telegram-nudge" />
         <UserGuideModal isOpen={showUserGuide} onClose={closeGuide} />
       </AnimatePresence>
 

@@ -6,6 +6,7 @@ import { authenticate, AuthRequest } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
 import { applyCoupon } from "../utils/orders.js";
 import { io } from "../socket.js";
+import { sendTelegramMessage, telegramTemplates } from "../utils/telegram.js";
 
 
 const router = express.Router();
@@ -363,6 +364,39 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       }
     }
 
+    // ── Telegram Order Notifications ──────────────────────────────────────────
+    try {
+      const buyerRow = await db.execute({
+        sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?',
+        args: [buyerId]
+      });
+      const buyer = buyerRow.rows[0] as any;
+
+      for (const orderItem of orderItemsToInsert) {
+        const sellerRow = await db.execute({
+          sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?',
+          args: [orderItem.seller_id]
+        });
+        const seller = sellerRow.rows[0] as any;
+
+        // Notify buyer with Full Info
+        if (buyer?.telegram_chat_id) {
+          await sendTelegramMessage(buyer.telegram_chat_id,
+            telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin)
+          );
+        }
+
+        // Notify seller with Full Info
+        if (seller?.telegram_chat_id) {
+          await sendTelegramMessage(seller.telegram_chat_id,
+            telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name)
+          );
+        }
+      }
+    } catch (err) {
+      console.error('[Telegram] Order notification failed:', err);
+    }
+
     res.status(201).json({
       message: "Order created successfully",
       orderId,
@@ -558,7 +592,6 @@ router.post(
         }
       }
 
-      // Notify buyer
       await createNotification(
         item.buyer_id as string,
         "order_update",
@@ -566,6 +599,29 @@ router.post(
         `The seller has acknowledged your purchase of "${item.title}". You can now coordinate the meetup.`,
         "/orders",
       );
+
+      // Telegram Notifications (Acknowledge)
+      try {
+        const [buyerRow, sellerRow] = await Promise.all([
+          db.execute({ sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?', args: [item.buyer_id] }),
+          db.execute({ sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?', args: [sellerId] })
+        ]);
+        const buyer = buyerRow.rows[0] as any;
+        const seller = sellerRow.rows[0] as any;
+
+        if (buyer?.telegram_chat_id) {
+          await sendTelegramMessage(buyer.telegram_chat_id,
+            telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name)
+          );
+        }
+        if (seller?.telegram_chat_id) {
+          await sendTelegramMessage(seller.telegram_chat_id,
+            telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name)
+          );
+        }
+      } catch (tgErr) {
+        console.error('[Telegram] Acknowledge notification failed:', tgErr);
+      }
 
       res.json({ message: "Order acknowledged successfully" });
     } catch (error) {
@@ -679,6 +735,32 @@ router.post(
         `"${item.title}" has been handed over. ${allCompleted ? "Your full order is now complete!" : "Waiting for remaining items."}`,
         "/orders",
       );
+
+      // ── Telegram Notifications ──────────────────────────────────────────────
+      try {
+        // Fetch buyer and seller names/chatIDs
+        const [buyerRow, sellerRow] = await Promise.all([
+          db.execute({ sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?', args: [item.buyer_id] }),
+          db.execute({ sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?', args: [sellerId] })
+        ]);
+
+        const buyer = buyerRow.rows[0] as any;
+        const seller = sellerRow.rows[0] as any;
+
+        if (buyer?.telegram_chat_id) {
+          await sendTelegramMessage(buyer.telegram_chat_id, 
+            telegramTemplates.orderCompleted(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name)
+          );
+        }
+
+        if (seller?.telegram_chat_id) {
+          await sendTelegramMessage(seller.telegram_chat_id, 
+            telegramTemplates.orderCompleted(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name)
+          );
+        }
+      } catch (tgErr) {
+        console.error('[Telegram] Post-completion notification failed:', tgErr);
+      }
 
       res.json({
         message: "PIN verified. Item marked as completed.",
