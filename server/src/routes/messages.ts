@@ -223,7 +223,9 @@ router.post('/', async (req: AuthRequest, res, next) => {
       'message',
       'New Message! 💬',
       `${senderName} sent you a message.`,
-      '/messages'
+      '/messages',
+      null,
+      { conversationId, senderName, content: content.trim() }
     );
 
     // Emit socket events if io is available

@@ -381,16 +381,26 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
 
         // Notify buyer with Full Info
         if (buyer?.telegram_chat_id) {
-          await sendTelegramMessage(buyer.telegram_chat_id,
-            telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin)
-          );
+          const meetupObj = {
+            location: buyer_location,
+            spot: buyer_preferred_spot,
+            availability: buyer_availability,
+            note: buyer_note
+          };
+          const template = telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin, orderItem.id, meetupObj);
+          await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
         }
 
         // Notify seller with Full Info
         if (seller?.telegram_chat_id) {
-          await sendTelegramMessage(seller.telegram_chat_id,
-            telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name)
-          );
+          const meetupObj = {
+            location: buyer_location,
+            spot: buyer_preferred_spot,
+            availability: buyer_availability,
+            note: buyer_note
+          };
+          const template = telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name, orderItem.id, meetupObj);
+          await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
         }
       }
     } catch (err) {
@@ -610,14 +620,12 @@ router.post(
         const seller = sellerRow.rows[0] as any;
 
         if (buyer?.telegram_chat_id) {
-          await sendTelegramMessage(buyer.telegram_chat_id,
-            telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name)
-          );
+          const template = telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name, itemId);
+          await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
         }
         if (seller?.telegram_chat_id) {
-          await sendTelegramMessage(seller.telegram_chat_id,
-            telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name)
-          );
+          const template = telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name, itemId);
+          await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
         }
       } catch (tgErr) {
         console.error('[Telegram] Acknowledge notification failed:', tgErr);
