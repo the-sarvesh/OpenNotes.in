@@ -687,6 +687,12 @@ router.post(
         });
       }
 
+      if (item.status === "completed" || item.status === "cancelled") {
+        return res
+          .status(400)
+          .json({ error: "Transaction closed for this item" });
+      }
+
       if (item.status !== "pending_meetup" && item.status !== "acknowledged") {
         return res
           .status(400)

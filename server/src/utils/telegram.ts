@@ -199,6 +199,10 @@ export const initTelegramBot = () => {
         const item = result.rows[0] as any;
         if (!item) return ctx.answerCbQuery('Order not found.');
 
+        if (item.status === 'completed' || item.status === 'cancelled') {
+          return ctx.answerCbQuery('❌ Transaction closed for this item.');
+        }
+
         const userRes = await db.execute({
           sql: 'SELECT id, name FROM users WHERE telegram_chat_id = ?',
           args: [chatId]
@@ -235,12 +239,16 @@ export const initTelegramBot = () => {
       }
       else if (action === 'show_pin') {
         const result = await db.execute({
-          sql: 'SELECT meetup_pin FROM order_items WHERE id = ?',
+          sql: 'SELECT meetup_pin, status FROM order_items WHERE id = ?',
           args: [id]
         });
-        const pin = (result.rows[0] as any)?.meetup_pin;
-        if (pin) {
-          await ctx.reply(`🔑 Your Exchange PIN: <code>${pin}</code>\n\nShare this with the seller at the meetup.`, { parse_mode: 'HTML' });
+        const item = result.rows[0] as any;
+        if (item?.status === 'completed' || item?.status === 'cancelled') {
+          return ctx.answerCbQuery('❌ Transaction closed.');
+        }
+
+        if (item?.meetup_pin) {
+          await ctx.reply(`🔑 Your Exchange PIN: <code>${item.meetup_pin}</code>\n\nShare this with the seller at the meetup.`, { parse_mode: 'HTML' });
         }
         await ctx.answerCbQuery();
       }
@@ -283,6 +291,11 @@ export const initTelegramBot = () => {
         const item = itemRes.rows[0] as any;
 
         if (!item) return ctx.reply('❌ Order item not found.');
+
+        if (item.status === 'completed' || item.status === 'cancelled') {
+          botState.delete(chatId);
+          return ctx.reply('❌ This order is already finalized.');
+        }
 
         if (item.meetup_pin !== pin) {
           return ctx.reply('❌ Incorrect PIN. Please ask the buyer to show their PIN and try again:');
@@ -541,8 +554,8 @@ export const telegramTemplates = {
           { text: '🔑 Show PIN', callback_data: `show_pin:${itemId}` },
           { text: '📍 I\'m Here', callback_data: `im_here:${itemId}` }
         ],
-        [{ text: '📋 View All Details', callback_data: `ord_det:${itemId}` }],
-        [{ text: '🌐 Open Website', url: 'https://open-notes-in-client.vercel.app/' }]
+        [{ text: '💬 Chat on Application', url: 'https://open-notes-in-client.vercel.app/messages' }],
+        [{ text: '📋 View All Details', callback_data: `ord_det:${itemId}` }]
       ]
     }
   }),
@@ -555,6 +568,7 @@ export const telegramTemplates = {
           { text: '✅ Acknowledge', callback_data: `ack_ord:${itemId}` },
           { text: '⌨️ Enter PIN', callback_data: `enter_pin:${itemId}` }
         ],
+        [{ text: '💬 Chat on Application', url: 'https://open-notes-in-client.vercel.app/messages' }],
         [{ text: '📍 I\'m Here', callback_data: `im_here:${itemId}` }],
         [{ text: '📋 View All Details', callback_data: `ord_det:${itemId}` }]
       ]
@@ -569,7 +583,7 @@ export const telegramTemplates = {
           { text: '📍 I\'m Here', callback_data: `im_here:${itemId}` },
           { text: role === 'Seller' ? '⌨️ Enter PIN' : '🔑 Show PIN', callback_data: role === 'Seller' ? `enter_pin:${itemId}` : `show_pin:${itemId}` }
         ],
-        [{ text: '🌐 Open Chat', url: 'https://open-notes-in-client.vercel.app/messages' }]
+        [{ text: '💬 Chat on Application', url: 'https://open-notes-in-client.vercel.app/messages' }]
       ]
     }
   }),
@@ -582,7 +596,7 @@ export const telegramTemplates = {
     reply_markup: {
       inline_keyboard: [
         [{ text: '✍️ Quick Reply', callback_data: `msg_reply:${convoId}` }],
-        [{ text: '🌐 View in App', url: `https://open-notes-in-client.vercel.app/messages` }]
+        [{ text: '💬 Chat on Application', url: 'https://open-notes-in-client.vercel.app/messages' }]
       ]
     }
   }),
