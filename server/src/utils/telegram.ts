@@ -555,7 +555,7 @@ export const telegramTemplates = {
           { text: '🔑 Show PIN', callback_data: `show_pin:${itemId}` },
           { text: '📍 I\'m Here', callback_data: `im_here:${itemId}` }
         ],
-        [{ text: '💬 Chat on Application', url: 'https://open-notes-in-client.vercel.app/messages' }],
+        [{ text: '💬 Chat on Application', url: `${process.env.FRONTEND_URL || 'https://opennotes.in'}/messages` }],
         [{ text: '📋 View All Details', callback_data: `ord_det:${itemId}` }]
       ]
     }
@@ -569,7 +569,7 @@ export const telegramTemplates = {
           { text: '✅ Acknowledge', callback_data: `ack_ord:${itemId}` },
           { text: '⌨️ Enter PIN', callback_data: `enter_pin:${itemId}` }
         ],
-        [{ text: '💬 Chat on Application', url: 'https://open-notes-in-client.vercel.app/messages' }],
+        [{ text: '💬 Chat on Application', url: `${process.env.FRONTEND_URL || 'https://opennotes.in'}/messages` }],
         [{ text: '📍 I\'m Here', callback_data: `im_here:${itemId}` }],
         [{ text: '📋 View All Details', callback_data: `ord_det:${itemId}` }]
       ]
@@ -584,24 +584,24 @@ export const telegramTemplates = {
           { text: '📍 I\'m Here', callback_data: `im_here:${itemId}` },
           { text: role === 'Seller' ? '⌨️ Enter PIN' : '🔑 Show PIN', callback_data: role === 'Seller' ? `enter_pin:${itemId}` : `show_pin:${itemId}` }
         ],
-        [{ text: '💬 Chat on Application', url: 'https://open-notes-in-client.vercel.app/messages' }]
+        [{ text: '💬 Chat on Application', url: `${process.env.FRONTEND_URL || 'https://opennotes.in'}/messages` }]
       ]
     }
   }),
 
   orderCompleted: (name: string, item: string, price: number, qty: number, role: 'Buyer' | 'Seller', otherParty: string) =>
-    `🎉 <b>Exchange Completed!</b>\n\nHi <b>${name}</b>, the exchange was successful.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer')}\n\n${role === 'Seller' ? '✅ Earnings added to your balance.' : '✅ Purchase confirmed.'}\n\n<a href="https://open-notes-in-client.vercel.app/">Open OpenNotes.in →</a>`,
+    `🎉 <b>Exchange Completed!</b>\n\nHi <b>${name}</b>, the exchange was successful.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer')}\n\n${role === 'Seller' ? '✅ Earnings added to your balance.' : '✅ Purchase confirmed.'}\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`,
 
   newMessage: (name: string, senderName: string, content: string, convoId: string) => ({
     text: `💬 <b>New Message from ${senderName}</b>\n\n"${content}"`,
     reply_markup: {
       inline_keyboard: [
         [{ text: '✍️ Quick Reply', callback_data: `msg_reply:${convoId}` }],
-        [{ text: '💬 Chat on Application', url: 'https://open-notes-in-client.vercel.app/messages' }]
+        [{ text: '💬 Chat on Application', url: `${process.env.FRONTEND_URL || 'https://opennotes.in'}/messages` }]
       ]
     }
   }),
 
   generic: (title: string, message: string, linkUrl?: string) => 
-    `<b>${title}</b>\n\n${message}${linkUrl ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : '\n\n<a href="https://open-notes-in-client.vercel.app/">Open OpenNotes.in →</a>'}`
+    `<b>${title}</b>\n\n${message}${linkUrl ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : `\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`}`
 };
