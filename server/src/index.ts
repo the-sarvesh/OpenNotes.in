@@ -97,7 +97,9 @@ app.use((req, res, next) => {
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
-  process.env.FRONTEND_URL?.replace(/\/$/, "")
+  process.env.FRONTEND_URL?.replace(/\/$/, ""),
+  "https://opennotes.in",
+  "https://www.opennotes.in"
 ].filter(Boolean) as string[];
 
 // Fallback if FRONTEND_URL is missing but we know the Vercel domain
