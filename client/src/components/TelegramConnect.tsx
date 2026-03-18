@@ -31,32 +31,9 @@ export const TelegramConnect: React.FC = () => {
       const res = await apiRequest('/api/telegram/generate-token');
       const data = await res.json();
       if (res.ok && data.link) {
-        const botUsername = data.link.split('/').pop()?.split('?')[0];
-        const token = data.link.split('start=').pop();
-        const appLink = `tg://resolve?domain=${botUsername}&start=${token}`;
-        
-        // 1. Try to trigger the desktop/mobile app directly in the CURRENT tab
-        window.location.assign(appLink);
-        
-        toast.success('Attempting to open Telegram...');
-
-        // 2. Fallback: Provide a manual link in the toast if they are stuck
-        setTimeout(() => {
-          toast((t) => (
-            <span className="text-xs">
-              If Telegram didn't open, 
-              <button 
-                onClick={() => {
-                  window.open(data.link, '_blank');
-                  toast.dismiss(t.id);
-                }}
-                className="ml-1 text-blue-600 font-bold hover:underline"
-              >
-                click here
-              </button>
-            </span>
-          ), { icon: '🌐', duration: 8000 });
-        }, 3500);
+        // Open directly in a new tab - confirmed as most reliable method by user
+        window.open(data.link, '_blank', 'noopener,noreferrer');
+        toast.success('Opening Telegram in a new tab...');
       } else {
         toast.error(data.error || 'Failed to generate linking token');
       }
