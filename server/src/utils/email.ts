@@ -179,7 +179,7 @@ export function verificationEmail(
     .greeting { font-size: 24px; font-weight: 700; color: #0f172a; margin: 0 0 16px; }
     .text { font-size: 15px; line-height: 1.7; color: #475569; margin: 0 0 32px; }
     .btn-container { text-align: center; margin-bottom: 32px; }
-    .btn { display: inline-block; background-color: #facc15; color: #000000; padding: 16px 40px; border-radius: 14px; font-size: 16px; font-weight: 700; text-decoration: none; transition: transform 0.2s ease, box-shadow 0.2s ease; box-shadow: 0 4px 15px rgba(250, 204, 21, 0.3); }
+    .btn { display: inline-block; background-color: #facc15; color: #000000 !important; padding: 16px 40px; border-radius: 14px; font-size: 16px; font-weight: 700; text-decoration: none; transition: transform 0.2s ease, box-shadow 0.2s ease; box-shadow: 0 4px 15px rgba(250, 204, 21, 0.3); }
     .footer { background-color: #fcfdfe; padding: 32px; border-top: 1px solid #f1f5f9; text-align: center; }
     .footer-text { font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0; }
     .fallback { background-color: #f8fafc; padding: 16px; border-radius: 12px; margin-top: 24px; word-break: break-all; border: 1px dashed #e2e8f0; }
