@@ -430,6 +430,25 @@ const App: React.FC = () => {
       }
     });
   };
+  const handleTelegramConnect = async () => {
+    requireAuth(async () => {
+      const toastId = toast.loading("Generating connection link...");
+      try {
+        const res = await apiRequest("/api/telegram/generate-token");
+        const data = await res.json();
+        if (res.ok && data.link) {
+          // Try to open Telegram app directly, fallback to web
+          // Directly open in a new tab - confirmed as most reliable method by user
+          window.open(data.link, "_blank", "noopener,noreferrer");
+          toast.success("Opening Telegram in a new tab...", { id: toastId });
+        } else {
+          toast.error(data.error || "Failed to generate link", { id: toastId });
+        }
+      } catch (err) {
+        toast.error("Network error. Please try again.", { id: toastId });
+      }
+    });
+  };
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -449,6 +468,7 @@ const App: React.FC = () => {
           setSelectedConversationId(null);
           navigate("/messages");
         }}
+        onTelegramClick={handleTelegramConnect}
       />
       <main className="flex-1">
         <AnimatePresence mode="wait">
