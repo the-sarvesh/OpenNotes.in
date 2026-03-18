@@ -17,13 +17,14 @@ import { apiRequest, API_BASE_URL } from "../utils/api.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AuthMode = "login" | "register" | "forgot" | "reset";
+type AuthMode = "login" | "register" | "forgot" | "reset" | "verify_pending";
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultMode?: AuthMode;
   resetToken?: string;
+  initialEmail?: string;
 }
 
 // ── Animation preset ──────────────────────────────────────────────────────────
@@ -37,9 +38,18 @@ const SLIDE = {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-const ErrorBanner = ({ msg }: { msg: string }) => (
-  <div className="p-3 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-200 dark:border-red-900/50 text-center font-medium">
-    {msg}
+const ErrorBanner = ({ msg, onAction, actionLabel }: { msg: string; onAction?: () => void; actionLabel?: string }) => (
+  <div className="p-3 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-200 dark:border-red-900/50 text-center font-medium space-y-2">
+    <p>{msg}</p>
+    {onAction && actionLabel && (
+      <button
+        type="button"
+        onClick={onAction}
+        className="text-xs font-bold underline decoration-red-400/50 hover:decoration-red-400"
+      >
+        {actionLabel}
+      </button>
+    )}
   </div>
 );
 
@@ -135,15 +145,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   defaultMode = "login",
   resetToken = "",
+  initialEmail = "",
 }) => {
   const [mode, setMode] = useState<AuthMode>(defaultMode);
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [upiId, setUpiId] = useState("");
 
   const [forgotSent, setForgotSent] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
   const [token, setToken] = useState(resetToken);
   const [newPassword, setNewPassword] = useState("");
@@ -158,6 +170,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   useEffect(() => { setMode(defaultMode); }, [defaultMode]);
   useEffect(() => { setToken(resetToken); }, [resetToken]);
+  useEffect(() => { if (initialEmail) setEmail(initialEmail); }, [initialEmail]);
 
   // Scroll lock
   useEffect(() => {
@@ -178,7 +191,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleClose = () => {
     setError(""); setEmail(""); setPassword(""); setName(""); setUpiId("");
-    setForgotSent(false); setNewPassword(""); setConfirmPw(""); setResetDone(false);
+    setForgotSent(false); setResendSent(false); setNewPassword(""); setConfirmPw(""); setResetDone(false);
     setMode(defaultMode);
     onClose();
   };
@@ -197,9 +210,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         : { email, password, name, upi_id: upiId };
       const res = await apiRequest(endpoint, { method: "POST", body: JSON.stringify(body) });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Authentication failed");
-      login(data.user);
-      handleClose();
+      
+      if (!res.ok) {
+        if (data.requiresVerification) {
+          setError(data.error);
+          return;
+        }
+        throw new Error(data.error || "Authentication failed");
+      }
+
+      if (mode === "register") {
+        setMode("verify_pending");
+      } else {
+        login(data.user);
+        handleClose();
+      }
+    } catch (err: any) { setError(err.message); }
+    finally { setIsLoading(false); }
+  };
+
+  const handleResendVerification = async () => {
+    setError(""); setIsLoading(true);
+    try {
+      const res = await apiRequest("/api/auth/resend-verification", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to resend email");
+      setResendSent(true);
+      if (mode !== "verify_pending") setMode("verify_pending");
     } catch (err: any) { setError(err.message); }
     finally { setIsLoading(false); }
   };
@@ -313,7 +353,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <p className="text-xs text-text-muted">Use the "Sign in with Google" button above.</p>
                       </div>
                     ) : (
-                      <ErrorBanner msg={error} />
+                      <ErrorBanner 
+                        msg={error} 
+                        onAction={error.includes("verify") ? handleResendVerification : undefined}
+                        actionLabel={error.includes("verify") ? "Resend verification email →" : undefined}
+                      />
                     )}
                     {error === "User not found" && mode === "login" && (
                       <button type="button" onClick={() => switchMode("register")}
@@ -513,6 +557,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button type="button" onClick={() => { setResetDone(false); switchMode("login"); }}
                   className="px-8 py-3 bg-primary hover:bg-primary-hover text-black rounded-2xl font-bold text-sm transition-all shadow-md">
                   Sign In Now
+                </button>
+              </motion.div>
+            )}
+
+            {/* ════════════ VERIFY PENDING ════════════ */}
+            {mode === "verify_pending" && (
+              <motion.div key="verify-pending" {...SLIDE} className="px-6 pb-8 flex flex-col items-center text-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mt-2">
+                  <Mail className="h-8 w-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-text-main mb-1">Verify your email</h3>
+                  <p className="text-sm text-text-muted leading-relaxed max-w-xs">
+                    We've sent a verification link to <strong>{email}</strong>. 
+                    Please check your inbox (and spam folder) to activate your account.
+                  </p>
+                </div>
+
+                {resendSent ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Link resent!</span>
+                  </div>
+                ) : (
+                  <button type="button" onClick={handleResendVerification} disabled={isLoading}
+                    className="text-xs font-bold text-primary hover:underline disabled:opacity-50">
+                    {isLoading ? "Resending..." : "Didn't get the email? Resend link"}
+                  </button>
+                )}
+
+                <button type="button" onClick={() => switchMode("login")}
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-text-main rounded-2xl font-bold text-sm transition-all">
+                  Back to Login
                 </button>
               </motion.div>
             )}

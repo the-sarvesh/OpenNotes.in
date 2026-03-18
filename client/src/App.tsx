@@ -87,6 +87,7 @@ const App: React.FC = () => {
     "login" | "register" | "forgot" | "reset"
   >("login");
   const [resetToken, setResetToken] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
@@ -132,6 +133,33 @@ const App: React.FC = () => {
         setResetToken(token);
         setAuthMode("reset");
         setShowAuth(true);
+        window.history.replaceState({}, document.title, "/");
+      }
+    }
+  }, []);
+
+  // ── Handle email verification deep link (/verify-email?token=...) ────────
+  useEffect(() => {
+    if (window.location.pathname === "/verify-email") {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
+      if (token) {
+        const verify = async () => {
+          try {
+            const res = await apiRequest(`/api/auth/verify-email?token=${token}`);
+            const data = await res.json();
+            if (res.ok) {
+              toast.success(data.message || "Email verified! You can now log in.", { duration: 5000 });
+              setAuthMode("login");
+              setShowAuth(true);
+            } else {
+              toast.error(data.error || "Verification failed.", { duration: 5000 });
+            }
+          } catch (err) {
+            toast.error("Network error during verification.");
+          }
+        };
+        verify();
         window.history.replaceState({}, document.title, "/");
       }
     }
@@ -514,9 +542,11 @@ const App: React.FC = () => {
             setShowAuth(false);
             setAuthMode("login");
             setResetToken("");
+            setAuthEmail("");
           }}
           defaultMode={authMode}
           resetToken={resetToken}
+          initialEmail={authEmail}
         />
 
         <ProfileCompletionModal

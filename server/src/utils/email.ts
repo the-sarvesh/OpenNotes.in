@@ -28,6 +28,7 @@ export interface MailOptions {
   subject: string;
   html: string;
   text?: string;
+  attachments?: any[];
 }
 
 /**
@@ -42,6 +43,7 @@ export async function sendMail(opts: MailOptions): Promise<void> {
       subject: opts.subject,
       html: opts.html,
       text: opts.text ?? opts.html.replace(/<[^>]+>/g, ""),
+      attachments: opts.attachments,
     });
   } else {
     // ── DEV FALLBACK ───────────────────────────────────────────────────────
@@ -151,5 +153,92 @@ export function passwordResetEmail(
     to: "", // filled by caller
     subject: "Reset your OpenNotes password",
     html,
+  };
+}
+
+export function verificationEmail(
+  name: string,
+  verifyUrl: string,
+): MailOptions {
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify your OpenNotes account</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    .wrapper { width: 100%; table-layout: fixed; background-color: #f8fafc; padding: 40px 16px; }
+    .main { max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04); overflow: hidden; border: 1px solid #eef2f6; }
+    .header { background-color: #0f172a; padding: 40px 32px; text-align: center; }
+    .logo { color: #facc15; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+    .logo span { color: #ffffff; }
+    .banner { width: 100%; max-height: 200px; object-fit: cover; }
+    .content { padding: 40px 32px; text-align: left; }
+    .greeting { font-size: 24px; font-weight: 700; color: #0f172a; margin: 0 0 16px; }
+    .text { font-size: 15px; line-height: 1.7; color: #475569; margin: 0 0 32px; }
+    .btn-container { text-align: center; margin-bottom: 32px; }
+    .btn { display: inline-block; background-color: #facc15; color: #000000; padding: 16px 40px; border-radius: 14px; font-size: 16px; font-weight: 700; text-decoration: none; transition: transform 0.2s ease, box-shadow 0.2s ease; box-shadow: 0 4px 15px rgba(250, 204, 21, 0.3); }
+    .footer { background-color: #fcfdfe; padding: 32px; border-top: 1px solid #f1f5f9; text-align: center; }
+    .footer-text { font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0; }
+    .fallback { background-color: #f8fafc; padding: 16px; border-radius: 12px; margin-top: 24px; word-break: break-all; border: 1px dashed #e2e8f0; }
+    .fallback-title { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px; display: block; }
+    .fallback-link { font-size: 11px; color: #64748b; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="main">
+      <div class="header">
+        <h1 class="logo">Open<span>Notes.in</span></h1>
+      </div>
+      
+      <!-- Logo/Graphic -->
+      <img src="cid:emailBanner" alt="OpenNotes" class="banner" />
+
+      <div class="content">
+        <p class="greeting">Hey ${name.split(' ')[0]}! 👋</p>
+        <p class="text">
+          Thanks for joining OpenNotes.in! We're the community for sharing and finding the best notes across semesters. 
+          To activate your account and start exploring, please verify your email address.
+        </p>
+
+        <div class="btn-container">
+          <a href="${verifyUrl}" class="btn">Verify Your Account</a>
+        </div>
+
+        <p class="text" style="font-size: 13px; color: #94a3b8; margin: 0;">
+          This link expires in 24 hours. Didn't sign up? Just ignore this.
+        </p>
+      </div>
+
+      <div class="footer">
+        <p class="footer-text">
+          <strong>OpenNotes.in</strong><br>
+          Bitsian Notes Exchange Platform
+        </p>
+        
+        <div class="fallback">
+          <span class="fallback-title">Link not working? Copy & Paste:</span>
+          <a href="${verifyUrl}" class="fallback-link">${verifyUrl}</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return {
+    to: "",
+    subject: "Activate your OpenNotes account",
+    html,
+    attachments: [
+      {
+        filename: "banner.png",
+        path: "C:/Users/91637/.gemini/antigravity/brain/ab3c3993-4193-4ed2-953e-cc489c28b4b6/opennotes_email_banner_1773856893541.png",
+        cid: "emailBanner",
+      },
+    ],
   };
 }
