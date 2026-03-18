@@ -235,8 +235,8 @@ export function verificationEmail(
     html,
     attachments: [
       {
-        filename: "banner.png",
-        path: "C:/Users/91637/.gemini/antigravity/brain/ab3c3993-4193-4ed2-953e-cc489c28b4b6/opennotes_email_banner_1773856893541.png",
+        filename: "logo.png",
+        path: "e:/My_learnings/Fun_projects/bits-notes-exchange/client/public/logo512.png",
         cid: "emailBanner",
       },
     ],
