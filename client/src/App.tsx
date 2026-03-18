@@ -80,8 +80,8 @@ const App: React.FC = () => {
   // ── UI state ──────────────────────────────────────────────────────────
   const [showAuth, setShowAuth] = useState(false);
   const [showProfileCompletion, setShowProfileCompletion] = useState(false);
-  const [hasDismissedProfileModal, setHasDismissedProfileModal] = useState(() => {
-    return localStorage.getItem("dismissedProfileModal") === "true";
+  const [profileModalDismissCount, setProfileModalDismissCount] = useState<number>(() => {
+    return parseInt(localStorage.getItem("profileModalDismissCount") || "0", 10);
   });
   const [authMode, setAuthMode] = useState<
     "login" | "register" | "forgot" | "reset"
@@ -107,7 +107,10 @@ const App: React.FC = () => {
   const { user, login } = useAuth();
 
   useEffect(() => {
-    if (user && (!user.mobile_number || !user.upi_id) && !hasDismissedProfileModal) {
+    const isProfileIncomplete = user && (!user.mobile_number || !user.upi_id);
+    const hasNotExceededStrikes = profileModalDismissCount < 3;
+
+    if (isProfileIncomplete && hasNotExceededStrikes) {
       // Don't show if they are on the auth callback page (it's too fast)
       if (location.pathname !== "/auth/callback") {
         setShowProfileCompletion(true);
@@ -115,7 +118,7 @@ const App: React.FC = () => {
     } else {
       setShowProfileCompletion(false);
     }
-  }, [user, location.pathname, hasDismissedProfileModal]);
+  }, [user, location.pathname, profileModalDismissCount]);
 
   // ── Validate cart freshness whenever user authenticates (FE-4) ───────────
   useEffect(() => {
@@ -554,8 +557,14 @@ const App: React.FC = () => {
           isOpen={showProfileCompletion}
           onClose={() => {
             setShowProfileCompletion(false);
-            setHasDismissedProfileModal(true);
-            localStorage.setItem("dismissedProfileModal", "true");
+            // Only increment strike count if they dismissed without completing
+            if (user && (!user.mobile_number || !user.upi_id)) {
+              setProfileModalDismissCount((prev) => {
+                const newCount = prev + 1;
+                localStorage.setItem("profileModalDismissCount", newCount.toString());
+                return newCount;
+              });
+            }
           }}
         />
 
