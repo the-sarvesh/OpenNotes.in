@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MessageCircle, CheckCircle2, ShieldAlert, Info, Loader2 } from 'lucide-react';
+import { Send, CheckCircle2, ShieldAlert, Info, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { apiRequest } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -31,8 +31,32 @@ export const TelegramConnect: React.FC = () => {
       const res = await apiRequest('/api/telegram/generate-token');
       const data = await res.json();
       if (res.ok && data.link) {
-        window.open(data.link, '_blank');
-        toast.success('Opening Telegram...');
+        const botUsername = data.link.split('/').pop()?.split('?')[0];
+        const token = data.link.split('start=').pop();
+        const appLink = `tg://resolve?domain=${botUsername}&start=${token}`;
+        
+        // 1. Try to trigger the desktop/mobile app directly in the CURRENT tab
+        window.location.assign(appLink);
+        
+        toast.success('Attempting to open Telegram...');
+
+        // 2. Fallback: Provide a manual link in the toast if they are stuck
+        setTimeout(() => {
+          toast((t) => (
+            <span className="text-xs">
+              If Telegram didn't open, 
+              <button 
+                onClick={() => {
+                  window.open(data.link, '_blank');
+                  toast.dismiss(t.id);
+                }}
+                className="ml-1 text-blue-600 font-bold hover:underline"
+              >
+                click here
+              </button>
+            </span>
+          ), { icon: '🌐', duration: 8000 });
+        }, 3500);
       } else {
         toast.error(data.error || 'Failed to generate linking token');
       }
@@ -66,7 +90,7 @@ export const TelegramConnect: React.FC = () => {
     <div className="bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
       <div className="flex items-center gap-3 mb-6">
         <div className="p-2.5 bg-blue-500/10 rounded-2xl text-blue-600">
-          <MessageCircle className="h-5 w-5" />
+          <Send className="h-5 w-5" />
         </div>
         <div>
           <h3 className="text-sm font-black text-text-main uppercase tracking-widest">Telegram Notifications</h3>
@@ -111,7 +135,7 @@ export const TelegramConnect: React.FC = () => {
               disabled={generating}
               className="w-full sm:w-auto px-6 py-2.5 bg-primary hover:bg-primary-hover text-black rounded-xl font-black text-[10px] uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
+              {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
               Connect Bot
             </button>
           )

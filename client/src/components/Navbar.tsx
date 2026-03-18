@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, PlusCircle, ShoppingBag, Sun, Moon,
   ShoppingCart, MessageCircle, Menu, User as UserIcon, Bell,
-  ChevronDown, LogOut, X, HelpCircle, FileText
+  ChevronDown, LogOut, X, HelpCircle, FileText, Send
 } from 'lucide-react';
 import { useNavigate, NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,13 +26,14 @@ interface NavbarProps {
   unreadNotificationCount?: number;
   onShowGuide?: () => void;
   onMessagesClick?: () => void;
+  onTelegramClick?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   isDark, toggleDark,
   cartCount, setShowAuth,
   unreadMessageCount = 0, unreadNotificationCount = 0,
-  onShowGuide, onMessagesClick,
+  onShowGuide, onMessagesClick, onTelegramClick,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -293,7 +294,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="hidden md:flex items-center gap-1">
                 {iconBtn(onShowGuide || (() => { }), <HelpCircle className="h-4 w-4" />, undefined, 'How it works')}
                 {iconBtn(toggleDark, isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />, undefined, 'Toggle theme')}
-                {user && !telegramLinked && iconBtn(() => navigate('/profile?tab=settings'), <MessageCircle className="h-4 w-4 text-[#FFC000]" />, undefined, 'Connect Telegram')}
+                {user && !telegramLinked && iconBtn(onTelegramClick || (() => { }), <Send className="h-3.5 w-3.5 text-[#229ED9]" />, undefined, 'Connect Telegram')}
               </div>
 
               {user && (
@@ -506,7 +507,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ...(user ? [
                     { icon: UserIcon, label: 'Dashboard', path: '/profile' },
                     { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
-                    ...(!telegramLinked ? [{ icon: MessageCircle, label: 'Connect Telegram', path: '/profile?tab=settings', color: '#FFC000' }] : []),
+                    ...(!telegramLinked ? [{ icon: Send, label: 'Connect Telegram', onClick: onTelegramClick, color: '#229ED9' }] : []),
                   ] : []),
                   { icon: isDark ? Sun : Moon, label: `${isDark ? 'Light' : 'Dark'} Mode`, path: null, onClick: () => toggleDark() },
                   { icon: HelpCircle, label: 'How it Works', path: null, onClick: () => { onShowGuide?.(); setIsMenuOpen(false); } },

@@ -60,8 +60,9 @@ export const TelegramNudge: React.FC = () => {
       const res = await apiRequest('/api/telegram/generate-token');
       const data = await res.json();
       if (res.ok && data.link) {
-        window.open(data.link, '_blank');
-        toast.success('Opening Telegram...');
+        // Open directly in a new tab - confirmed as most reliable method by user
+        window.open(data.link, '_blank', 'noopener,noreferrer');
+        toast.success('Opening Telegram in a new tab...');
         setIsVisible(false); // Close on success
       } else {
         toast.error(data.error || 'Failed to generate linking token');
