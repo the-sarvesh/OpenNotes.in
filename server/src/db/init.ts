@@ -16,7 +16,9 @@ const initDb = async () => {
         profile_image_url TEXT,
         google_id TEXT UNIQUE,
         role TEXT NOT NULL DEFAULT 'user',
-        status TEXT NOT NULL DEFAULT 'active',
+        is_verified INTEGER NOT NULL DEFAULT 0,
+        verification_token TEXT,
+        verification_token_expires_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -271,6 +273,9 @@ const initDb = async () => {
       "ALTER TABLE users ADD COLUMN telegram_chat_id TEXT",
       "ALTER TABLE users ADD COLUMN telegram_link_token TEXT",
       "CREATE INDEX IF NOT EXISTS idx_users_telegram_token ON users(telegram_link_token)",
+      "ALTER TABLE users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE users ADD COLUMN verification_token TEXT",
+      "ALTER TABLE users ADD COLUMN verification_token_expires_at DATETIME",
     ];
 
     for (const migration of migrations) {
@@ -352,6 +357,9 @@ const initDb = async () => {
             google_id TEXT,
             role TEXT NOT NULL DEFAULT 'user',
             status TEXT NOT NULL DEFAULT 'active',
+            is_verified INTEGER NOT NULL DEFAULT 0,
+            verification_token TEXT,
+            verification_token_expires_at DATETIME,
             rating_avg REAL DEFAULT 0,
             rating_count INTEGER DEFAULT 0,
             monthly_upload_limit INTEGER DEFAULT 10,
@@ -359,8 +367,8 @@ const initDb = async () => {
             telegram_link_token TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );
-          INSERT INTO users_new (id, email, name, password_hash, upi_id, google_id, role, status, rating_avg, rating_count, monthly_upload_limit, telegram_chat_id, telegram_link_token, created_at)
-          SELECT id, email, name, password_hash, upi_id, google_id, role, status, 
+          INSERT INTO users_new (id, email, name, password_hash, upi_id, google_id, role, status, is_verified, verification_token, verification_token_expires_at, rating_avg, rating_count, monthly_upload_limit, telegram_chat_id, telegram_link_token, created_at)
+          SELECT id, email, name, password_hash, upi_id, google_id, role, status, is_verified, verification_token, verification_token_expires_at,
                  COALESCE(rating_avg, 0), COALESCE(rating_count, 0), COALESCE(monthly_upload_limit, 10),
                  telegram_chat_id, telegram_link_token, created_at FROM users;
           DROP TABLE users;

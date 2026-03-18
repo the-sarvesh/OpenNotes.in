@@ -196,20 +196,32 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 bg-primary hover:bg-primary-hover text-black rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  "Save and Continue"
+              <div className="flex flex-col gap-3">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3 bg-primary hover:bg-primary-hover text-black rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save and Continue"
+                  )}
+                </button>
+                
+                {!isLoading && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full py-2.5 text-text-muted hover:text-text-main text-xs font-medium transition-colors"
+                  >
+                    Skip for now
+                  </button>
                 )}
-              </button>
+              </div>
             </form>
           )}
         </div>

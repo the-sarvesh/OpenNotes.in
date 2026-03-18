@@ -80,13 +80,14 @@ const App: React.FC = () => {
   // ── UI state ──────────────────────────────────────────────────────────
   const [showAuth, setShowAuth] = useState(false);
   const [showProfileCompletion, setShowProfileCompletion] = useState(false);
-  const [hasDismissedProfileModal, setHasDismissedProfileModal] = useState(() => {
-    return localStorage.getItem("dismissedProfileModal") === "true";
+  const [profileModalDismissCount, setProfileModalDismissCount] = useState<number>(() => {
+    return parseInt(localStorage.getItem("profileModalDismissCount") || "0", 10);
   });
   const [authMode, setAuthMode] = useState<
     "login" | "register" | "forgot" | "reset"
   >("login");
   const [resetToken, setResetToken] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
@@ -106,7 +107,10 @@ const App: React.FC = () => {
   const { user, login } = useAuth();
 
   useEffect(() => {
-    if (user && (!user.mobile_number || !user.upi_id) && !hasDismissedProfileModal) {
+    const isProfileIncomplete = user && (!user.mobile_number || !user.upi_id);
+    const hasNotExceededStrikes = profileModalDismissCount < 3;
+
+    if (isProfileIncomplete && hasNotExceededStrikes) {
       // Don't show if they are on the auth callback page (it's too fast)
       if (location.pathname !== "/auth/callback") {
         setShowProfileCompletion(true);
@@ -114,7 +118,7 @@ const App: React.FC = () => {
     } else {
       setShowProfileCompletion(false);
     }
-  }, [user, location.pathname, hasDismissedProfileModal]);
+  }, [user, location.pathname, profileModalDismissCount]);
 
   // ── Validate cart freshness whenever user authenticates (FE-4) ───────────
   useEffect(() => {
@@ -132,6 +136,33 @@ const App: React.FC = () => {
         setResetToken(token);
         setAuthMode("reset");
         setShowAuth(true);
+        window.history.replaceState({}, document.title, "/");
+      }
+    }
+  }, []);
+
+  // ── Handle email verification deep link (/verify-email?token=...) ────────
+  useEffect(() => {
+    if (window.location.pathname === "/verify-email") {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
+      if (token) {
+        const verify = async () => {
+          try {
+            const res = await apiRequest(`/api/auth/verify-email?token=${token}`);
+            const data = await res.json();
+            if (res.ok) {
+              toast.success(data.message || "Email verified! You can now log in.", { duration: 5000 });
+              setAuthMode("login");
+              setShowAuth(true);
+            } else {
+              toast.error(data.error || "Verification failed.", { duration: 5000 });
+            }
+          } catch (err) {
+            toast.error("Network error during verification.");
+          }
+        };
+        verify();
         window.history.replaceState({}, document.title, "/");
       }
     }
@@ -514,9 +545,11 @@ const App: React.FC = () => {
             setShowAuth(false);
             setAuthMode("login");
             setResetToken("");
+            setAuthEmail("");
           }}
           defaultMode={authMode}
           resetToken={resetToken}
+          initialEmail={authEmail}
         />
 
         <ProfileCompletionModal
@@ -524,8 +557,14 @@ const App: React.FC = () => {
           isOpen={showProfileCompletion}
           onClose={() => {
             setShowProfileCompletion(false);
-            setHasDismissedProfileModal(true);
-            localStorage.setItem("dismissedProfileModal", "true");
+            // Only increment strike count if they dismissed without completing
+            if (user && (!user.mobile_number || !user.upi_id)) {
+              setProfileModalDismissCount((prev) => {
+                const newCount = prev + 1;
+                localStorage.setItem("profileModalDismissCount", newCount.toString());
+                return newCount;
+              });
+            }
           }}
         />
 

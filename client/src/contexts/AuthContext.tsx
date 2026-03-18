@@ -44,7 +44,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
 
           if (res.ok) {
-            setUser(JSON.parse(storedUser));
+            const freshUser = await res.json();
+            setUser(freshUser);
+            localStorage.setItem('open_notes_user', JSON.stringify(freshUser));
           } else {
             logout(); // Session expired
           }
