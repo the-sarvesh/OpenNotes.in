@@ -200,7 +200,7 @@ export function verificationEmail(
       <div class="content">
         <p class="greeting">Hey ${name.split(' ')[0]}! 👋</p>
         <p class="text">
-          Thanks for joining OpenNotes.in! We're the community for sharing and finding the best notes across semesters. 
+          Thanks for joining OpenNotes.in! We are the community for sharing and finding the best learning resources across semesters. 
           To activate your account and start exploring, please verify your email address.
         </p>
 
