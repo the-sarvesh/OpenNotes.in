@@ -155,6 +155,11 @@ router.get('/:conversationId', async (req: AuthRequest, res, next) => {
       args: [conversationId as string, userId as string]
     });
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${userId}`).emit('unread_count_changed');
+    }
+
     const messages = await db.execute({
       sql: `
         SELECT m.id, m.conversation_id, m.sender_id, m.receiver_id, m.listing_id, 

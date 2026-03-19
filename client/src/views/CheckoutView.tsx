@@ -19,6 +19,8 @@ import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
 import toast from "react-hot-toast";
 import { apiRequest } from "../utils/api";
+import { LOCATIONS, STANDARD_SPOTS } from "../utils/constants";
+
 
 interface CheckoutViewProps {
   cart?: any[];
@@ -26,8 +28,6 @@ interface CheckoutViewProps {
   onBack?: () => void;
 }
 
-const LOCATIONS = ['Noida / Delhi NCR', 'Bengaluru', 'Hyderabad', 'Chennai', 'Pune', 'Other (Manual)'];
-const STANDARD_SPOTS = ['HCL Office', 'BITS Exam Center'];
 
 // ── Reusable section card ──────────────────────────────────────────
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({
@@ -103,9 +103,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
   const activeCart = cart || contextCart;
 
-  const [buyerLocation, setBuyerLocation] = useState("Noida / Delhi NCR");
+  const [buyerLocation, setBuyerLocation] = useState(LOCATIONS[0]);
   const [customBuyerLocation, setCustomBuyerLocation] = useState("");
-  const [buyerPreferredSpot, setBuyerPreferredSpot] = useState("HCL Office");
+  const [buyerPreferredSpot, setBuyerPreferredSpot] = useState(STANDARD_SPOTS[0]);
   const [buyerMeetupDetails, setBuyerMeetupDetails] = useState("");
   const [collectionDate, setCollectionDate] = useState("");
   const [collectionPeriod, setCollectionPeriod] = useState("Morning");

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, PlusCircle, ShoppingBag, Sun, Moon,
   ShoppingCart, MessageCircle, Menu, User as UserIcon, Bell,
-  ChevronDown, LogOut, X, HelpCircle, FileText, Send
+  ChevronDown, LogOut, X, HelpCircle, FileText, Send, Settings
 } from 'lucide-react';
 import { useNavigate, NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -397,12 +397,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                             </div>
                             <div className="p-1.5 space-y-0.5">
                               {[
-                                { icon: UserIcon, label: 'Dashboard', path: '/profile' },
+                                { icon: UserIcon, label: 'Dashboard', path: '/profile', state: { tab: 'overview' } },
                                 { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
-                              ].map(({ icon: Icon, label, path }) => (
+                                { icon: Settings, label: 'Settings', path: '/profile', state: { tab: 'settings' } },
+                              ].map(({ icon: Icon, label, path, state }) => (
                                 <button
-                                  key={path}
-                                  onClick={() => { navigate(path); setShowUserMenu(false); }}
+                                  key={label}
+                                  onClick={() => { navigate(path, { state }); setShowUserMenu(false); }}
                                   className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white text-sm font-medium transition-colors"
                                 >
                                   <Icon className="h-4 w-4" /> {label}
@@ -505,8 +506,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   { icon: FileText, label: 'Free Study Materials', path: '/resources' },
                   { icon: PlusCircle, label: 'Sell Notes', path: '/sell' },
                   ...(user ? [
-                    { icon: UserIcon, label: 'Dashboard', path: '/profile' },
+                    { icon: UserIcon, label: 'Dashboard', path: '/profile', state: { tab: 'overview' } },
                     { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
+                    { icon: Settings, label: 'Settings', path: '/profile', state: { tab: 'settings' } },
                     ...(!telegramLinked ? [{ icon: Send, label: 'Connect Telegram', onClick: onTelegramClick, color: '#229ED9' }] : []),
                   ] : []),
                   { icon: isDark ? Sun : Moon, label: `${isDark ? 'Light' : 'Dark'} Mode`, path: null, onClick: () => toggleDark() },
@@ -525,7 +527,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           if (needsAuth && !user) {
                             setShowAuth(true);
                           } else {
-                            navigate(path);
+                            navigate(path, { state: item.state });
                           }
                           setIsMenuOpen(false);
                         }

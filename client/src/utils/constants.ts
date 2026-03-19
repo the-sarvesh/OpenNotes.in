@@ -18,3 +18,17 @@ export const RESOURCE_CATEGORIES = [
   { id: 'assignment', label: 'Assignments' },
   { id: 'quiz', label: 'Quizzes' },
 ];
+
+export const LOCATIONS = [
+  'Noida / Delhi NCR',
+  'Bengaluru',
+  'Hyderabad',
+  'Chennai',
+  'Pune',
+  'Nagpur',
+  'Vijayawada',
+  'Lucknow',
+  'Other (Manual)'
+];
+
+export const STANDARD_SPOTS = ['HCL Office', 'BITS Exam Center'];
