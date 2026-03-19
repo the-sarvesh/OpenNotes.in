@@ -139,10 +139,10 @@ const App: React.FC = () => {
         setResetToken(token);
         setAuthMode("reset");
         setShowAuth(true);
-        window.history.replaceState({}, document.title, "/");
+        navigate("/", { replace: true });
       }
     }
-  }, []);
+  }, [navigate]);
 
   // ── Handle email verification deep link (/verify-email?token=...) ────────
   useEffect(() => {
@@ -163,13 +163,15 @@ const App: React.FC = () => {
             }
           } catch (err) {
             toast.error("Network error during verification.");
+          } finally {
+            // Use navigate for cleaner URL handling
+            navigate("/", { replace: true });
           }
         };
         verify();
-        window.history.replaceState({}, document.title, "/");
       }
     }
-  }, []);
+  }, [navigate]);
 
   // ── Handle OAuth Callback ─────────────────────────────────────────
   useEffect(() => {
@@ -371,7 +373,7 @@ const App: React.FC = () => {
   // No longer needed: Redirect logic handled by ProtectedRoute or similar if needed
   // For now, simple redirect in main Routes is better.
   const isProtected = (path: string) => {
-    const public_ = ["/", "/auth/callback", "/reset-password"];
+    const public_ = ["/", "/auth/callback", "/reset-password", "/verify-email"];
     return !public_.includes(path);
   };
 
@@ -584,6 +586,7 @@ const App: React.FC = () => {
               />
             } />
             <Route path="/auth/callback" element={<div className="min-h-[50vh] flex items-center justify-center text-text-muted font-medium animate-pulse">Authenticating with Google...</div>} />
+            <Route path="/verify-email" element={<div className="min-h-[50vh] flex items-center justify-center text-text-muted font-medium animate-pulse text-sm">Verifying your account...</div>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AnimatePresence>
