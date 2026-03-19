@@ -100,9 +100,15 @@ export function passwordResetEmail(
               </p>
 
               <!-- OTP Box -->
-              <div style="background:#f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
-                <span style="font-size: 32px; font-weight: 800; letter-spacing: 12px; color: #003366; font-family: monospace;">${otp}</span>
-              </div>
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td align="center">
+                    <div style="background:#f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; display: inline-block;">
+                      <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #003366; font-family: monospace; white-space: nowrap;">${otp}</span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
 
               <p style="margin:0 0 6px;font-size:12px;color:#94a3b8;">
                 If you are on the same device, you can also use this direct link:
@@ -193,9 +199,15 @@ export function verificationEmail(
           Enter this 6-digit code in the app to activate your account.
         </p>
 
-        <div class="otp-box">
-          <span class="otp-code">${otp}</span>
-        </div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 32px;">
+          <tr>
+            <td align="center">
+              <div class="otp-box" style="display: inline-block; margin-bottom: 0;">
+                <span class="otp-code" style="letter-spacing: 8px; font-size: 36px; white-space: nowrap;">${otp}</span>
+              </div>
+            </td>
+          </tr>
+        </table>
 
         <p class="text" style="font-size: 13px; margin-bottom: 12px; color: #94a3b8;">
           Or click this direct link if you're on the same device:

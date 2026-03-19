@@ -647,7 +647,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             prev?.focus();
                           }
                         }}
-                        className="w-full h-full bg-background border border-border rounded-xl text-center text-xl font-bold
+                        className="w-full h-full bg-white dark:bg-slate-900 border border-border rounded-xl text-center text-xl font-bold
+                                   text-slate-900 dark:text-white
                                    focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
                       />
                     </div>
