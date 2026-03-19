@@ -161,6 +161,7 @@ export const ProfileView = ({
   }, [user]);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [submittingPassword, setSubmittingPassword] = useState(false);
 
 
   // PIN verification
@@ -246,6 +247,7 @@ export const ProfileView = ({
       toast.error('Passwords do not match');
       return;
     }
+    setSubmittingPassword(true);
 
     try {
       const res = await apiRequest('/api/users/me/password', {
@@ -267,6 +269,8 @@ export const ProfileView = ({
       }
     } catch {
       toast.error('Network error');
+    } finally {
+      setSubmittingPassword(false);
     }
   };
 
@@ -827,10 +831,11 @@ export const ProfileView = ({
 
                 <button
                   onClick={handlePasswordChange}
-                  disabled={!newPassword || newPassword.length < 6 || newPassword !== confirmPassword || (user?.has_password && !currentPassword)}
-                  className="w-full py-5 bg-background hover:bg-surface border border-border text-text-main rounded-[1.5rem] font-black text-xs uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                  disabled={submittingPassword || !newPassword || newPassword.length < 6 || newPassword !== confirmPassword || (user?.has_password && !currentPassword)}
+                  className="w-full py-5 bg-background hover:bg-surface border border-border text-text-main rounded-[1.5rem] font-black text-xs uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  {user?.has_password ? 'Update Password' : 'Set Password'}
+                  {submittingPassword && <span className="h-3.5 w-3.5 rounded-full border-2 border-text-main/40 border-t-text-main animate-spin" />}
+                  {submittingPassword ? 'Updating...' : (user?.has_password ? 'Update Password' : 'Set Password')}
                 </button>
               </div>
 
