@@ -10,7 +10,9 @@ export interface User {
   location?: string;
   profile_image_url?: string;
   role?: string;
+  has_password?: boolean;
 }
+
 
 interface AuthContextType {
   user: User | null;

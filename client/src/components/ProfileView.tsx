@@ -161,6 +161,8 @@ export const ProfileView = ({
     }
   }, [user]);
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
 
   // PIN verification
   const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
@@ -237,18 +239,38 @@ export const ProfileView = ({
 
 
   const handlePasswordChange = async () => {
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
     try {
       const res = await apiRequest('/api/users/me/password', {
         method: 'PUT',
-        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+        body: JSON.stringify({ 
+          current_password: user?.has_password ? currentPassword : '', 
+          new_password: newPassword 
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success('Password changed!');
-        setCurrentPassword(''); setNewPassword('');
-      } else { toast.error(data.error || 'Change failed'); }
-    } catch { toast.error('Network error'); }
+        toast.success(user?.has_password ? 'Password updated!' : 'Password created!');
+        setCurrentPassword(''); 
+        setNewPassword(''); 
+        setConfirmPassword('');
+        await refreshUser();
+      } else { 
+        toast.error(data.error || 'Change failed'); 
+      }
+    } catch { 
+      toast.error('Network error'); 
+    }
   };
+
 
   const handleVerifyPin = async (itemId: string) => {
     if (!user) return;
@@ -773,27 +795,47 @@ export const ProfileView = ({
                   <div className="p-2.5 bg-amber-500/10 rounded-2xl text-amber-600">
                     <ShieldAlert className="h-5 w-5" />
                   </div>
-                  <h3 className="text-sm font-black text-text-main uppercase tracking-widest">Update Password</h3>
+                  <div>
+                    <h3 className="text-sm font-black text-text-main uppercase tracking-widest">
+                      {user?.has_password ? 'Update Password' : 'Create Password'}
+                    </h3>
+                    <p className="text-[10px] font-bold text-text-muted uppercase mt-0.5">
+                      {user?.has_password 
+                        ? 'Secure your account with a new password' 
+                        : 'Set a password to enable email login alongside Google'}
+                    </p>
+                  </div>
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-                  <div>
-                    <Label>Current Password</Label>
-                    <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <Label>New Password</Label>
-                    <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} />
+                <div className="space-y-6 mb-8">
+                  {user?.has_password && (
+                    <div>
+                      <Label>Current Password</Label>
+                      <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className={inputClass} placeholder="Enter your current password" />
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <Label>New Password</Label>
+                      <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} placeholder="At least 6 characters" />
+                    </div>
+                    <div>
+                      <Label>Confirm New Password</Label>
+                      <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className={inputClass} placeholder="Repeat new password" />
+                    </div>
                   </div>
                 </div>
                 
                 <button
                   onClick={handlePasswordChange}
-                  className="w-full py-4 bg-background hover:bg-surface border border-border text-text-main rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                  disabled={!newPassword || newPassword.length < 6 || newPassword !== confirmPassword || (user?.has_password && !currentPassword)}
+                  className="w-full py-5 bg-background hover:bg-surface border border-border text-text-main rounded-[1.5rem] font-black text-xs uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                 >
-                  Change Password
+                  {user?.has_password ? 'Update Password' : 'Set Password'}
                 </button>
               </div>
+
 
               <TelegramConnect />
 

@@ -17,7 +17,7 @@ import { upload, getFileUrl } from "../utils/cloudinary.js";
 router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const result = await db.execute({
-      sql: 'SELECT id, email, name, upi_id, role, mobile_number, location, profile_image_url, monthly_upload_limit, created_at FROM users WHERE id = ?',
+      sql: 'SELECT id, email, name, upi_id, role, mobile_number, location, profile_image_url, monthly_upload_limit, created_at, password_hash FROM users WHERE id = ?',
       args: [req.user!.id]
     });
 
@@ -25,7 +25,13 @@ router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(result.rows[0]);
+    const user = result.rows[0];
+    const userResponse = { ...user };
+    (userResponse as any).has_password = !!user.password_hash;
+    delete (userResponse as any).password_hash;
+
+    res.json(userResponse);
+
   } catch (error) {
     next(error);
   }
@@ -155,10 +161,18 @@ router.put('/me/password', authenticate, async (req: AuthRequest, res, next) => 
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const isValid = await bcrypt.compare(current_password, user.password_hash as string);
-    if (!isValid) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+    // If user already has a password, verify the current one
+    if (user.password_hash) {
+      if (!current_password) {
+        return res.status(400).json({ error: 'Current password is required to change password' });
+      }
+      const isValid = await bcrypt.compare(current_password, user.password_hash as string);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
     }
+    // If no password_hash, user is social-only and is setting their first password
+
 
     const newHash = await bcrypt.hash(new_password, 10);
     await db.execute({

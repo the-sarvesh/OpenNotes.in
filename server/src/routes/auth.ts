@@ -438,10 +438,11 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
 
     const user = userRes.rows[0];
 
-    // No user found or Google-only account → silent success
-    if (!user || !user.password_hash) {
+    // No user found → silent success
+    if (!user) {
       return res.json(GENERIC_OK);
     }
+
 
     // Invalidate any existing tokens for this user
     await db.execute({
