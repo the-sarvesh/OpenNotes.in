@@ -16,8 +16,8 @@ export function getSocket(): Socket {
     (import.meta as any).env.VITE_API_BASE_URL ||
     (import.meta as any).env.VITE_BACKEND_URL ||
     (typeof window !== "undefined"
-      ? (isLocal ? `${window.location.protocol}//${window.location.hostname}:5000` : '') 
-      : "http://localhost:5000");
+      ? (isLocal ? `${window.location.protocol}//${window.location.hostname}:5000` : 'https://api.opennotes.in') 
+      : "https://api.opennotes.in");
 
   socketInstance = io(SOCKET_URL, {
     withCredentials: true,
