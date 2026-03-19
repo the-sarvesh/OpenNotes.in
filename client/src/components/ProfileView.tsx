@@ -64,7 +64,7 @@ const StatCard: React.FC<{
     amber: 'bg-amber-500/5 border-amber-500/20 text-amber-600 dark:text-amber-400',
     primary: 'bg-primary/5 border-primary/20 text-primary',
   };
-  
+
   return (
     <div className={`rounded-3xl p-6 border transition-all hover:shadow-md ${styles[color]}`}>
       <div className="flex items-center gap-3 mb-4">
@@ -87,11 +87,10 @@ const QuickAction: React.FC<{
 }> = ({ label, description, icon, onClick, primary }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-4 p-5 rounded-[2rem] border transition-all text-left active:scale-[0.98] ${
-      primary 
-        ? 'bg-primary border-transparent text-black shadow-lg shadow-primary/20 hover:bg-primary-hover' 
+    className={`flex items-center gap-4 p-5 rounded-[2rem] border transition-all text-left active:scale-[0.98] ${primary
+        ? 'bg-primary border-transparent text-black shadow-lg shadow-primary/20 hover:bg-primary-hover'
         : 'bg-surface border-border text-text-main hover:bg-background hover:border-primary/30'
-    }`}
+      }`}
   >
     <div className={`p-3.5 rounded-2xl ${primary ? 'bg-white/20' : 'bg-primary/10 text-primary'}`}>
       {icon}
@@ -129,7 +128,7 @@ export const ProfileView = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
-  
+
   // Sync tab if prop changes or location state changes (e.g. from navbar or chat)
   useEffect(() => {
     if (location.state?.tab) {
@@ -251,23 +250,23 @@ export const ProfileView = ({
     try {
       const res = await apiRequest('/api/users/me/password', {
         method: 'PUT',
-        body: JSON.stringify({ 
-          current_password: user?.has_password ? currentPassword : '', 
-          new_password: newPassword 
+        body: JSON.stringify({
+          current_password: user?.has_password ? currentPassword : '',
+          new_password: newPassword
         }),
       });
       const data = await res.json();
       if (res.ok) {
         toast.success(user?.has_password ? 'Password updated!' : 'Password created!');
-        setCurrentPassword(''); 
-        setNewPassword(''); 
+        setCurrentPassword('');
+        setNewPassword('');
         setConfirmPassword('');
         await refreshUser();
-      } else { 
-        toast.error(data.error || 'Change failed'); 
+      } else {
+        toast.error(data.error || 'Change failed');
       }
-    } catch { 
-      toast.error('Network error'); 
+    } catch {
+      toast.error('Network error');
     }
   };
 
@@ -389,8 +388,8 @@ export const ProfileView = ({
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${activeTab === tab.id
-                ? 'bg-[#003366] text-white shadow-md shadow-[#003366]/20 border border-transparent'
-                : 'bg-surface text-text-muted border border-border hover:bg-background hover:bg-primary-hover'
+              ? 'bg-[#003366] text-white shadow-md shadow-[#003366]/20 border border-transparent'
+              : 'bg-surface text-text-muted border border-border hover:bg-background hover:bg-primary-hover'
               }`}
           >
             {tab.icon} {tab.label}
@@ -407,49 +406,49 @@ export const ProfileView = ({
         <AnimatePresence mode="wait">
           {/* ── Dashboard Overview ── */}
           {activeTab === 'overview' && (
-            <motion.div 
-              key="overview" 
-              initial={{ opacity: 0, y: 8 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              exit={{ opacity: 0 }} 
+            <motion.div
+              key="overview"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
               className="space-y-8"
             >
               {/* Stats Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <StatCard 
-                  label="Net Earnings" 
-                  value={salesData?.summary.netEarnings || 0} 
-                  icon={<TrendingUp className="h-5 w-5 text-emerald-600" />} 
-                  color="emerald" 
+                <StatCard
+                  label="Net Earnings"
+                  value={salesData?.summary.netEarnings || 0}
+                  icon={<TrendingUp className="h-5 w-5 text-emerald-600" />}
+                  color="emerald"
                 />
-                <StatCard 
-                  label="Active Listings" 
-                  value={listings.filter(l => l.status === 'active').length} 
-                  icon={<Package className="h-5 w-5 text-blue-600" />} 
-                  color="blue" 
+                <StatCard
+                  label="Active Listings"
+                  value={listings.filter(l => l.status === 'active').length}
+                  icon={<Package className="h-5 w-5 text-blue-600" />}
+                  color="blue"
                 />
-                <StatCard 
-                  label="Total Views" 
-                  value={listings.reduce((acc, l) => acc + (Number((l as any).views) || 0), 0)} 
-                  icon={<Eye className="h-5 w-5 text-amber-600" />} 
-                  color="amber" 
+                <StatCard
+                  label="Total Views"
+                  value={listings.reduce((acc, l) => acc + (Number((l as any).views) || 0), 0)}
+                  icon={<Eye className="h-5 w-5 text-amber-600" />}
+                  color="amber"
                 />
               </div>
 
               {/* Quick Actions */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <QuickAction 
-                  label="List New Item" 
-                  description="Upload your study materials" 
-                  icon={<PlusCircle className="h-6 w-6" />} 
-                  onClick={() => navigate('/sell')} 
-                  primary 
+                <QuickAction
+                  label="List New Item"
+                  description="Upload your study materials"
+                  icon={<PlusCircle className="h-6 w-6" />}
+                  onClick={() => navigate('/sell')}
+                  primary
                 />
-                <QuickAction 
-                  label="View Messages" 
-                  description="Check your chat inbox" 
-                  icon={<MessageCircle className="h-6 w-6" />} 
-                  onClick={() => navigate('/messages')} 
+                <QuickAction
+                  label="View Messages"
+                  description="Check your chat inbox"
+                  icon={<MessageCircle className="h-6 w-6" />}
+                  onClick={() => navigate('/messages')}
                 />
               </div>
 
@@ -548,8 +547,8 @@ export const ProfileView = ({
                             </span>
                           </div>
                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${listing.quantity > 0
-                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400'
+                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400'
                             }`}>
                             {listing.quantity > 0 ? `${listing.quantity} left` : 'Sold out'}
                           </span>
@@ -658,8 +657,7 @@ export const ProfileView = ({
                             </div>
 
                             <div className="flex flex-col items-end gap-1.5 shrink-0">
-                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
-                                sale.status === 'delivered' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${sale.status === 'delivered' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
                                   sale.status === 'shipped' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' :
                                     sale.status === 'pending_meetup' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' :
                                       'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
@@ -694,8 +692,8 @@ export const ProfileView = ({
                                   value={pinInputs[sale.id] || ''}
                                   onChange={e => setPinInputs(p => ({ ...p, [sale.id]: e.target.value.replace(/\D/g, '') }))}
                                   className={`w-full text-center text-lg font-black tracking-[0.4em] px-4 py-3 bg-surface border-2 rounded-xl outline-none transition-all placeholder:text-sm placeholder:tracking-normal placeholder:font-normal text-text-main ${pinErrors[sale.id]
-                                      ? 'border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/20'
-                                      : 'border-border focus:border-primary focus:ring-4 focus:ring-primary/20'
+                                    ? 'border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-500/20'
+                                    : 'border-border focus:border-primary focus:ring-4 focus:ring-primary/20'
                                     }`}
                                 />
                                 {pinErrors[sale.id] && (
@@ -728,7 +726,7 @@ export const ProfileView = ({
           {/* ── Settings ── */}
           {activeTab === 'settings' && (
             <motion.div key="settings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6 max-w-2xl mx-auto">
-              
+
               {/* Account Section */}
               <div className="bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
                 <div className="flex items-center gap-3 mb-8">
@@ -740,7 +738,7 @@ export const ProfileView = ({
                     <p className="text-[10px] font-bold text-text-muted uppercase mt-0.5">Your public identity</p>
                   </div>
                 </div>
-                
+
                 <div className="space-y-6">
                   <div>
                     <Label>Display Name</Label>
@@ -771,7 +769,7 @@ export const ProfileView = ({
                     <p className="text-[10px] font-bold text-text-muted uppercase mt-0.5">Where you get paid</p>
                   </div>
                 </div>
-                
+
                 <div>
                   <Label>UPI ID for Payouts</Label>
                   <input type="text" value={editUpi} onChange={e => setEditUpi(e.target.value)} placeholder="username@upi" className={inputClass} />
@@ -800,13 +798,13 @@ export const ProfileView = ({
                       {user?.has_password ? 'Update Password' : 'Create Password'}
                     </h3>
                     <p className="text-[10px] font-bold text-text-muted uppercase mt-0.5">
-                      {user?.has_password 
-                        ? 'Secure your account with a new password' 
+                      {user?.has_password
+                        ? 'Secure your account with a new password'
                         : 'Set a password to enable email login alongside Google'}
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="space-y-6 mb-8">
                   {user?.has_password && (
                     <div>
@@ -814,7 +812,7 @@ export const ProfileView = ({
                       <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className={inputClass} placeholder="Enter your current password" />
                     </div>
                   )}
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
                       <Label>New Password</Label>
@@ -826,7 +824,7 @@ export const ProfileView = ({
                     </div>
                   </div>
                 </div>
-                
+
                 <button
                   onClick={handlePasswordChange}
                   disabled={!newPassword || newPassword.length < 6 || newPassword !== confirmPassword || (user?.has_password && !currentPassword)}
@@ -1012,7 +1010,7 @@ export const ProfileView = ({
                 <div>
                   <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">Logistics & Location</p>
                   <div className="bg-surface/50 border border-border rounded-xl p-4 space-y-4">
-                    
+
                     {/* Seller Side (You) */}
                     <div className="space-y-3">
                       <div className="flex items-start gap-3">

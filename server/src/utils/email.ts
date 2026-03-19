@@ -12,12 +12,13 @@ const transport = hasSmtp
   ? nodemailer.createTransport({
       host: process.env.SMTP_HOST!,
       port: Number(process.env.SMTP_PORT ?? 587),
-      secure: process.env.SMTP_SECURE === "true", // true for 465
+      // Smart secure: default true for 465, false for others (like 587) unless overridden
+      secure: process.env.SMTP_SECURE === "true" || Number(process.env.SMTP_PORT) === 465,
       auth: {
         user: process.env.SMTP_USER!,
         pass: process.env.SMTP_PASS!,
       },
-      connectionTimeout: 10000, // 10 seconds
+      connectionTimeout: 10000, 
       greetingTimeout: 10000,
       socketTimeout: 15000,
     })
