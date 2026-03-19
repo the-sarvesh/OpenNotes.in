@@ -1,39 +1,5 @@
-import nodemailer from "nodemailer";
-
-// ── Transport factory ─────────────────────────────────────────────────────────
-// If SMTP_HOST / SMTP_USER / SMTP_PASS env vars are present we use a real
-// transport; otherwise we fall back to logging the email to the console so
-// local development still works without any mail server.
-
-const hasSmtp =
-  process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
-
-const transport = hasSmtp
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST!,
-      port: Number(process.env.SMTP_PORT ?? 587),
-      // Smart secure: default true for 465, false for others (like 587) unless overridden
-      secure: process.env.SMTP_SECURE === "true" || Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER!,
-        pass: process.env.SMTP_PASS!,
-      },
-      connectionTimeout: 10000, 
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    })
-  : null;
-  
-if (transport) {
-  transport.verify().then(() => {
-    console.log("[Email] SMTP connection verified successfully.");
-  }).catch((err) => {
-    console.error("[Email] SMTP verification FAILED:", err.message);
-  });
-}
-
-const FROM_ADDRESS =
-  process.env.EMAIL_FROM ?? "OpenNotes <no-reply@opennotes.in>";
+const RESEND_API_KEY = process.env.SMTP_PASS || process.env.RESEND_API_KEY;
+const FROM_ADDRESS = process.env.EMAIL_FROM ?? "OpenNotes <no-reply@opennotes.in>";
 
 export interface MailOptions {
   to: string;
@@ -44,47 +10,50 @@ export interface MailOptions {
 }
 
 /**
- * Send a transactional email.
- * In development (no SMTP env vars) the email is printed to the console instead.
+ * Send a transactional email via Resend HTTP API.
+ * This bypasses SMTP port blocking (587/465) on cloud providers like Render.
  */
 export async function sendMail(opts: MailOptions): Promise<void> {
-  if (transport) {
-    try {
-      console.log(`[Email] Attempting to send ${opts.subject} to ${opts.to}...`);
-      const info = await transport.sendMail({
+  // If no API key, log to console (dev mode)
+  if (!RESEND_API_KEY || process.env.NODE_ENV === "development") {
+    console.log("\n━━━━━━━━━━━━━━━━  📧  EMAIL (dev/mock mode)  ━━━━━━━━━━━━━━━━");
+    console.log(`TO:      ${opts.to}`);
+    console.log(`SUBJECT: ${opts.subject}`);
+    console.log("BODY (excerpt):");
+    console.log(opts.html.replace(/<[^>]+>/g, "").substring(0, 200) + "...");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    return;
+  }
+
+  try {
+    console.log(`[Email] Sending to ${opts.to} via Resend HTTP API...`);
+    
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
         from: FROM_ADDRESS,
         to: opts.to,
         subject: opts.subject,
         html: opts.html,
         text: opts.text ?? opts.html.replace(/<[^>]+>/g, ""),
-        attachments: opts.attachments,
-      });
-      console.log(`[Email] Success! MessageId: ${info.messageId}`);
-    } catch (err: any) {
-      console.error("[Email Error] Critical failure while sending email:");
-      console.error(`- To: ${opts.to}`);
-      console.error(`- Subject: ${opts.subject}`);
-      console.error(`- Error Code: ${err.code}`);
-      console.error(`- Error Message: ${err.message}`);
-      if (err.code === 'EAUTH') {
-        console.error("  TIP: Check your SMTP_USER and SMTP_PASS. For Resend, user is 'resend'.");
-      } else if (err.code === 'ESOCKET' || err.code === 'ETIMEDOUT') {
-        console.error("  TIP: Connection timed out. Try switching ports (587 vs 465) or check if your host blocks outgoing SMTP.");
-      } else if (err.message.includes('verified')) {
-        console.error("  TIP: Check if your domain is verified in your SMTP provider's dashboard.");
-      }
-      // Re-throw if we want the caller to handle it, but since we are calling it non-blocking in auth.ts, logging is key.
-      throw err;
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || `HTTP ${response.status} from Resend`);
     }
-  } else {
-    // ── DEV FALLBACK ───────────────────────────────────────────────────────
-    console.log("\n━━━━━━━━━━━━━━━━  📧  EMAIL (dev mode)  ━━━━━━━━━━━━━━━━");
-    console.log(`TO:      ${opts.to}`);
-    console.log(`SUBJECT: ${opts.subject}`);
-    console.log("BODY:");
-    // strip tags for readability
-    console.log(opts.html.replace(/<[^>]+>/g, "").replace(/\s{2,}/g, " ").trim());
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    console.log(`[Email] Success! Message ID: ${data.id}`);
+  } catch (err: any) {
+    console.error(`[Email Error] Failed to send via Resend API: ${err.message}`);
+    // We throw so the caller knows it failed if they await it
+    throw err;
   }
 }
 
