@@ -692,4 +692,28 @@ router.get("/debug-email", async (req, res) => {
   }
 });
 
+// ── GET /api/auth/debug-verify-user ──────────────────────────────────────────
+// Internal testing only — manually set is_verified = 1 for an email.
+router.get("/debug-verify-user", async (req, res) => {
+  const { email } = req.query;
+  if (!email || typeof email !== "string") {
+    return res.status(400).json({ error: "Email query param is required" });
+  }
+
+  try {
+    const result = await db.execute({
+      sql: "UPDATE users SET is_verified = 1, verification_token = NULL, verification_token_expires_at = NULL WHERE email = ?",
+      args: [email.toLowerCase().trim()],
+    });
+
+    if (result.rowsAffected === 0) {
+      return res.status(404).json({ success: false, error: "User not found with that email" });
+    }
+
+    res.json({ success: true, message: `User ${email} has been manually verified! You can now log in.` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;
