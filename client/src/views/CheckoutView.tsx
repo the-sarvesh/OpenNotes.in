@@ -103,9 +103,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
   const activeCart = cart || contextCart;
 
-  const [buyerLocation, setBuyerLocation] = useState("Noida / Delhi NCR");
+  const [buyerLocation, setBuyerLocation] = useState(LOCATIONS[0]);
   const [customBuyerLocation, setCustomBuyerLocation] = useState("");
-  const [buyerPreferredSpot, setBuyerPreferredSpot] = useState("HCL Office");
+  const [buyerPreferredSpot, setBuyerPreferredSpot] = useState(STANDARD_SPOTS[0]);
   const [buyerMeetupDetails, setBuyerMeetupDetails] = useState("");
   const [collectionDate, setCollectionDate] = useState("");
   const [collectionPeriod, setCollectionPeriod] = useState("Morning");

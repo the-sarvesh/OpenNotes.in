@@ -47,7 +47,7 @@ const INITIAL_FORM: FormData = {
   price: '',
   quantity: '1',
   condition: 'Good',
-  location: 'Noida / Delhi NCR',
+  location: LOCATIONS[0],
   customLocation: '',
   deliveryMethod: 'in_person',
   preferredMeetupSpot: STANDARD_SPOTS[0],
