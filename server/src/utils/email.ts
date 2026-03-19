@@ -224,8 +224,7 @@ export function verificationEmail(
         <h1 class="logo">Open<span>Notes.in</span></h1>
       </div>
       
-      <!-- Logo/Graphic -->
-      <img src="cid:emailBanner" alt="OpenNotes" class="banner" />
+      <!-- Logo/Graphic Removed for reliability - using CSS branding above -->
 
       <div class="content">
         <p class="greeting">Hey ${name.split(' ')[0]}! 👋</p>
@@ -263,12 +262,5 @@ export function verificationEmail(
     to: "",
     subject: "Activate your OpenNotes account",
     html,
-    attachments: [
-      {
-        filename: "logo.png",
-        path: "e:/My_learnings/Fun_projects/bits-notes-exchange/client/public/logo512.png",
-        cid: "emailBanner",
-      },
-    ],
   };
 }
