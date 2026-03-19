@@ -1,4 +1,5 @@
 import { io, Socket } from "socket.io-client";
+import { isLocal } from "./api";
 
 let socketInstance: Socket | null = null;
 
@@ -11,10 +12,12 @@ export function getSocket(): Socket {
   }
 
   const SOCKET_URL =
-    import.meta.env.VITE_API_URL ||
+    (import.meta as any).env.VITE_API_URL ||
+    (import.meta as any).env.VITE_API_BASE_URL ||
+    (import.meta as any).env.VITE_BACKEND_URL ||
     (typeof window !== "undefined"
-      ? `${window.location.protocol}//${window.location.hostname}:5000`
-      : "http://localhost:5000");
+      ? (isLocal ? `${window.location.protocol}//${window.location.hostname}:5000` : 'https://api.opennotes.in') 
+      : "https://api.opennotes.in");
 
   socketInstance = io(SOCKET_URL, {
     withCredentials: true,

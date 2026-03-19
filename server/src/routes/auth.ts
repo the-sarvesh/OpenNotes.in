@@ -292,7 +292,11 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
 
     const mailOpts = verificationEmail(name, verifyUrl);
     mailOpts.to = email;
-    await sendMail(mailOpts);
+    
+    // Send email asynchronously to avoid hanging the response
+    sendMail(mailOpts).catch(err => {
+      console.error("[Registration Email Error]:", err);
+    });
 
     res.status(201).json({
       message: "Registration successful! Please check your email to verify your account.",
@@ -471,7 +475,11 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
       RESET_TOKEN_EXPIRES_MINUTES,
     );
     mailOpts.to = user.email as string;
-    await sendMail(mailOpts);
+    
+    // Send email asynchronously
+    sendMail(mailOpts).catch(err => {
+      console.error("[Forgot Password Email Error]:", err);
+    });
 
     return res.json(GENERIC_OK);
   } catch (error) {
@@ -605,7 +613,11 @@ router.post("/resend-verification", async (req, res, next) => {
 
     const mailOpts = verificationEmail(user.name as string, verifyUrl);
     mailOpts.to = user.email as string;
-    await sendMail(mailOpts);
+    
+    // Send email asynchronously
+    sendMail(mailOpts).catch(err => {
+      console.error("[Resend Verification Email Error]:", err);
+    });
 
     res.json({
       message: "If that email is registered and unverified, a new link has been sent.",
