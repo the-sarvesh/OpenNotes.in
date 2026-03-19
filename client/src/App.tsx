@@ -83,6 +83,8 @@ const App: React.FC = () => {
   const [profileModalDismissCount, setProfileModalDismissCount] = useState<number>(() => {
     return parseInt(localStorage.getItem("profileModalDismissCount") || "0", 10);
   });
+  const [hasDismissedProfileModalThisSession, setHasDismissedProfileModalThisSession] = useState(false);
+
   const [authMode, setAuthMode] = useState<
     "login" | "register" | "forgot" | "reset"
   >("login");
@@ -110,7 +112,7 @@ const App: React.FC = () => {
     const isProfileIncomplete = user && (!user.mobile_number || !user.upi_id);
     const hasNotExceededStrikes = profileModalDismissCount < 3;
 
-    if (isProfileIncomplete && hasNotExceededStrikes) {
+    if (isProfileIncomplete && hasNotExceededStrikes && !hasDismissedProfileModalThisSession) {
       // Don't show if they are on the auth callback page (it's too fast)
       if (location.pathname !== "/auth/callback") {
         setShowProfileCompletion(true);
@@ -118,7 +120,8 @@ const App: React.FC = () => {
     } else {
       setShowProfileCompletion(false);
     }
-  }, [user, location.pathname, profileModalDismissCount]);
+  }, [user, location.pathname, profileModalDismissCount, hasDismissedProfileModalThisSession]);
+
 
   // ── Validate cart freshness whenever user authenticates (FE-4) ───────────
   useEffect(() => {
@@ -577,6 +580,7 @@ const App: React.FC = () => {
           isOpen={showProfileCompletion}
           onClose={() => {
             setShowProfileCompletion(false);
+            setHasDismissedProfileModalThisSession(true);
             // Only increment strike count if they dismissed without completing
             if (user && (!user.mobile_number || !user.upi_id)) {
               setProfileModalDismissCount((prev) => {
@@ -587,6 +591,7 @@ const App: React.FC = () => {
             }
           }}
         />
+
 
         {selectedNote && (
           <ProductDetailsModal
