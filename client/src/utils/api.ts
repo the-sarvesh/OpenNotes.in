@@ -55,7 +55,7 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
   }
 
   if (response.status === 403) {
-    const data = await response.json();
+    const data = await response.clone().json();
     if (data.error === 'ACCOUNT_BLOCKED') {
       localStorage.removeItem('open_notes_user');
       window.location.href = '/?error=blocked';
