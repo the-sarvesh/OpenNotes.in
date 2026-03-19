@@ -224,7 +224,8 @@ export function verificationEmail(
         <h1 class="logo">Open<span>Notes.in</span></h1>
       </div>
       
-      <!-- Logo/Graphic Removed for reliability - using CSS branding above -->
+      <!-- Logo/Graphic -->
+      <img src="${process.env.FRONTEND_URL?.replace(/\/$/, '') || 'https://opennotes.in'}/logo512.png" alt="OpenNotes" class="banner" />
 
       <div class="content">
         <p class="greeting">Hey ${name.split(' ')[0]}! 👋</p>
