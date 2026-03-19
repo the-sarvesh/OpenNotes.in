@@ -487,7 +487,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="md:hidden overflow-hidden bg-slate-900 border-t border-white/10"
+              className="md:hidden overflow-y-auto max-h-[calc(100vh-64px)] bg-slate-900 border-t border-white/10"
             >
               <div className="px-4 py-6 space-y-1">
                 {user && (
