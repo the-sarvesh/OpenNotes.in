@@ -167,8 +167,8 @@ router.put('/me/password', authenticate, async (req: AuthRequest, res, next) => 
     const { current_password, new_password } = req.body;
     const userId = req.user!.id;
 
-    if (!current_password || !new_password) {
-      return res.status(400).json({ error: 'Current and new password are required' });
+    if (!new_password) {
+      return res.status(400).json({ error: 'New password is required' });
     }
 
     if (new_password.length < 6) {
