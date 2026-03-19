@@ -43,6 +43,12 @@ const isAllowedEmail = (email: string): boolean => {
   return ALLOWED_DOMAINS.includes(domain);
 };
 
+// ── OTP Helper ─────────────────────────────────────────────────────────────
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+
 // ── Rate limiters ─────────────────────────────────────────────────────────────
 
 // max 10 auth attempts per 15 minutes per IP
@@ -66,6 +72,18 @@ const resetLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// max 5 OTP attempts per 10 minutes per IP
+const otpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  message: {
+    error: "Too many attempts. Please try again after 10 minutes",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 
 // ── Passport Google Strategy ──────────────────────────────────────────────────
 passport.use(
@@ -270,27 +288,27 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = (existingUser as any)?.id || uuidv4();
-    const verificationToken = randomBytes(32).toString("hex");
+    const otp = generateOTP();
     const verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     if (existingUser) {
       // Update existing unverified user
       await db.execute({
         sql: "UPDATE users SET name = ?, password_hash = ?, upi_id = ?, verification_token = ?, verification_token_expires_at = ? WHERE id = ?",
-        args: [name, hashedPassword, upi_id || null, verificationToken, verificationTokenExpiresAt, userId],
+        args: [name, hashedPassword, upi_id || null, otp, verificationTokenExpiresAt, userId],
       });
     } else {
       // Create new user
       await db.execute({
         sql: "INSERT INTO users (id, email, name, password_hash, upi_id, verification_token, verification_token_expires_at, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-        args: [userId, email, name, hashedPassword, upi_id || null, verificationToken, verificationTokenExpiresAt],
+        args: [userId, email, name, hashedPassword, upi_id || null, otp, verificationTokenExpiresAt],
       });
     }
 
     const { frontendUrl } = getUrls(req);
-    const verifyUrl = `${frontendUrl}/verify-email?token=${verificationToken}`;
+    const verifyUrl = `${frontendUrl}/verify-email?token=${otp}&email=${encodeURIComponent(email)}`;
 
-    const mailOpts = verificationEmail(name, verifyUrl);
+    const mailOpts = verificationEmail(name, verifyUrl, otp);
     mailOpts.to = email;
     
     // Send email asynchronously to avoid hanging the response
@@ -299,7 +317,8 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
     });
 
     res.status(201).json({
-      message: "Registration successful! Please check your email to verify your account.",
+      message: "Registration successful! Please check your email for the 6-digit verification code.",
+      requiresVerification: true,
       user: {
         id: userId,
         email,
@@ -313,6 +332,50 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
     next(error);
   }
 });
+
+// ── POST /api/auth/verify-otp ────────────────────────────────────────────────
+router.post("/verify-otp", otpLimiter as any, async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: "Email and code are required" });
+    }
+
+    const result = await db.execute({
+      sql: `SELECT id, is_verified, verification_token, verification_token_expires_at 
+            FROM users WHERE email = ?`,
+      args: [email.toLowerCase().trim()],
+    });
+
+    const user = result.rows[0] as any;
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.is_verified === 1) {
+      return res.status(400).json({ error: "Account already verified" });
+    }
+
+    if (user.verification_token !== otp) {
+      return res.status(400).json({ error: "Invalid verification code" });
+    }
+
+    if (user.verification_token_expires_at && new Date(user.verification_token_expires_at) < new Date()) {
+      return res.status(400).json({ error: "Verification code has expired. Please request a new one." });
+    }
+
+    await db.execute({
+      sql: "UPDATE users SET is_verified = 1, verification_token = NULL, verification_token_expires_at = NULL WHERE id = ?",
+      args: [user.id],
+    });
+
+    res.json({ message: "Email verified successfully! You can now log in." });
+  } catch (error) {
+    next(error);
+  }
+});
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const getUrls = (req: any) => {
@@ -447,14 +510,13 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
       return res.json(GENERIC_OK);
     }
 
-
     // Invalidate any existing tokens for this user
     await db.execute({
       sql: "UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0",
       args: [user.id],
     });
 
-    const rawToken = randomBytes(32).toString("hex");
+    const otp = generateOTP();
     const tokenId = uuidv4();
     const expiresAt = new Date(
       Date.now() + RESET_TOKEN_EXPIRES_MINUTES * 60 * 1000,
@@ -463,15 +525,16 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
     await db.execute({
       sql: `INSERT INTO password_reset_tokens (id, user_id, token, expires_at)
             VALUES (?, ?, ?, ?)`,
-      args: [tokenId, user.id, rawToken, expiresAt],
+      args: [tokenId, user.id, otp, expiresAt],
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
-    const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}`;
+    const { frontendUrl } = getUrls(req);
+    const resetUrl = `${frontendUrl}/reset-password?token=${otp}&email=${encodeURIComponent(email)}`;
 
     const mailOpts = passwordResetEmail(
       user.name as string,
       resetUrl,
+      otp,
       RESET_TOKEN_EXPIRES_MINUTES,
     );
     mailOpts.to = user.email as string;
@@ -488,15 +551,15 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
 });
 
 // ── POST /api/auth/reset-password ────────────────────────────────────────────
-// Accepts { token, new_password }. Verifies token and updates the password.
+// Accepts { token, new_password, email }. Verifies token and updates the password.
 router.post("/reset-password", resetLimiter as any, async (req, res, next) => {
   try {
-    const { token, new_password } = req.body;
+    const { token, new_password, email } = req.body;
 
     if (!token || !new_password) {
       return res
         .status(400)
-        .json({ error: "token and new_password are required" });
+        .json({ error: "Code and new password are required" });
     }
 
     if ((new_password as string).length < 6) {
@@ -505,20 +568,25 @@ router.post("/reset-password", resetLimiter as any, async (req, res, next) => {
         .json({ error: "Password must be at least 6 characters" });
     }
 
-    const tokenRes = await db.execute({
-      sql: `SELECT prt.id as token_id, prt.user_id, u.email, u.name
-            FROM password_reset_tokens prt
-            JOIN users u ON prt.user_id = u.id
-            WHERE prt.token = ?
-              AND prt.used = 0
-              AND prt.expires_at > CURRENT_TIMESTAMP`,
-      args: [token],
-    });
+    // Attempt to find token. If email is provided, we can be more specific.
+    let sql = `SELECT prt.id as token_id, prt.user_id, u.email, u.name
+               FROM password_reset_tokens prt
+               JOIN users u ON prt.user_id = u.id
+               WHERE prt.token = ?
+                 AND prt.used = 0
+                 AND prt.expires_at > CURRENT_TIMESTAMP`;
+    let args = [token];
+
+    if (email) {
+      sql += " AND u.email = ?";
+      args.push(email.toLowerCase().trim());
+    }
+
+    const tokenRes = await db.execute({ sql, args });
 
     if (tokenRes.rows.length === 0) {
       return res.status(400).json({
-        error:
-          "This reset link is invalid or has expired. Please request a new one.",
+        error: "Invalid or expired reset code. Please request a new one.",
       });
     }
 
@@ -596,22 +664,22 @@ router.post("/resend-verification", async (req, res, next) => {
     // If no user or already verified, return generic success to avoid enumeration
     if (!user || user.is_verified === 1) {
       return res.json({
-        message: "If that email is registered and unverified, a new link has been sent.",
+        message: "If that email is registered and unverified, a new code has been sent.",
       });
     }
 
-    const verificationToken = randomBytes(32).toString("hex");
+    const otp = generateOTP();
     const verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     await db.execute({
       sql: "UPDATE users SET verification_token = ?, verification_token_expires_at = ? WHERE id = ?",
-      args: [verificationToken, verificationTokenExpiresAt, user.id],
+      args: [otp, verificationTokenExpiresAt, user.id],
     });
 
     const { frontendUrl } = getUrls(req);
-    const verifyUrl = `${frontendUrl}/verify-email?token=${verificationToken}`;
+    const verifyUrl = `${frontendUrl}/verify-email?token=${otp}&email=${encodeURIComponent(user.email as string)}`;
 
-    const mailOpts = verificationEmail(user.name as string, verifyUrl);
+    const mailOpts = verificationEmail(user.name as string, verifyUrl, otp);
     mailOpts.to = user.email as string;
     
     // Send email asynchronously
@@ -620,12 +688,13 @@ router.post("/resend-verification", async (req, res, next) => {
     });
 
     res.json({
-      message: "If that email is registered and unverified, a new link has been sent.",
+      message: "If that email is registered and unverified, a new code has been sent.",
     });
   } catch (error) {
     next(error);
   }
 });
+
 
 // ── POST /api/auth/logout ────────────────────────────────────────────────────
 router.post("/logout", (req, res) => {

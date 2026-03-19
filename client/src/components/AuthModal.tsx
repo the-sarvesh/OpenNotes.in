@@ -17,7 +17,7 @@ import { apiRequest, API_BASE_URL } from "../utils/api.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AuthMode = "login" | "register" | "forgot" | "reset" | "verify_pending";
+type AuthMode = "login" | "register" | "forgot" | "reset" | "verify_pending" | "otp_verify";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -166,6 +166,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const [otp, setOtp] = useState("");
+  const [otpType, setOtpType] = useState<"verify" | "reset">("verify");
+
   const { login } = useAuth();
 
   useEffect(() => { setMode(defaultMode); }, [defaultMode]);
@@ -192,6 +195,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleClose = () => {
     setError(""); setEmail(""); setPassword(""); setName(""); setUpiId("");
     setForgotSent(false); setResendSent(false); setNewPassword(""); setConfirmPw(""); setResetDone(false);
+    setOtp("");
     setMode(defaultMode);
     onClose();
   };
@@ -220,7 +224,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       if (mode === "register") {
-        setMode("verify_pending");
+        setOtpType("verify");
+        setMode("otp_verify");
       } else {
         login(data.user);
         handleClose();
@@ -251,7 +256,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const res = await apiRequest("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
-      setForgotSent(true);
+      setOtpType("reset");
+      setMode("otp_verify");
+    } catch (err: any) { setError(err.message); }
+    finally { setIsLoading(false); }
+  };
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length !== 6) return;
+    setError(""); setIsLoading(true);
+    try {
+      if (otpType === "verify") {
+        const res = await apiRequest("/api/auth/verify-otp", {
+          method: "POST",
+          body: JSON.stringify({ email, otp }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Verification failed");
+        
+        // Auto-login after verification? 
+        // For security, let's just show success and switch to login 
+        // OR if we have the password still in state, we could attempt login.
+        // Let's just go to login for now.
+        setMode("login");
+        setError("Account verified! You can now sign in.");
+      } else {
+        // For reset, we just "verify" it and then show the reset form
+        // The reset form needs the token anyway.
+        setToken(otp);
+        setMode("reset");
+      }
     } catch (err: any) { setError(err.message); }
     finally { setIsLoading(false); }
   };
@@ -264,7 +299,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (!token.trim()) { setError("Reset token is missing. Please use the link from your email."); return; }
     setIsLoading(true);
     try {
-      const res = await apiRequest("/api/auth/reset-password", { method: "POST", body: JSON.stringify({ token: token.trim(), new_password: newPassword }) });
+      const res = await apiRequest("/api/auth/reset-password", { 
+        method: "POST", 
+        body: JSON.stringify({ 
+          token: token.trim(), 
+          new_password: newPassword,
+          email: email.toLowerCase().trim() 
+        }) 
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Reset failed");
       setResetDone(true);
@@ -307,7 +349,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <h2 className="text-xl font-black text-text-main tracking-tight">
                   {mode === "login" && "Welcome back"}
                   {mode === "register" && "Join OpenNotes"}
-                  {mode === "forgot" && "Reset password"}
+                  {mode === "otp_verify" && (otpType === "verify" ? "Verify code" : "Reset code")}
                   {mode === "reset" && "New password"}
                 </h2>
                 {isAuthMode && (
@@ -539,6 +581,73 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     : "Update Password"
                   }
                 </button>
+              </motion.form>
+            )}
+
+            {/* ════════════ OTP VERIFY ════════════ */}
+            {mode === "otp_verify" && (
+              <motion.form key="otp" {...SLIDE} onSubmit={handleVerifyOTP} className="px-6 pb-6 space-y-5">
+                <div className="text-center space-y-2">
+                  <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <KeyRound className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-sm text-text-muted leading-relaxed">
+                    Enter the 6-digit code sent to<br/>
+                    <strong className="text-text-main">{email}</strong>
+                  </p>
+                </div>
+
+                {error && <ErrorBanner msg={error} />}
+
+                {/* OTP Input UI */}
+                <div className="flex justify-between gap-2">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="flex-1 aspect-square max-w-[54px] relative">
+                      <input
+                        type="text"
+                        maxLength={1}
+                        inputMode="numeric"
+                        value={otp[i] || ""}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, "");
+                          if (val || otp[i]) {
+                            const newOtp = otp.split("");
+                            newOtp[i] = val.slice(-1);
+                            const finalOtp = newOtp.join("");
+                            setOtp(finalOtp);
+                            
+                            // Auto focus next
+                            if (val && i < 5) {
+                              const next = e.target.parentElement?.nextElementSibling?.querySelector('input');
+                              next?.focus();
+                            }
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Backspace" && !otp[i] && i > 0) {
+                            const prev = e.currentTarget.parentElement?.previousElementSibling?.querySelector('input');
+                            prev?.focus();
+                          }
+                        }}
+                        className="w-full h-full bg-background border border-border rounded-xl text-center text-xl font-bold
+                                   focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <button type="submit" disabled={isLoading || otp.length !== 6}
+                  className="w-full py-3.5 bg-primary hover:bg-primary-hover text-black rounded-2xl font-bold
+                             text-sm transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2">
+                  {isLoading ? "Verifying..." : "Verify Code"}
+                </button>
+
+                <div className="text-center">
+                  <button type="button" onClick={handleResendVerification} disabled={isLoading}
+                    className="text-xs font-bold text-primary hover:underline disabled:opacity-50">
+                    Didn't get the code? Resend
+                  </button>
+                </div>
               </motion.form>
             )}
 
