@@ -22,6 +22,14 @@ const transport = hasSmtp
       socketTimeout: 15000,
     })
   : null;
+  
+if (transport) {
+  transport.verify().then(() => {
+    console.log("[Email] SMTP connection verified successfully.");
+  }).catch((err) => {
+    console.error("[Email] SMTP verification FAILED:", err.message);
+  });
+}
 
 const FROM_ADDRESS =
   process.env.EMAIL_FROM ?? "OpenNotes <no-reply@opennotes.in>";
@@ -40,14 +48,33 @@ export interface MailOptions {
  */
 export async function sendMail(opts: MailOptions): Promise<void> {
   if (transport) {
-    await transport.sendMail({
-      from: FROM_ADDRESS,
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.html,
-      text: opts.text ?? opts.html.replace(/<[^>]+>/g, ""),
-      attachments: opts.attachments,
-    });
+    try {
+      console.log(`[Email] Attempting to send ${opts.subject} to ${opts.to}...`);
+      const info = await transport.sendMail({
+        from: FROM_ADDRESS,
+        to: opts.to,
+        subject: opts.subject,
+        html: opts.html,
+        text: opts.text ?? opts.html.replace(/<[^>]+>/g, ""),
+        attachments: opts.attachments,
+      });
+      console.log(`[Email] Success! MessageId: ${info.messageId}`);
+    } catch (err: any) {
+      console.error("[Email Error] Critical failure while sending email:");
+      console.error(`- To: ${opts.to}`);
+      console.error(`- Subject: ${opts.subject}`);
+      console.error(`- Error Code: ${err.code}`);
+      console.error(`- Error Message: ${err.message}`);
+      if (err.code === 'EAUTH') {
+        console.error("  TIP: Check your SMTP_USER and SMTP_PASS. For Resend, user is 'resend'.");
+      } else if (err.code === 'ESOCKET' || err.code === 'ETIMEDOUT') {
+        console.error("  TIP: Connection timed out. Try switching ports (587 vs 465) or check if your host blocks outgoing SMTP.");
+      } else if (err.message.includes('verified')) {
+        console.error("  TIP: Check if your domain is verified in your SMTP provider's dashboard.");
+      }
+      // Re-throw if we want the caller to handle it, but since we are calling it non-blocking in auth.ts, logging is key.
+      throw err;
+    }
   } else {
     // ── DEV FALLBACK ───────────────────────────────────────────────────────
     console.log("\n━━━━━━━━━━━━━━━━  📧  EMAIL (dev mode)  ━━━━━━━━━━━━━━━━");
