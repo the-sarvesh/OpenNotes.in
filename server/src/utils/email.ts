@@ -60,6 +60,7 @@ export async function sendMail(opts: MailOptions): Promise<void> {
 // ── Template helpers ──────────────────────────────────────────────────────────
 
 export function passwordResetEmail(
+  to: string,
   name: string,
   resetUrl: string,
   otp: string,
@@ -142,13 +143,14 @@ export function passwordResetEmail(
 </html>`;
 
   return {
-    to: "",
+    to,
     subject: `Password Reset: ${otp} is your code`,
     html,
   };
 }
 
 export function verificationEmail(
+  to: string,
   name: string,
   verifyUrl: string,
   otp: string,
@@ -215,7 +217,7 @@ export function verificationEmail(
 </html>`;
 
   return {
-    to: "",
+    to,
     subject: `Verify Account: ${otp} is your code`,
     html,
   };

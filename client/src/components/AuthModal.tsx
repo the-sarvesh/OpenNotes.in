@@ -53,6 +53,12 @@ const ErrorBanner = ({ msg, onAction, actionLabel }: { msg: string; onAction?: (
   </div>
 );
 
+const SuccessBanner = ({ msg }: { msg: string }) => (
+  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-sm rounded-xl border border-emerald-200 dark:border-emerald-900/50 text-center font-medium">
+    <p>{msg}</p>
+  </div>
+);
+
 const InputField = ({
   label,
   icon,
@@ -164,6 +170,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [resetDone, setResetDone] = useState(false);
 
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const [otp, setOtp] = useState("");
@@ -190,10 +197,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     };
   }, [isOpen]);
 
-  const switchMode = (next: AuthMode) => { setError(""); setMode(next); };
+  const switchMode = (next: AuthMode) => { setError(""); setSuccess(""); setMode(next); };
 
   const handleClose = () => {
-    setError(""); setEmail(""); setPassword(""); setName(""); setUpiId("");
+    setError(""); setSuccess(""); setEmail(""); setPassword(""); setName(""); setUpiId("");
     setForgotSent(false); setResendSent(false); setNewPassword(""); setConfirmPw(""); setResetDone(false);
     setOtp("");
     setMode(defaultMode);
@@ -206,7 +213,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleLoginRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(""); setIsLoading(true);
+    setError(""); setSuccess(""); setIsLoading(true);
     try {
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const body = mode === "login"
@@ -235,7 +242,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   const handleResendVerification = async () => {
-    setError(""); setIsLoading(true);
+    setError(""); setSuccess(""); setIsLoading(true);
     try {
       const res = await apiRequest("/api/auth/resend-verification", {
         method: "POST",
@@ -249,9 +256,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     finally { setIsLoading(false); }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(""); setIsLoading(true);
+  const resendForgotPasswordOtp = async () => {
+    setError(""); setSuccess(""); setIsLoading(true);
+    try {
+      const res = await apiRequest("/api/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to resend forgot password code");
+      setResendSent(true);
+      setSuccess("Reset code has been resent to your email.");
+    } catch (err: any) { setError(err.message); }
+    finally { setIsLoading(false); }
+  };
+
+  const handleForgotPassword = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setError(""); setSuccess(""); setIsLoading(true);
     try {
       const res = await apiRequest("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
       const data = await res.json();
@@ -265,25 +287,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.length !== 6) return;
-    setError(""); setIsLoading(true);
+    setError(""); setSuccess(""); setIsLoading(true);
     try {
+      const endpoint = otpType === "verify" ? "/api/auth/verify-otp" : "/api/auth/verify-reset-otp";
+      const res = await apiRequest(endpoint, {
+        method: "POST",
+        body: JSON.stringify({ email, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Verification failed");
+      
       if (otpType === "verify") {
-        const res = await apiRequest("/api/auth/verify-otp", {
-          method: "POST",
-          body: JSON.stringify({ email, otp }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Verification failed");
-        
-        // Auto-login after verification? 
-        // For security, let's just show success and switch to login 
-        // OR if we have the password still in state, we could attempt login.
-        // Let's just go to login for now.
         setMode("login");
-        setError("Account verified! You can now sign in.");
+        setSuccess("Account verified! You can now sign in.");
       } else {
-        // For reset, we just "verify" it and then show the reset form
-        // The reset form needs the token anyway.
         setToken(otp);
         setMode("reset");
       }
@@ -293,11 +310,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
-    if (newPassword !== confirmPw) { setError("Passwords do not match."); return; }
     if (!token.trim()) { setError("Reset token is missing. Please use the link from your email."); return; }
-    setIsLoading(true);
+    setError(""); setSuccess(""); setIsLoading(true);
     try {
       const res = await apiRequest("/api/auth/reset-password", { 
         method: "POST", 
@@ -386,7 +400,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {/* ── Divider ── */}
                 <OrDivider />
 
-                {/* ── Error banner ── */}
+                {/* ── Error & Success banners ── */}
+                {success && <SuccessBanner msg={success} />}
                 {error && (
                   <div>
                     {error.includes("Google Login") ? (
@@ -486,6 +501,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <p className="text-sm text-text-muted leading-relaxed">
                   Enter your BITS email and we'll send you a reset link. It expires in 30 minutes.
                 </p>
+                {success && <SuccessBanner msg={success} />}
                 {error && <ErrorBanner msg={error} />}
                 <InputField label="BITS Email"
                   icon={<Mail className="h-4 w-4" />}
@@ -526,6 +542,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {mode === "reset" && !resetDone && (
               <motion.form key="reset" {...SLIDE} onSubmit={handleResetPassword} className="px-6 pb-6 space-y-4">
                 <p className="text-sm text-text-muted leading-relaxed">Choose a strong new password.</p>
+                {success && <SuccessBanner msg={success} />}
                 {error && <ErrorBanner msg={error} />}
 
                 {!resetToken && (
@@ -597,6 +614,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </p>
                 </div>
 
+                {success && <SuccessBanner msg={success} />}
                 {error && <ErrorBanner msg={error} />}
 
                 {/* OTP Input UI */}
@@ -643,7 +661,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
 
                 <div className="text-center">
-                  <button type="button" onClick={handleResendVerification} disabled={isLoading}
+                  <button type="button" 
+                    onClick={otpType === "reset" ? resendForgotPasswordOtp : handleResendVerification} 
+                    disabled={isLoading}
                     className="text-xs font-bold text-primary hover:underline disabled:opacity-50">
                     Didn't get the code? Resend
                   </button>
