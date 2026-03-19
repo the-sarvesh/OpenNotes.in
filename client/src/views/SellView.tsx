@@ -5,11 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiRequest } from '../utils/api';
 import { toast } from 'react-hot-toast';
 
-import { SUBJECTS_BY_SEM } from '../utils/constants';
-
-const STANDARD_SPOTS = ['HCL Office', 'BITS Exam Center'];
-
-const LOCATIONS = ['Noida / Delhi NCR', 'Bengaluru', 'Hyderabad', 'Chennai', 'Pune', 'Other (Manual)'];
+import { SUBJECTS_BY_SEM, LOCATIONS, STANDARD_SPOTS } from '../utils/constants';
 
 interface ImageUpload {
   file: File;
@@ -166,7 +162,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
   };
 
   const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0) return;
 
     const totalRemaining = 3 - form.images.length;
