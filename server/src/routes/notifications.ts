@@ -44,10 +44,17 @@ router.get('/unread/count', async (req: AuthRequest, res, next) => {
 // PUT /api/notifications/mark-read — mark all as read
 router.put('/mark-read', async (req: AuthRequest, res, next) => {
   try {
+    const userId = req.user!.id;
     await db.execute({
       sql: 'UPDATE notifications SET is_read = 1 WHERE user_id = ?',
-      args: [req.user!.id as string]
+      args: [userId]
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${userId}`).emit('unread_count_changed');
+    }
+
     res.json({ message: 'Notifications marked as read' });
   } catch (error) {
     next(error);
@@ -57,10 +64,17 @@ router.put('/mark-read', async (req: AuthRequest, res, next) => {
 // PUT /api/notifications/:id/read — mark specific as read
 router.put('/:id/read', async (req: AuthRequest, res, next) => {
   try {
+    const userId = req.user!.id;
     await db.execute({
       sql: 'UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?',
-      args: [req.params.id as string, req.user!.id as string]
+      args: [req.params.id as string, userId]
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${userId}`).emit('unread_count_changed');
+    }
+
     res.json({ message: 'Notification marked as read' });
   } catch (error) {
     next(error);

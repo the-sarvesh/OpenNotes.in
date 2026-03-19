@@ -37,6 +37,30 @@ router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
   }
 });
 
+// Get unread counts (messages + notifications)
+router.get('/me/unread-counts', authenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.user!.id;
+    const [msgResult, notifResult] = await Promise.all([
+      db.execute({
+        sql: 'SELECT COUNT(*) as count FROM messages WHERE receiver_id = ? AND is_read = 0',
+        args: [userId]
+      }),
+      db.execute({
+        sql: 'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
+        args: [userId]
+      })
+    ]);
+
+    res.json({
+      messages: Number(msgResult.rows[0]?.count || 0),
+      notifications: Number(notifResult.rows[0]?.count || 0)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Update my profile
 router.put('/me', authenticate, upload.single('profile_image') as any, async (req: AuthRequest, res, next) => {
   try {

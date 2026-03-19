@@ -218,24 +218,55 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // ── Poll unread counts ────────────────────────────────────────────
+  // ── Unread counts (Optimized: single endpoint + Visibility + Sockets) ──
   useEffect(() => {
     if (!user) return;
-    const fetch_ = async () => {
+
+    const fetchCounts = async () => {
+      // Don't fetch if tab is hidden to save DB reads
+      if (document.visibilityState !== "visible") return;
+
       try {
-        const [m, n] = await Promise.all([
-          apiRequest("/api/messages/unread/count").then((r) => r.json()),
-          apiRequest("/api/notifications/unread/count").then((r) => r.json()),
-        ]);
-        setUnreadMessages(m.count ?? 0);
-        setUnreadNotifs(n.count ?? 0);
-      } catch {
-        /* silent */
-      }
+        const res = await apiRequest("/api/users/me/unread-counts");
+        const data = await res.json();
+        if (res.ok) {
+          setUnreadMessages(data.messages || 0);
+          setUnreadNotifs(data.notifications || 0);
+        }
+      } catch { /* silent */ }
     };
-    fetch_();
-    const id = setInterval(fetch_, 30_000);
-    return () => clearInterval(id);
+
+    // Initial fetch
+    fetchCounts();
+
+    // 1. Slow fallback poll (60s) — only if visible
+    const intervalId = setInterval(fetchCounts, 60_000);
+
+    // 2. Immediate refetch on visibility change (back to tab)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchCounts();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // 3. Socket-driven immediate updates
+    const socket = getSocket();
+    const handleSocketUpdate = () => fetchCounts();
+    
+    socket.on("unread_count_changed", handleSocketUpdate);
+    socket.on("connect", () => {
+      socket.emit("join", `user:${user.id}`);
+    });
+    
+    // Ensure joined if already connected
+    if (socket.connected) {
+      socket.emit("join", `user:${user.id}`);
+    }
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      socket.off("unread_count_changed", handleSocketUpdate);
+    };
   }, [user, location.pathname]);
 
   // ── Service Worker & Push registration ───────────────────────────
