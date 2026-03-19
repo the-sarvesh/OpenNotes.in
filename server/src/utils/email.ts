@@ -195,7 +195,7 @@ export function verificationEmail(
       </div>
       
       <!-- Logo/Graphic -->
-      <img src="${process.env.FRONTEND_URL?.replace(/\/$/, '') || 'https://opennotes.in'}/logo512.png" alt="OpenNotes" class="banner" />
+      <img src="${process.env.FRONTEND_URL?.replace(/\/$/, '') || 'https://opennotes.in'}/logo192.png" alt="OpenNotes" class="banner" />
 
       <div class="content">
         <p class="greeting">Hey ${name.split(' ')[0]}! 👋</p>
