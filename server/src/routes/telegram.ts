@@ -9,16 +9,14 @@ const router = express.Router();
 /**
  * Telegram Webhook Endpoint
  */
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', (req, res) => {
   const bot = getBot();
   if (bot) {
-    try {
-      await bot.handleUpdate(req.body);
-      res.sendStatus(200);
-    } catch (err) {
+    // Process update in background to respond to Telegram immediately
+    bot.handleUpdate(req.body).catch((err) => {
       console.error('[Telegram Webhook] Error:', err);
-      res.sendStatus(500);
-    }
+    });
+    res.sendStatus(200);
   } else {
     res.sendStatus(404);
   }

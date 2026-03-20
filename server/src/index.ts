@@ -219,11 +219,20 @@ const registerTelegramWebhook = async () => {
 };
 
 // ── Start HTTP + WebSocket server ────────────────────────────────────────────
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Socket.IO ready for real-time messaging`);
   initTelegramBot();
-  registerTelegramWebhook();
+  const appUrl = process.env.BACKEND_URL;
+  if (appUrl && appUrl.startsWith('https://')) {
+    registerTelegramWebhook();
+  } else {
+    // In local development, use polling as fallback
+    const bot = (await import('./utils/telegram.js')).getBot();
+    if (bot) {
+      bot.launch().then(() => console.log('[Telegram] Bot started in polling mode')).catch(e => console.error('[Telegram] Polling error:', e));
+    }
+  }
 });
 
 // ── Auto-archive out-of-stock listings every 1 hour ─────────────────────────

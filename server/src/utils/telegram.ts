@@ -69,6 +69,7 @@ export const initTelegramBot = () => {
 
     try {
       if (action === 'ord_det') {
+        await ctx.answerCbQuery();
         // Fetch detailed order info
         const result = await db.execute({
           sql: `SELECT oi.*, o.buyer_location, o.buyer_preferred_spot, o.buyer_availability, o.buyer_note, o.buyer_meetup_details, u.name as buyer_name, s.name as seller_name
@@ -81,7 +82,7 @@ export const initTelegramBot = () => {
         });
 
         const item = result.rows[0] as any;
-        if (!item) return ctx.answerCbQuery('Order not found.');
+        if (!item) return; // Already answered
 
         const detailMsg = `📋 <b>Order Details: ${item.title}</b>\n\n` +
           `👤 <b>Buyer:</b> ${item.buyer_name}\n` +
@@ -94,9 +95,9 @@ export const initTelegramBot = () => {
           (item.buyer_meetup_details ? `💬 <b>Meetup Info:</b> ${item.buyer_meetup_details}\n` : '');
 
         await ctx.reply(detailMsg, { parse_mode: 'HTML' });
-        await ctx.answerCbQuery();
       } 
       else if (action === 'ack_ord') {
+        await ctx.answerCbQuery('Acknowledging Order...');
         const itemRes = await db.execute({
           sql: `SELECT oi.*, 
                        o.total_amount, o.platform_fee,
@@ -111,10 +112,10 @@ export const initTelegramBot = () => {
           args: [id]
         });
         const item = itemRes.rows[0] as any;
-        if (!item) return ctx.answerCbQuery('Order not found.');
+        if (!item) return; // Already answered
 
         if (item.status !== "pending_meetup") {
-          return ctx.answerCbQuery(`Order is already ${item.status}`);
+          return await ctx.reply(`❌ Order is already ${item.status}`);
         }
 
         // Update DB
@@ -188,12 +189,12 @@ export const initTelegramBot = () => {
           console.error('[Telegram] Acknowledge notification failed:', tgErr);
         }
 
-        await ctx.reply('✅ Order acknowledged! coordination details sent.');
-        await ctx.answerCbQuery('Order Acknowledged');
+        await ctx.reply('✅ Order acknowledged! Coordination details sent to the buyer.');
       }
       else if (action === 'im_here') {
+        await ctx.answerCbQuery('Sending location signal...');
         const result = await db.execute({
-          sql: `SELECT oi.id, oi.seller_id, oi.meetup_signal_count, o.buyer_id, u.telegram_chat_id as buyer_chat, s.telegram_chat_id as seller_chat, u.name as buyer_name, s.name as seller_name
+          sql: `SELECT oi.id, oi.seller_id, oi.status, oi.meetup_signal_count, o.buyer_id, u.telegram_chat_id as buyer_chat, s.telegram_chat_id as seller_chat, u.name as buyer_name, s.name as seller_name
                 FROM order_items oi
                 JOIN orders o ON oi.order_id = o.id
                 JOIN users u ON o.buyer_id = u.id
@@ -203,16 +204,15 @@ export const initTelegramBot = () => {
         });
 
         const item = result.rows[0] as any;
-        if (!item) return ctx.answerCbQuery('Order not found.');
+        if (!item) return;
 
         if (item.status === 'completed' || item.status === 'cancelled') {
-          return ctx.answerCbQuery('❌ Transaction closed.');
+          return await ctx.reply('❌ Transaction closed.');
         }
 
         // Limit "I'm here" signals to 3
         if (item.meetup_signal_count >= 3) {
-          await ctx.reply('⚠️ Limit reached. You can only signal arrival 3 times per item. Please use the application chat if you need more coordination.');
-          return ctx.answerCbQuery('Limit reached');
+          return await ctx.reply('⚠️ Limit reached. You can only signal arrival 3 times per item. Please use the application chat if you need more coordination.');
         }
 
         const userRes = await db.execute({
@@ -248,29 +248,29 @@ export const initTelegramBot = () => {
         );
 
         await ctx.reply(`✅ Notified ${targetName} that you've arrived. (Signal ${item.meetup_signal_count + 1}/3)`);
-        await ctx.answerCbQuery('Sent arrival alert');
       }
       else if (action === 'msg_reply') {
+        await ctx.answerCbQuery();
         botState.set(chatId, { type: 'awaiting_reply', convoId: id });
         await ctx.reply('✍️ Type your reply below:');
-        await ctx.answerCbQuery();
       }
       else if (action === 'show_pin') {
+        await ctx.answerCbQuery();
         const result = await db.execute({
           sql: 'SELECT meetup_pin, status FROM order_items WHERE id = ?',
           args: [id]
         });
         const item = result.rows[0] as any;
         if (item?.status === 'completed' || item?.status === 'cancelled') {
-          return ctx.answerCbQuery('❌ Transaction closed.');
+          return await ctx.reply('❌ Transaction closed.');
         }
 
         if (item?.meetup_pin) {
           await ctx.reply(`🔑 Your Exchange PIN: <code>${item.meetup_pin}</code>\n\nShare this with the seller at the meetup.`, { parse_mode: 'HTML' });
         }
-        await ctx.answerCbQuery();
       }
       else if (action === 'enter_pin') {
+        await ctx.answerCbQuery();
         const result = await db.execute({
           sql: 'SELECT pin_attempts, last_pin_attempt_at FROM order_items WHERE id = ?',
           args: [id]
@@ -283,14 +283,12 @@ export const initTelegramBot = () => {
           const diffMinutes = (now - lastAttempt) / (1000 * 60);
 
           if (diffMinutes < 30) {
-            await ctx.reply(`❌ <b>Secure Verification Locked</b>\n\nIncorrect PIN 3 times. Telegram verification is locked for <b>${Math.ceil(30 - diffMinutes)} more minutes</b> to prevent spam.\n\nYou can still verify this PIN on the <a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/profile">Sales Dashboard</a> right now. Please check the 4-digit PIN with the buyer.`, { parse_mode: 'HTML' });
-            return ctx.answerCbQuery('Verification Locked');
+            return await ctx.reply(`❌ <b>Secure Verification Locked</b>\n\nIncorrect PIN 3 times. Telegram verification is locked for <b>${Math.ceil(30 - diffMinutes)} more minutes</b> to prevent spam.\n\nYou can still verify this PIN on the <a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/profile">Sales Dashboard</a> right now. Please check the 4-digit PIN with the buyer.`, { parse_mode: 'HTML' });
           }
         }
 
         botState.set(chatId, { type: 'awaiting_pin', itemId: id });
         await ctx.reply('⌨️ Please type the 4-digit PIN provided by the buyer:');
-        await ctx.answerCbQuery();
       }
     } catch (err) {
       console.error('[Telegram] Interaction error:', err);
@@ -534,22 +532,8 @@ export const initTelegramBot = () => {
     }
   });
 
-  // NOTE: In production (Railway), we use webhooks. In local dev, we use polling.
-  const appUrl = process.env.BACKEND_URL;
-  if (appUrl && appUrl.startsWith('https://')) {
-    const webhookUrl = `${appUrl}/api/telegram/webhook`;
-    bot.telegram.setWebhook(webhookUrl).then(() => {
-      console.log(`[Telegram] Webhook set to: ${webhookUrl}`);
-    }).catch(err => {
-      console.error('[Telegram] Failed to set webhook:', err);
-    });
-  } else {
-    bot.launch().then(() => {
-      console.log('[Telegram] Bot started in polling mode (Local Development)');
-    }).catch(err => {
-      console.error('[Telegram] Failed to start bot in polling mode:', err);
-    });
-  }
+  // Registration (Webhook or Polling) is now handled centrally in index.ts
+  // to avoid redundant calls and conflicts between the two mechanisms.
 };
 
 export const getBot = () => bot;
