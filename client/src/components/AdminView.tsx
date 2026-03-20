@@ -8,13 +8,13 @@ import {
   TrendingUp, ChevronRight, ChevronLeft, MapPin,
   Hash, Calendar, Tag, Star, User as UserIcon,
   BookOpen, Layers, Clock, CheckCircle2, XCircle,
-  PackageOpen, Truck
+  PackageOpen, Truck, Settings as SettingsIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
 import { statusColors, formatStatus } from '../utils/status';
 
-type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats';
+type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats' | 'settings';
 
 interface Stats {
   users: number;
@@ -82,6 +82,8 @@ export const AdminView: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
+  const [dbSettings, setDbSettings] = useState<any>(null);
+  const [localFee, setLocalFee] = useState<string>('0');
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
 
@@ -129,6 +131,13 @@ export const AdminView: React.FC = () => {
       } else if (tab === 'chats') {
         const res = await apiRequest('/api/admin/chats');
         if (res.ok) setChats(await res.json());
+      } else if (tab === 'settings') {
+        const res = await apiRequest('/api/settings');
+        if (res.ok) {
+          const data = await res.json();
+          setDbSettings(data);
+          setLocalFee(String(data.platform_fee_percentage));
+        }
       }
     } catch (err) {
       console.error('Admin fetch error:', err);
@@ -213,6 +222,7 @@ export const AdminView: React.FC = () => {
     { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
     { id: 'orders', label: 'Orders', icon: <ShoppingBag className="h-4 w-4" /> },
     { id: 'chats', label: 'Chats', icon: <MessageCircle className="h-4 w-4" /> },
+    { id: 'settings', label: 'Settings', icon: <SettingsIcon className="h-4 w-4" /> },
   ];
 
   return (
@@ -896,6 +906,82 @@ export const AdminView: React.FC = () => {
                       ))}
                     </div>
                   )}
+                </motion.div>
+              )}
+
+              {/* ══ SETTINGS ══════════════════════════════════════════════ */}
+              {tab === 'settings' && dbSettings && (
+                <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+                  <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2 bg-[#FFC000]/10 rounded-xl text-[#FFC000]">
+                        <DollarSign className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-white">Platform Settings</h3>
+                        <p className="text-xs text-slate-500">Configure global platform parameters</p>
+                      </div>
+                    </div>
+
+                    <div className="max-w-md space-y-4">
+                      <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-[#FFC000] mb-2">
+                          Platform Fee Percentage (%)
+                        </label>
+                        <div className="flex gap-3">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={localFee}
+                            onChange={(e) => setLocalFee(e.target.value)}
+                            onBlur={async () => {
+                              const val = Number(localFee);
+                              if (!isNaN(val) && val >= 0 && val <= 100) {
+                                try {
+                                  const res = await apiRequest('/api/settings', { 
+                                    method: 'PATCH', 
+                                    body: JSON.stringify({ platform_fee_percentage: val }) 
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    setActionMsg(data.message || 'Updated');
+                                    fetchData();
+                                  } else {
+                                    const data = await res.json();
+                                    setActionMsg(data.error || 'Update failed');
+                                    setLocalFee(String(dbSettings.platform_fee_percentage));
+                                  }
+                                } catch {
+                                  setActionMsg('Network error');
+                                  setLocalFee(String(dbSettings.platform_fee_percentage));
+                                }
+                                setTimeout(() => setActionMsg(''), 3000);
+                              } else {
+                                setLocalFee(String(dbSettings.platform_fee_percentage));
+                              }
+                            }}
+                            className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none focus:ring-2 focus:ring-[#FFC000]/50 flex-1"
+                          />
+                          <div className="flex items-center justify-center bg-white/5 border border-white/10 rounded-xl px-4 font-black text-slate-400">
+                            %
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                          This fee is charged to the seller on every transaction. Setting this to 0 will enable Launch Promo mode (0% fees).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 bg-blue-500/5 border border-blue-500/20 rounded-2xl">
+                    <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5" /> Note on Caching
+                    </h4>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Settings are cached for 30 seconds to optimize performance. Changes may take up to half a minute to reflect across all users globally.
+                    </p>
+                  </div>
                 </motion.div>
               )}
 

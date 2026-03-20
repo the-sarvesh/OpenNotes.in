@@ -27,6 +27,7 @@ if (!fs.existsSync(uploadsDir)) {
 import authRoutes from "./routes/auth.js";
 import telegramRoutes from "./routes/telegram.js";
 import { initTelegramBot } from "./utils/telegram.js";
+import settingsRouter from "./routes/settings.js";
 import listingsRoutes from "./routes/listings.js";
 import ordersRoutes from "./routes/orders.js";
 import usersRoutes from "./routes/users.js";
@@ -167,6 +168,7 @@ app.use("/api/reviews", reviewsRoutes);
 app.use("/api/push", pushRoutes);
 app.use("/api/resources", resourcesRoutes);
 app.use("/api/telegram", telegramRoutes);
+app.use("/api/settings", settingsRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", message: "OpenNotes.in API is running" });

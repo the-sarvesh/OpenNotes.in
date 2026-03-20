@@ -7,11 +7,10 @@ import { createNotification } from "../utils/notifications.js";
 import { applyCoupon } from "../utils/orders.js";
 import { io } from "../socket.js";
 import { sendTelegramMessage, telegramTemplates } from "../utils/telegram.js";
+import { getSetting } from "../utils/settings.js";
 
 
 const router = express.Router();
-
-const PLATFORM_FEE_PERCENTAGE = 0;
 
 /** Generate a cryptographically secure 4-digit PIN */
 const generateSecurePin = () =>
@@ -39,8 +38,11 @@ router.post("/validate-coupon", authenticate, async (req: AuthRequest, res, next
       return res.status(400).json({ error: "order_total is required" });
     }
 
+    const feeSetting = await getSetting("platform_fee_percentage", "0");
+    const dynamicFeePercentage = Number(feeSetting);
+
     const originalFee = Math.round(
-      Number(order_total) * (PLATFORM_FEE_PERCENTAGE / 100),
+      Number(order_total) * (dynamicFeePercentage / 100),
     );
     const result = await applyCoupon(coupon_code, originalFee);
 
@@ -138,9 +140,13 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
     }
 
     // ── Coupon / fee logic ────────────────────────────────────────────────────
+    // Fetch dynamic platform fee from DB
+    const feeSetting = await getSetting("platform_fee_percentage", "0");
+    const dynamicFeePercentage = Number(feeSetting);
+
     const totalAmount = subtotal;
     const rawPlatformFee = Math.round(
-      totalAmount * (PLATFORM_FEE_PERCENTAGE / 100),
+      totalAmount * (dynamicFeePercentage / 100),
     );
 
     let platformFee = rawPlatformFee;
@@ -379,6 +385,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         });
         const seller = sellerRow.rows[0] as any;
 
+        const itemSubtotal = orderItem.price_at_purchase * orderItem.quantity;
+        // Proportional fee calculation: (itemSubtotal / totalAmount) * platformFee
+        const itemPlatformFee = totalAmount > 0 ? Math.round((itemSubtotal / totalAmount) * platformFee) : 0;
+
         // Notify buyer with Full Info
         if (buyer?.telegram_chat_id) {
           const meetupObj = {
@@ -388,7 +398,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             note: buyer_note,
             details: buyer_meetup_details
           };
-          const template = telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin, orderItem.id, meetupObj);
+          const template = telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin, orderItem.id, meetupObj, itemSubtotal, itemPlatformFee);
           await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
         }
 
@@ -401,7 +411,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             note: buyer_note,
             details: buyer_meetup_details
           };
-          const template = telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name, orderItem.id, meetupObj);
+          const template = telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name, orderItem.id, meetupObj, itemSubtotal, itemPlatformFee);
           await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
         }
       }
@@ -518,9 +528,17 @@ router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
       0,
     );
 
+    const feeSetting = await getSetting("platform_fee_percentage", "0");
+    const dynamicFeePercentage = Number(feeSetting);
+
     const platformFeeTotal = salesRes.rows.reduce((sum: number, row: any) => {
-      const itemTotal = Number(row.price_at_purchase) * Number(row.quantity);
-      return sum + Math.round(itemTotal * (PLATFORM_FEE_PERCENTAGE / 100));
+      const itemSubtotal = Number(row.price_at_purchase) * Number(row.quantity);
+      const orderTotal = Number(row.total_amount) || itemSubtotal; // Fallback if total_amount is missing
+      const orderFee = Number(row.platform_fee) || 0;
+      
+      // Proportional fee for this item
+      const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+      return sum + itemFee;
     }, 0);
 
     res.json({
@@ -629,7 +647,12 @@ router.post(
             note: item.buyer_note,
             details: item.buyer_meetup_details
           };
-          const template = telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name, itemId, meetupObj);
+          const itemSubtotal = (item.price_at_purchase as number) * (item.quantity as number);
+          const orderTotal = (item as any).total_amount || itemSubtotal;
+          const orderFee = (item as any).platform_fee || 0;
+          const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+
+          const template = telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name, itemId, meetupObj, itemSubtotal, itemFee);
           await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
         }
         if (seller?.telegram_chat_id) {
@@ -640,7 +663,12 @@ router.post(
             note: item.buyer_note,
             details: item.buyer_meetup_details
           };
-          const template = telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name, itemId, meetupObj);
+          const itemSubtotal = (item.price_at_purchase as number) * (item.quantity as number);
+          const orderTotal = (item as any).total_amount || itemSubtotal;
+          const orderFee = (item as any).platform_fee || 0;
+          const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+
+          const template = telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name, itemId, meetupObj, itemSubtotal, itemFee);
           await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
         }
       } catch (tgErr) {
@@ -670,7 +698,7 @@ router.post(
 
       const itemRes = await db.execute({
         sql: `
-          SELECT oi.*, o.id as order_id, o.status as order_status, o.buyer_id, l.title
+          SELECT oi.*, o.id as order_id, o.status as order_status, o.buyer_id, o.total_amount, o.platform_fee, l.title
           FROM order_items oi
           JOIN orders o ON oi.order_id = o.id
           JOIN listings l ON oi.listing_id = l.id
@@ -699,15 +727,35 @@ router.post(
           .json({ error: "This item is not ready for PIN verification" });
       }
 
+      // Check for PIN lockout
+      if (Number(item.pin_attempts) >= 3) {
+        const lastAttempt = new Date(item.last_pin_attempt_at as string).getTime();
+        const now = Date.now();
+        const diffMinutes = (now - lastAttempt) / (1000 * 60);
+
+        if (diffMinutes < 30) {
+          return res.status(403).json({
+            error: `PIN verification is locked for ${Math.ceil(30 - diffMinutes)} more minutes due to repeated incorrect attempts. Please check the PIN with the buyer.`
+          });
+        }
+        
+        // Cooldown passed, reset internal counter for this attempt session
+        item.pin_attempts = 0;
+      }
+
       if (item.meetup_pin !== pin) {
+        await db.execute({
+          sql: "UPDATE order_items SET pin_attempts = pin_attempts + 1, last_pin_attempt_at = CURRENT_TIMESTAMP WHERE id = ?",
+          args: [itemId]
+        });
         return res.status(400).json({
-          error: "Incorrect PIN. Please ask the buyer to show their PIN.",
+          error: `Incorrect PIN. Attempt ${Number(item.pin_attempts) + 1} of 3. Please ask the buyer to show their PIN.`,
         });
       }
 
       // Mark this item as completed
       await db.execute({
-        sql: "UPDATE order_items SET status = 'completed' WHERE id = ?",
+        sql: "UPDATE order_items SET status = 'completed', pin_attempts = 0 WHERE id = ?",
         args: [itemId as string],
       });
 
@@ -777,15 +825,20 @@ router.post(
         const buyer = buyerRow.rows[0] as any;
         const seller = sellerRow.rows[0] as any;
 
+        const itemSubtotal = Number(item.price_at_purchase) * Number(item.quantity);
+        const orderTotal = Number(item.total_amount) || itemSubtotal;
+        const orderFee = Number(item.platform_fee) || 0;
+        const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+
         if (buyer?.telegram_chat_id) {
-          await sendTelegramMessage(buyer.telegram_chat_id, 
-            telegramTemplates.orderCompleted(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name)
+          await sendTelegramMessage(buyer.telegram_chat_id,
+            telegramTemplates.orderCompleted(buyer.name, item.title as string, Number(item.price_at_purchase), Number(item.quantity), 'Buyer', seller.name, itemSubtotal, itemFee)
           );
         }
 
         if (seller?.telegram_chat_id) {
-          await sendTelegramMessage(seller.telegram_chat_id, 
-            telegramTemplates.orderCompleted(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name)
+          await sendTelegramMessage(seller.telegram_chat_id,
+            telegramTemplates.orderCompleted(seller.name, item.title as string, Number(item.price_at_purchase), Number(item.quantity), 'Seller', buyer.name, itemSubtotal, itemFee)
           );
         }
       } catch (tgErr) {

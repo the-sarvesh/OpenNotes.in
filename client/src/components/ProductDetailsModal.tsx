@@ -8,7 +8,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
-import { formatSemester } from '../utils/formatters';
+import { formatSemester, formatMaterialType } from '../utils/formatters';
 import type { Note } from '../types';
 
 interface ProductDetailsModalProps {
@@ -238,13 +238,6 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 </div>
               </div>
 
-              {/* Seller pill */}
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-full">
-                <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center text-black text-[9px] font-black shrink-0">
-                  {note.seller.charAt(0).toUpperCase()}
-                </div>
-                <span className="text-xs font-bold text-text-muted">{note.seller}</span>
-              </div>
             </div>
 
             {/* ── Exchange details ─────────────────────────────────── */}
@@ -321,7 +314,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 <p className="text-[9px] font-black uppercase tracking-widest mb-1 opacity-70">Condition</p>
                 <p className="text-sm font-bold leading-tight">{note.condition}</p>
               </div>
-              <Tile label="Material" value={note.materialType} />
+              <Tile label="Material" value={formatMaterialType(note.materialType)} />
               <Tile label="Availability" value={`${note.quantity} left`} />
             </div>
           </div>
@@ -331,7 +324,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             {/* Price line */}
             <div className="flex items-baseline justify-between">
               <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Total Price</span>
-              <span className="text-3xl font-black text-text-main tracking-tight">{note.price === 0 ? 'FREE' : `₹${note.price}`}</span>
+              <span className="text-3xl font-black text-text-main tracking-tight">{note.price === 0 ? 'FREE' : `₹${Math.round(note.price)}`}</span>
             </div>
 
             {/* Action buttons — single row on both mobile and desktop */}

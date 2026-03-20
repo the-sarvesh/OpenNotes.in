@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Heart, Star, Clock, MapPin, ShoppingCart, Layers, Eye } from 'lucide-react';
-import { formatSemester } from '../utils/formatters';
+import { formatSemester, formatMaterialType } from '../utils/formatters';
 
 export interface Note {
   id: string;
@@ -90,7 +90,7 @@ export const NoteCard = ({
         <div className="flex flex-wrap items-center gap-2 mb-3">
           {note.materialType && (
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-surface border border-border text-text-main shadow-sm">
-              {note.materialType}
+              {formatMaterialType(note.materialType)}
             </span>
           )}
 
@@ -122,7 +122,7 @@ export const NoteCard = ({
           </div>
           <div className="text-right">
             <p className="text-xs text-text-muted mb-0.5">Price</p>
-            <p className="text-lg font-bold text-primary">{note.price === 0 ? 'FREE' : `₹${note.price}`}</p>
+            <p className="text-lg font-bold text-primary">{note.price === 0 ? 'FREE' : `₹${Math.round(note.price)}`}</p>
           </div>
         </div>
         

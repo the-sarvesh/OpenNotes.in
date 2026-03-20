@@ -2,8 +2,10 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ShoppingCart, ArrowLeft, Trash2, Plus, Minus, ChevronRight, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { formatSemester } from '../utils/formatters';
+import { formatSemester, getPlatformFeeConfig } from '../utils/formatters';
 import { View, Listing, Order, OrderItem, CartItem } from '../types';
+import { useSettings } from '../contexts/SettingsContext';
+import { Info, Sparkles } from 'lucide-react';
 
 
 interface CartViewProps {
@@ -18,9 +20,21 @@ export const CartView: React.FC<CartViewProps> = ({
   removeItem,
 }) => {
   const navigate = useNavigate();
-  const total = cart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
-  const platformFee = Math.round(total * 0.1); 
-  const cashAtMeetup = total - platformFee;
+  const { settings, loading } = useSettings();
+  
+  if (loading || !settings) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-20 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+      </div>
+    );
+  }
+
+  const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
+
+  const subtotal = cart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
+  const platformFee = Math.round(subtotal * (PLATFORM_FEE_PERCENTAGE / 100)); 
+  const cashAtMeetup = subtotal;
 
   if (cart.length === 0) {
     return (
@@ -140,27 +154,48 @@ export const CartView: React.FC<CartViewProps> = ({
           >
             <h2 className="text-sm font-black text-text-muted uppercase tracking-[0.2em] mb-6">Price Details</h2>
             
-            <div className="space-y-4 mb-8">
-              <div className="flex justify-between text-text-muted text-sm font-semibold">
-                <span>Notes Price (Cash)</span>
-                <span className="text-text-main">{cashAtMeetup === 0 ? 'FREE' : `₹${cashAtMeetup}`}</span>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center px-1">
+                <span className="text-sm font-bold text-text-muted">Notes Subtotal</span>
+                <span className="text-base font-black text-text-main">₹{subtotal}</span>
               </div>
-              <div className="flex justify-between text-text-muted text-sm font-semibold">
-                <span>Platform Fee (Online)</span>
-                <span className="text-primary">{platformFee === 0 ? 'FREE' : `+₹${platformFee}`}</span>
-              </div>
-            </div>
-            
-            <div className="pt-6 border-t border-border mb-8">
-              <div className="flex justify-between items-end">
+
+              {(() => {
+                const config = getPlatformFeeConfig(PLATFORM_FEE_PERCENTAGE);
+                return (
+                  <div className="space-y-3">
+                    <div className={`flex justify-between items-center px-1 ${config.color}`}>
+                      <span className="flex items-center gap-1.5 text-sm font-bold">
+                        {config.isPromo && <Sparkles className="h-4 w-4 animate-pulse" />}
+                        {config.label}
+                        <span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">{config.desc}</span>
+                      </span>
+                      <span className="text-base font-black">₹{platformFee}</span>
+                    </div>
+
+                    {config.isPromo && (
+                      <div className={`p-4 rounded-2xl border ${config.bgColor} ${config.borderColor} flex items-center gap-3`}>
+                        <div className={`p-2 rounded-xl ${config.color} bg-white/10`}>
+                          <Info className="h-4 w-4" />
+                        </div>
+                        <p className={`text-xs font-bold leading-relaxed ${config.color}`}>
+                          {config.label} applied! You're saving on platform fees. This helps us maintain the service and keep the platform secure.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="h-px bg-border/50 my-2" />
+              <div className="flex justify-between items-center px-1 bg-primary/5 p-4 rounded-2xl border border-primary/10">
                 <div>
-                  <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1">Total Amount</p>
-                  <p className="text-3xl font-black text-text-main">{total === 0 ? 'FREE' : `₹${total}`}</p>
+                  <span className="text-xs font-black text-primary uppercase tracking-widest block mb-1">Total to Pay Online</span>
+                  <span className="text-2xl font-black text-text-main">₹{platformFee}</span>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-black text-primary uppercase tracking-widest bg-surface bg-accent px-2 py-1 rounded-lg">
-                    You save ₹0
-                  </p>
+                  <span className="text-xs font-black text-text-muted uppercase tracking-widest block mb-1">Cash at Meetup</span>
+                  <span className="text-2xl font-black text-text-main">₹{cashAtMeetup}</span>
                 </div>
               </div>
             </div>

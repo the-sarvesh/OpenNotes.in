@@ -90,6 +90,10 @@ const initDb = async () => {
         price_at_purchase INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending_meetup',
         meetup_pin TEXT,
+        meetup_signal_count INTEGER NOT NULL DEFAULT 0,
+        last_meetup_signal_at DATETIME,
+        pin_attempts INTEGER NOT NULL DEFAULT 0,
+        last_pin_attempt_at DATETIME,
         FOREIGN KEY (order_id) REFERENCES orders(id),
         FOREIGN KEY (listing_id) REFERENCES listings(id),
         FOREIGN KEY (seller_id) REFERENCES users(id)
@@ -150,6 +154,14 @@ const initDb = async () => {
         expires_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('platform_fee_percentage', '0');
 
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
         id TEXT PRIMARY KEY,
@@ -276,6 +288,13 @@ const initDb = async () => {
       "ALTER TABLE users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE users ADD COLUMN verification_token TEXT",
       "ALTER TABLE users ADD COLUMN verification_token_expires_at DATETIME",
+      "ALTER TABLE order_items ADD COLUMN pin_attempts INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE order_items ADD COLUMN last_pin_attempt_at DATETIME",
+      // ── Orders Migration: total_amount & platform_fee (BE-9.1) ─────────────
+      "ALTER TABLE orders ADD COLUMN total_amount REAL NOT NULL DEFAULT 0",
+      "ALTER TABLE orders ADD COLUMN platform_fee REAL NOT NULL DEFAULT 0",
+      "UPDATE orders SET total_amount = COALESCE((SELECT SUM(price_at_purchase * quantity) FROM order_items WHERE order_items.order_id = orders.id), 0)",
+      "UPDATE orders SET platform_fee = COALESCE((SELECT SUM(platform_fee) FROM order_items WHERE order_items.order_id = orders.id), 0)",
     ];
 
     for (const migration of migrations) {
