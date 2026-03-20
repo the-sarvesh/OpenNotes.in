@@ -171,12 +171,17 @@ export const initTelegramBot = () => {
             details: item.buyer_meetup_details
           };
 
+          const itemSubtotal = item.price_at_purchase * item.quantity;
+          const orderTotal = item.total_amount || itemSubtotal;
+          const orderFee = item.platform_fee || 0;
+          const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+
           if (item.buyer_chat) {
-            const template = telegramTemplates.orderAcknowledged(item.buyer_name, item.title, item.price_at_purchase, item.quantity, 'Buyer', item.seller_name, id, meetupObj, item.total_amount, item.platform_fee);
+            const template = telegramTemplates.orderAcknowledged(item.buyer_name, item.title, item.price_at_purchase, item.quantity, 'Buyer', item.seller_name, id, meetupObj, itemSubtotal, itemFee);
             await sendTelegramMessage(item.buyer_chat, template.text, template.reply_markup);
           }
           if (item.seller_chat) {
-            const template = telegramTemplates.orderAcknowledged(item.seller_name, item.title, item.price_at_purchase, item.quantity, 'Seller', item.buyer_name, id, meetupObj, item.total_amount, item.platform_fee);
+            const template = telegramTemplates.orderAcknowledged(item.seller_name, item.title, item.price_at_purchase, item.quantity, 'Seller', item.buyer_name, id, meetupObj, itemSubtotal, itemFee);
             await sendTelegramMessage(item.seller_chat, template.text, template.reply_markup);
           }
         } catch (tgErr) {

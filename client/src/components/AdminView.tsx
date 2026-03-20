@@ -83,6 +83,7 @@ export const AdminView: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
   const [dbSettings, setDbSettings] = useState<any>(null);
+  const [localFee, setLocalFee] = useState<string>('0');
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
 
@@ -132,7 +133,11 @@ export const AdminView: React.FC = () => {
         if (res.ok) setChats(await res.json());
       } else if (tab === 'settings') {
         const res = await apiRequest('/api/settings');
-        if (res.ok) setDbSettings(await res.json());
+        if (res.ok) {
+          const data = await res.json();
+          setDbSettings(data);
+          setLocalFee(String(data.platform_fee_percentage));
+        }
       }
     } catch (err) {
       console.error('Admin fetch error:', err);
@@ -928,11 +933,32 @@ export const AdminView: React.FC = () => {
                             type="number"
                             min="0"
                             max="100"
-                            defaultValue={dbSettings.platform_fee_percentage}
-                            onBlur={async (e) => {
-                              const val = Number(e.target.value);
+                            value={localFee}
+                            onChange={(e) => setLocalFee(e.target.value)}
+                            onBlur={async () => {
+                              const val = Number(localFee);
                               if (!isNaN(val) && val >= 0 && val <= 100) {
-                                await doAction('/api/settings', 'PATCH', { platform_fee_percentage: val });
+                                try {
+                                  const res = await apiRequest('/api/settings', { 
+                                    method: 'PATCH', 
+                                    body: JSON.stringify({ platform_fee_percentage: val }) 
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    setActionMsg(data.message || 'Updated');
+                                    fetchData();
+                                  } else {
+                                    const data = await res.json();
+                                    setActionMsg(data.error || 'Update failed');
+                                    setLocalFee(String(dbSettings.platform_fee_percentage));
+                                  }
+                                } catch {
+                                  setActionMsg('Network error');
+                                  setLocalFee(String(dbSettings.platform_fee_percentage));
+                                }
+                                setTimeout(() => setActionMsg(''), 3000);
+                              } else {
+                                setLocalFee(String(dbSettings.platform_fee_percentage));
                               }
                             }}
                             className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none focus:ring-2 focus:ring-[#FFC000]/50 flex-1"

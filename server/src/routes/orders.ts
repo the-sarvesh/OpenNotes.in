@@ -385,6 +385,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         });
         const seller = sellerRow.rows[0] as any;
 
+        const itemSubtotal = orderItem.price_at_purchase * orderItem.quantity;
+        // Proportional fee calculation: (itemSubtotal / totalAmount) * platformFee
+        const itemPlatformFee = totalAmount > 0 ? Math.round((itemSubtotal / totalAmount) * platformFee) : 0;
+
         // Notify buyer with Full Info
         if (buyer?.telegram_chat_id) {
           const meetupObj = {
@@ -394,7 +398,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             note: buyer_note,
             details: buyer_meetup_details
           };
-          const template = telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin, orderItem.id, meetupObj, totalAmount, platformFee);
+          const template = telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin, orderItem.id, meetupObj, itemSubtotal, itemPlatformFee);
           await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
         }
 
@@ -407,7 +411,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             note: buyer_note,
             details: buyer_meetup_details
           };
-          const template = telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name, orderItem.id, meetupObj, totalAmount, platformFee);
+          const template = telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name, orderItem.id, meetupObj, itemSubtotal, itemPlatformFee);
           await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
         }
       }
@@ -528,8 +532,13 @@ router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
     const dynamicFeePercentage = Number(feeSetting);
 
     const platformFeeTotal = salesRes.rows.reduce((sum: number, row: any) => {
-      const itemTotal = Number(row.price_at_purchase) * Number(row.quantity);
-      return sum + Math.round(itemTotal * (dynamicFeePercentage / 100));
+      const itemSubtotal = Number(row.price_at_purchase) * Number(row.quantity);
+      const orderTotal = Number(row.total_amount) || itemSubtotal; // Fallback if total_amount is missing
+      const orderFee = Number(row.platform_fee) || 0;
+      
+      // Proportional fee for this item
+      const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+      return sum + itemFee;
     }, 0);
 
     res.json({
@@ -638,7 +647,12 @@ router.post(
             note: item.buyer_note,
             details: item.buyer_meetup_details
           };
-          const template = telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name, itemId, meetupObj, (item as any).total_amount, (item as any).platform_fee);
+          const itemSubtotal = (item.price_at_purchase as number) * (item.quantity as number);
+          const orderTotal = (item as any).total_amount || itemSubtotal;
+          const orderFee = (item as any).platform_fee || 0;
+          const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+
+          const template = telegramTemplates.orderAcknowledged(buyer.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Buyer', seller.name, itemId, meetupObj, itemSubtotal, itemFee);
           await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
         }
         if (seller?.telegram_chat_id) {
@@ -649,7 +663,12 @@ router.post(
             note: item.buyer_note,
             details: item.buyer_meetup_details
           };
-          const template = telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name, itemId, meetupObj, (item as any).total_amount, (item as any).platform_fee);
+          const itemSubtotal = (item.price_at_purchase as number) * (item.quantity as number);
+          const orderTotal = (item as any).total_amount || itemSubtotal;
+          const orderFee = (item as any).platform_fee || 0;
+          const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+
+          const template = telegramTemplates.orderAcknowledged(seller.name, item.title as string, item.price_at_purchase as number, item.quantity as number, 'Seller', buyer.name, itemId, meetupObj, itemSubtotal, itemFee);
           await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
         }
       } catch (tgErr) {
@@ -719,7 +738,9 @@ router.post(
             error: `PIN verification is locked for ${Math.ceil(30 - diffMinutes)} more minutes due to repeated incorrect attempts. Please check the PIN with the buyer.`
           });
         }
-        // If more than 30 minutes, reset attempts within this request or at next success
+        
+        // Cooldown passed, reset internal counter for this attempt session
+        item.pin_attempts = 0;
       }
 
       if (item.meetup_pin !== pin) {

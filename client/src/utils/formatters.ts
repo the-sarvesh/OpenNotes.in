@@ -51,7 +51,7 @@ export const getPlatformFeeConfig = (percentage: number) => {
     };
   }
   
-  if (percentage <= 5) {
+  if (percentage === 5) {
     return {
       label: "Exam Special",
       desc: "50% Off Platform Fee",

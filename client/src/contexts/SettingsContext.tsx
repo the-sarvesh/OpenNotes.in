@@ -6,7 +6,7 @@ interface Settings {
 }
 
 interface SettingsContextType {
-  settings: Settings;
+  settings: Settings | null;
   loading: boolean;
   refreshSettings: () => Promise<void>;
 }
@@ -14,7 +14,7 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<Settings>({ platform_fee_percentage: 0 });
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {

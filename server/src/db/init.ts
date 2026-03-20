@@ -288,10 +288,13 @@ const initDb = async () => {
       "ALTER TABLE users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE users ADD COLUMN verification_token TEXT",
       "ALTER TABLE users ADD COLUMN verification_token_expires_at DATETIME",
-      "ALTER TABLE order_items ADD COLUMN meetup_signal_count INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE order_items ADD COLUMN last_meetup_signal_at DATETIME",
       "ALTER TABLE order_items ADD COLUMN pin_attempts INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE order_items ADD COLUMN last_pin_attempt_at DATETIME",
+      // ── Orders Migration: total_amount & platform_fee (BE-9.1) ─────────────
+      "ALTER TABLE orders ADD COLUMN total_amount REAL NOT NULL DEFAULT 0",
+      "ALTER TABLE orders ADD COLUMN platform_fee REAL NOT NULL DEFAULT 0",
+      "UPDATE orders SET total_amount = COALESCE((SELECT SUM(price_at_purchase * quantity) FROM order_items WHERE order_items.order_id = orders.id), 0)",
+      "UPDATE orders SET platform_fee = COALESCE((SELECT SUM(platform_fee) FROM order_items WHERE order_items.order_id = orders.id), 0)",
     ];
 
     for (const migration of migrations) {

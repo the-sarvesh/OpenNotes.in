@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Camera, MapPin, ChevronRight, ChevronLeft, Check, PlusCircle, Upload, Info, Shield, X, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { getPlatformFeeConfig } from '../utils/formatters';
 import { apiRequest } from '../utils/api';
 import { toast } from 'react-hot-toast';
 
@@ -125,6 +127,10 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [step]);
+
+  const { settings } = useSettings();
+  const PLATFORM_FEE_PERCENTAGE = settings?.platform_fee_percentage ?? 0;
+  const platformFee = Math.round(Number(form.price || 0) * (PLATFORM_FEE_PERCENTAGE / 100));
 
   const set = (key: keyof FormData, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -691,35 +697,42 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
 
               {form.price && (
                 <div className="p-4 bg-surface/50 rounded-xl border border-border space-y-2.5">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Price Breakdown</p>
-                    <span className="bg-emerald-500/10 text-emerald-600 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border border-emerald-500/20">
-                      Launch Promo: 0% Fee
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-text-muted">Listing Price (Total)</span>
-                    <span className="font-bold text-text-main">{priceNum === 0 ? 'FREE' : `₹${priceNum}`}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
-                    <span className="font-medium">Platform Fee (Online)</span>
-                    <span className="font-bold">₹0</span>
-                  </div>
-                  <div className="flex justify-between text-sm pt-2.5 border-t border-border">
-                    <span className="font-bold text-text-main">
-                      {priceNum === 0 ? 'Buyer pays' : 'You receive at meetup'}
-                    </span>
-                    <span className="font-black text-emerald-600 dark:text-emerald-400">
-                      {priceNum === 0 ? 'FREE' : `₹${priceNum}`}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-text-muted leading-relaxed pt-1">
-                    {priceNum === 0 ? (
-                      <>Buyer pays <strong>₹0 online</strong> to unlock seller details. This is a <strong>donation</strong> - no money will be exchanged.</>
-                    ) : (
-                      <>Buyer pays <strong>₹0 online</strong> to unlock seller details, then hands you the <strong>full ₹{priceNum} cash</strong> at the meetup. You keep 100% of the sale!</>
-                    )}
-                  </p>
+                  {(() => {
+                    const config = getPlatformFeeConfig(PLATFORM_FEE_PERCENTAGE);
+                    return (
+                      <>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Price Breakdown</p>
+                          <span className={`${config.bgColor} ${config.color} text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border ${config.borderColor}`}>
+                            {config.label}: {config.desc}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-text-muted">Listing Price (Total)</span>
+                          <span className="font-bold text-text-main">{priceNum === 0 ? 'FREE' : `₹${priceNum}`}</span>
+                        </div>
+                        <div className={`flex justify-between text-sm ${config.color}`}>
+                          <span className="font-medium">Platform Fee (Charged Online)</span>
+                          <span className="font-bold">₹{platformFee}</span>
+                        </div>
+                        <div className="flex justify-between text-sm pt-2.5 border-t border-border">
+                          <span className="font-bold text-text-main">
+                            {priceNum === 0 ? 'Buyer pays' : 'You receive at meetup'}
+                          </span>
+                          <span className="font-black text-emerald-600 dark:text-emerald-400">
+                            {priceNum === 0 ? 'FREE' : `₹${priceNum}`}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-text-muted leading-relaxed pt-1">
+                          {priceNum === 0 ? (
+                            <>Buyer pays <strong>₹0 online</strong> to unlock seller details. This is a <strong>donation</strong> - no money will be exchanged.</>
+                          ) : (
+                            <>Buyer pays <strong>₹{platformFee} online</strong> to unlock seller details, then hands you the <strong>full ₹{priceNum} cash</strong> at the meetup. You keep 100% of the sale!</>
+                          )}
+                        </p>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 

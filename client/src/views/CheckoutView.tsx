@@ -128,7 +128,16 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   } | null>(null);
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
 
-  const { settings } = useSettings();
+  const { settings, loading: settingsLoading } = useSettings();
+  
+  if (settingsLoading || !settings) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
 
   const total = activeCart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
@@ -416,7 +425,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
               >
                 {/* Payment split — shown again before user pays */}
                 <PaymentSplitBanner
-                  platformFee={couponResult?.valid && couponResult.feeWaived ? 0 : platformFee}
+                  platformFee={platformFee}
                   cashAmount={subtotal}
                 />
 
@@ -581,37 +590,58 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
             {/* Totals */}
             <div className="pt-4 border-t border-border space-y-3">
-              <div className="flex justify-between text-xs font-semibold text-text-muted">
-                <span>Cash to seller (at meetup)</span>
-                <span className="font-bold text-text-main">{subtotal === 0 ? 'FREE' : `₹${subtotal}`}</span>
-              </div>
-              <div className="flex justify-between text-xs font-semibold text-text-muted">
-                <span>Platform fee (online)</span>
-                <div className="flex items-center gap-1.5">
-                  {couponResult?.valid && couponResult.finalFee < rawPlatformFee && (
-                    <span className="text-[10px] line-through text-text-muted">₹{rawPlatformFee}</span>
-                  )}
-                  <span className={`font-bold ${couponResult?.valid && couponResult.feeWaived ? "text-emerald-600" : "text-text-main"}`}>
-                    {couponResult?.valid && couponResult.feeWaived ? "FREE" : `₹${platformFee}`}
-                  </span>
+                {(() => {
+                  const config = getPlatformFeeConfig(PLATFORM_FEE_PERCENTAGE);
+                  const isWaived = platformFee === 0 && PLATFORM_FEE_PERCENTAGE > 0;
+                  
+                  return (
+                    <div className="space-y-3">
+                      <div className={`flex justify-between items-center px-1 ${config.color}`}>
+                        <span className="flex items-center gap-1.5 text-sm font-bold">
+                          {config.isPromo && <Sparkles className="h-4 w-4 animate-pulse" />}
+                          {config.label}
+                          <span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">
+                            {isWaived ? "(Waived)" : config.desc}
+                          </span>
+                        </span>
+                        <div className="flex flex-col items-end">
+                          {couponResult?.valid && couponResult.finalFee < rawPlatformFee && (
+                            <span className="text-[10px] line-through text-text-muted">₹{rawPlatformFee}</span>
+                          )}
+                          <span className="text-base font-black">
+                            {platformFee === 0 ? "FREE" : `₹${platformFee}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {(config.isPromo || couponResult?.valid) && (
+                        <div className={`p-4 rounded-2xl border ${config.bgColor} ${config.borderColor} flex items-center gap-3`}>
+                          <div className={`p-2 rounded-xl ${config.color} bg-white/10`}>
+                            <Info className="h-4 w-4" />
+                          </div>
+                          <p className={`text-[11px] font-bold leading-relaxed ${config.color}`}>
+                            {couponResult?.valid 
+                              ? `Coupon "${appliedCoupon}" applied: ${couponResult.message}`
+                              : `${config.label} Active! You're saving on platform fees.`}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <div className="h-px bg-border/50 my-2" />
+                <div className="flex justify-between items-center px-1 bg-primary/5 p-4 rounded-2xl border border-primary/10">
+                  <div>
+                    <span className="text-xs font-black text-primary uppercase tracking-widest block mb-1">Total to Pay Online</span>
+                    <span className="text-2xl font-black text-text-main">₹{platformFee}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-black text-text-muted uppercase tracking-widest block mb-1">Cash at Meetup</span>
+                    <span className="text-2xl font-black text-text-main">₹{subtotal}</span>
+                  </div>
                 </div>
               </div>
-              {appliedCoupon && couponResult?.valid && (
-                <div className="flex justify-between text-[10px] font-bold text-emerald-600">
-                  <span className="flex items-center gap-1"><Tag className="h-2.5 w-2.5" /> {appliedCoupon}</span>
-                  <span>−₹{rawPlatformFee - platformFee}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-baseline pt-3 border-t border-border">
-                <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Pay Online Now</span>
-                <span className="text-2xl font-black text-text-main">₹{platformFee}</span>
-              </div>
-              <p className="text-[10px] text-text-muted font-medium leading-relaxed">
-                {couponResult?.valid && couponResult.feeWaived
-                  ? `Fee waived · ₹${subtotal} cash at meetup`
-                  : `₹${platformFee} online · ₹${subtotal} cash at meetup`}
-              </p>
-            </div>
 
             {/* Desktop CTAs */}
             <div className="hidden lg:flex flex-col gap-3 mt-6 pt-5 border-t border-border">

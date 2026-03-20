@@ -24,13 +24,19 @@ router.patch("/", authenticate, async (req: AuthRequest, res, next) => {
     }
 
     const { platform_fee_percentage } = req.body;
+    let updated = false;
 
     if (platform_fee_percentage !== undefined) {
-      const fee = Number(platform_fee_percentage);
-      if (isNaN(fee) || fee < 0 || fee > 100) {
+      const val = Number(platform_fee_percentage);
+      if (isNaN(val) || val < 0 || val > 100) {
         return res.status(400).json({ error: "Invalid platform fee percentage" });
       }
-      await updateSetting("platform_fee_percentage", String(fee));
+      await updateSetting("platform_fee_percentage", String(val));
+      updated = true;
+    }
+
+    if (!updated) {
+      return res.status(400).json({ error: "No recognized settings provided or no changes made" });
     }
 
     res.json({ message: "Settings updated successfully" });
