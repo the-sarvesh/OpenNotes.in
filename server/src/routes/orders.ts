@@ -257,6 +257,10 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         );
         const messageId = uuidv4();
         
+        const itemSubtotal = orderItem.price_at_purchase * orderItem.quantity;
+        const itemPlatformFee = totalAmount > 0 ? Math.round((itemSubtotal / totalAmount) * platformFee) : 0;
+        const totalToCollect = itemSubtotal - itemPlatformFee;
+
         // Structured purchase message
         const initialMessage = `Hi! I just purchased your "${orderItem.title}".\n\nI'm based in ${buyer_location || "BITS"}${buyer_preferred_spot ? ` and prefer meeting at ${buyer_preferred_spot}` : ""}.\n\nAvailability: ${buyer_availability}${buyer_meetup_details ? `\nDetails: ${buyer_meetup_details}` : ""}`;
         const metadata = JSON.stringify({
@@ -273,7 +277,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           buyerMeetupDetails: buyer_meetup_details,
           price: orderItem.price_at_purchase,
           quantity: orderItem.quantity,
-          totalToCollect: orderItem.price_at_purchase * orderItem.quantity
+          totalToCollect: totalToCollect
         });
 
         await tx.execute({
@@ -368,7 +372,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             buyerMeetupDetails: buyer_meetup_details,
             price: orderItem.price_at_purchase,
             quantity: orderItem.quantity,
-            totalToCollect: orderItem.price_at_purchase * orderItem.quantity
+            totalToCollect: orderItem.price_at_purchase * orderItem.quantity - (totalAmount > 0 ? Math.round(((orderItem.price_at_purchase * orderItem.quantity) / totalAmount) * platformFee) : 0)
           }),
 
           is_read: false,
