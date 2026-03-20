@@ -347,17 +347,19 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       </div>
 
       {/* Selling Guide Note */}
-      <div className="mb-8 p-5 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/40 rounded-2xl">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="p-1.5 bg-emerald-600 rounded-lg">
-            <Shield className="h-3.5 w-3.5 text-white" />
+      {PLATFORM_FEE_PERCENTAGE === 0 && (
+        <div className="mb-8 p-5 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/40 rounded-2xl">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-1.5 bg-emerald-600 rounded-lg">
+              <Shield className="h-3.5 w-3.5 text-white" />
+            </div>
+            <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Launch Promo: 0% Fee</p>
           </div>
-          <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Launch Promo: 0% Fee</p>
+          <p className="text-xs text-text-muted leading-relaxed">
+            List your notes for free. During our launch, we've <strong>waived the platform fee</strong>. You keep <strong>100% of your listing price</strong> which the buyer pays you in <strong>cash</strong> during the hand-over.
+          </p>
         </div>
-        <p className="text-xs text-text-muted leading-relaxed">
-          List your notes for free. During our launch, we've <strong>waived the platform fee</strong>. You keep <strong>100% of your listing price</strong> which the buyer pays you in <strong>cash</strong> during the hand-over.
-        </p>
-      </div>
+      )}
 
       {/* Step indicator */}
       <div className="flex items-center mb-10">
@@ -720,14 +722,14 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                             {priceNum === 0 ? 'Buyer pays' : 'You receive at meetup'}
                           </span>
                           <span className="font-black text-emerald-600 dark:text-emerald-400">
-                            {priceNum === 0 ? 'FREE' : `₹${priceNum}`}
+                            {priceNum === 0 ? 'FREE' : `₹${priceNum - platformFee}`}
                           </span>
                         </div>
                         <p className="text-[11px] text-text-muted leading-relaxed pt-1">
                           {priceNum === 0 ? (
                             <>Buyer pays <strong>₹0 online</strong> to unlock seller details. This is a <strong>donation</strong> - no money will be exchanged.</>
                           ) : (
-                            <>Buyer pays <strong>₹{platformFee} online</strong> to unlock seller details, then hands you the <strong>full ₹{priceNum} cash</strong> at the meetup. You keep 100% of the sale!</>
+                            <>Buyer pays <strong>₹{priceNum}</strong> for these notes. You receive <strong>₹{priceNum - platformFee} cash</strong> at the meetup, as the platform fee (₹{platformFee}) is deducted from the seller's share.</>
                           )}
                         </p>
                       </>

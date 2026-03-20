@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ShoppingCart, ArrowLeft, Trash2, Plus, Minus, ChevronRight, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { formatSemester, getPlatformFeeConfig } from '../utils/formatters';
+import { formatSemester, getPlatformFeeConfig, formatRupee, formatCashAtMeetup } from '../utils/formatters';
 import { View, Listing, Order, OrderItem, CartItem } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
 import { Info, Sparkles } from 'lucide-react';
@@ -32,9 +32,9 @@ export const CartView: React.FC<CartViewProps> = ({
 
   const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
 
-  const subtotal = cart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
-  const platformFee = Math.round(subtotal * (PLATFORM_FEE_PERCENTAGE / 100)); 
-  const cashAtMeetup = subtotal;
+  const total = cart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
+  const platformFee = Math.round(total * (PLATFORM_FEE_PERCENTAGE / 100)); 
+  const cashAtMeetup = total - platformFee;
 
   if (cart.length === 0) {
     return (
@@ -135,7 +135,7 @@ export const CartView: React.FC<CartViewProps> = ({
                     <div className="text-right">
                       <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider mb-0.5">Price</p>
                       <p className="text-xl font-black text-text-main">
-                        {item.note.price === 0 ? 'FREE' : `₹${item.note.price * item.quantity}`}
+                        {item.note.price === 0 ? 'FREE' : formatRupee(item.note.price * item.quantity)}
                       </p>
                     </div>
                   </div>
@@ -156,8 +156,8 @@ export const CartView: React.FC<CartViewProps> = ({
             
             <div className="space-y-4">
               <div className="flex justify-between items-center px-1">
-                <span className="text-sm font-bold text-text-muted">Notes Subtotal</span>
-                <span className="text-base font-black text-text-main">₹{subtotal}</span>
+                <span className="text-sm font-bold text-text-muted">Listing Total</span>
+                <span className="text-base font-black text-text-main">{formatRupee(total)}</span>
               </div>
 
               {(() => {
@@ -170,7 +170,7 @@ export const CartView: React.FC<CartViewProps> = ({
                         {config.label}
                         <span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">{config.desc}</span>
                       </span>
-                      <span className="text-base font-black">₹{platformFee}</span>
+                      <span className="text-base font-black">{formatRupee(platformFee)}</span>
                     </div>
 
                     {config.isPromo && (
@@ -191,11 +191,11 @@ export const CartView: React.FC<CartViewProps> = ({
               <div className="flex justify-between items-center px-1 bg-primary/5 p-4 rounded-2xl border border-primary/10">
                 <div>
                   <span className="text-xs font-black text-primary uppercase tracking-widest block mb-1">Total to Pay Online</span>
-                  <span className="text-2xl font-black text-text-main">₹{platformFee}</span>
+                  <span className="text-2xl font-black text-text-main">{formatRupee(platformFee)}</span>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-black text-text-muted uppercase tracking-widest block mb-1">Cash at Meetup</span>
-                  <span className="text-2xl font-black text-text-main">₹{cashAtMeetup}</span>
+                  <span className="text-2xl font-black text-text-main">{formatCashAtMeetup(total, platformFee)}</span>
                 </div>
               </div>
             </div>

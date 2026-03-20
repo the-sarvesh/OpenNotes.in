@@ -22,7 +22,7 @@ import toast from "react-hot-toast";
 import { apiRequest } from "../utils/api";
 import { LOCATIONS, STANDARD_SPOTS } from "../utils/constants";
 import { useSettings } from "../contexts/SettingsContext";
-import { formatMaterialType, getPlatformFeeConfig } from "../utils/formatters";
+import { formatMaterialType, getPlatformFeeConfig, formatRupee, formatCashAtMeetup } from "../utils/formatters";
 
 
 interface CheckoutViewProps {
@@ -65,7 +65,7 @@ const PaymentSplitBanner: React.FC<{ platformFee: number; cashAmount: number }> 
           <CreditCard className="h-3 w-3 text-primary shrink-0" />
           <span className="text-[9px] font-black text-primary uppercase tracking-widest">Pay Online Now</span>
         </div>
-        <p className="text-2xl font-black text-text-main">₹{platformFee}</p>
+        <p className="text-2xl font-black text-text-main">{formatRupee(platformFee)}</p>
         <p className="text-[10px] text-text-muted leading-tight">Platform fee · secures order</p>
       </div>
       <div className="p-4 flex flex-col gap-1 bg-surface">
@@ -73,7 +73,7 @@ const PaymentSplitBanner: React.FC<{ platformFee: number; cashAmount: number }> 
           <Banknote className="h-3 w-3 text-text-muted shrink-0" />
           <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">Cash at Meetup</span>
         </div>
-        <p className="text-2xl font-black text-text-main">{cashAmount === 0 ? 'FREE' : `₹${cashAmount}`}</p>
+        <p className="text-2xl font-black text-text-main">{cashAmount === 0 ? 'FREE' : formatRupee(cashAmount)}</p>
         <p className="text-[10px] text-text-muted leading-tight">To seller · after inspecting notes</p>
       </div>
     </div>
@@ -285,18 +285,23 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                 className="space-y-4"
               >
                 {/* Launch Promo Banner */}
-                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-500/20">
-                    <CheckCircle className="h-6 w-6" />
+                {PLATFORM_FEE_PERCENTAGE === 0 && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-4">
+                    <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-500/20">
+                      <CheckCircle className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Launch Promo Active! 🎉</h3>
+                      <p className="text-xs text-emerald-800/70 font-medium">Platform fees are waived for all BITSians for a limited time.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Launch Promo Active! 🎉</h3>
-                    <p className="text-xs text-emerald-800/70 font-medium">Platform fees are waived for all BITSians for a limited time.</p>
-                  </div>
-                </div>
+                )}
 
                 {/* Payment split — shown upfront so user isn't surprised */}
-                <PaymentSplitBanner platformFee={0} cashAmount={total} />
+                <PaymentSplitBanner 
+                  platformFee={rawPlatformFee} 
+                  cashAmount={total - rawPlatformFee} 
+                />
 
                 <Card className="p-4 sm:p-6">
                   <SectionHeader icon={<MapPin className="h-4 w-4" />} title="Where & When to Meet" />
@@ -426,7 +431,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                 {/* Payment split — shown again before user pays */}
                 <PaymentSplitBanner
                   platformFee={platformFee}
-                  cashAmount={subtotal}
+                  cashAmount={total - platformFee}
                 />
 
                 <Card className="p-4 sm:p-6 space-y-5">
@@ -513,8 +518,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                       </svg>
                     </div>
                     <span className="text-xs font-medium text-text-muted leading-relaxed">
-                      I agree: I'll pay <strong className="text-text-main">₹0 online (Waived)</strong> as the platform fee, {total === 0 ? 'and ' : `and `}
-                      <strong className="text-text-main">{total === 0 ? 'nothing' : `₹${total} cash`}</strong> to the seller at the meetup after inspecting the notes.
+                      I agree: I'll pay <strong className="text-text-main">{formatRupee(platformFee)} online</strong> {PLATFORM_FEE_PERCENTAGE > 0 ? 'as the platform\'s share of the listing total' : '(Waived)'}, and{" "}
+                      <strong className="text-text-main">{total - platformFee === 0 ? 'nothing' : `${formatRupee(total - platformFee)} cash`}</strong> to the seller at the meetup after inspecting the notes.
                     </span>
                   </label>
                 </Card>
@@ -638,7 +643,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                   </div>
                   <div className="text-right">
                     <span className="text-xs font-black text-text-muted uppercase tracking-widest block mb-1">Cash at Meetup</span>
-                    <span className="text-2xl font-black text-text-main">₹{subtotal}</span>
+                    <span className="text-2xl font-black text-text-main">{formatRupee(total - platformFee)}</span>
                   </div>
                 </div>
               </div>
@@ -695,7 +700,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
           </div>
           {step === 2 && (
             <span className="text-[10px] text-text-muted font-semibold">
-              + ₹{subtotal} cash at meetup
+              + {formatRupee(total - platformFee)} cash at meetup
             </span>
           )}
         </div>

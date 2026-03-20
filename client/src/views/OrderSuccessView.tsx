@@ -109,7 +109,7 @@ export const OrderSuccessView: React.FC<OrderSuccessViewProps> = ({ orderData, o
               <div>
                 <h3 className="font-bold text-text-main mb-1">Cash Payment Due</h3>
                 <p className="text-sm text-text-muted leading-relaxed">
-                  Hand over <strong className="text-text-main font-black">{cashDue === 0 ? 'FREE' : `₹${cashDue}`}</strong> to the seller at the meetup. The remaining balance was settled via the online platform fee.
+                  Hand over <strong className="text-text-main font-black">{cashDue === 0 ? 'FREE' : `₹${cashDue}`}</strong> to the seller at the meetup. This is the balance after the platform's share ({orderData.platformFee === 0 ? 'FREE' : `₹${orderData.platformFee}`}) was settled online.
                 </p>
               </div>
             </div>

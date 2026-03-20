@@ -1,4 +1,5 @@
 import db from '../db/database.js';
+import { getSetting } from './settings.js';
 
 // Returns { valid, discountType, discountValue, feeWaived, finalFee, message }
 export const applyCoupon = async (
@@ -57,5 +58,38 @@ export const applyCoupon = async (
     message: feeWaived
       ? "✅ Platform fee fully waived!"
       : `✅ Coupon applied — fee reduced to ₹${finalFee}.`,
+  };
+};
+
+/**
+ * Shared utility to calculate platform fees and apply coupons consistently.
+ */
+export const calculateOrderFees = async (subtotal: number, couponCode?: string) => {
+  const feePercentage = Number(await getSetting("platform_fee_percentage", "0"));
+  const rawFee = Math.round(subtotal * (feePercentage / 100));
+  
+  if (!couponCode || !couponCode.trim()) {
+    return {
+      subtotal,
+      rawPlatformFee: rawFee,
+      platformFee: rawFee,
+      feeWaived: false,
+      appliedCouponCode: null,
+      couponId: null,
+      couponValid: true,
+      couponMessage: null
+    };
+  }
+
+  const result = await applyCoupon(couponCode, rawFee);
+  return {
+    subtotal,
+    rawPlatformFee: rawFee,
+    platformFee: result.valid ? result.finalFee : rawFee,
+    feeWaived: result.valid ? result.feeWaived : false,
+    appliedCouponCode: result.valid ? couponCode.toUpperCase().trim() : null,
+    couponId: result.valid ? result.couponId : null,
+    couponValid: result.valid,
+    couponMessage: result.message
   };
 };

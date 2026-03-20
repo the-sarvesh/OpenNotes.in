@@ -8,7 +8,7 @@ import {
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { getPlatformFeeConfig } from '../utils/formatters';
+import { getPlatformFeeConfig, formatRupee, formatCashAtMeetup } from '../utils/formatters';
 import type { Note } from '../types';
 
 interface CartModalProps {
@@ -24,9 +24,9 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
   const [showDelivery, setShowDelivery] = useState(false);
 
   const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
-  const subtotal = cart.reduce((sum, item) => sum + (item.note.price * item.quantity), 0);
-  const fee = Math.round(subtotal * (PLATFORM_FEE_PERCENTAGE / 100));
-  const total = subtotal + fee;
+  const total = cart.reduce((sum, item) => sum + (item.note.price * item.quantity), 0);
+  const fee = Math.round(total * (PLATFORM_FEE_PERCENTAGE / 100));
+  const cashAtMeetup = total - fee;
 
   if (!isOpen) return null;
 
@@ -109,7 +109,7 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
                             className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-primary disabled:opacity-30 transition-colors"
                           >+</button>
                         </div>
-                        <span className="text-sm font-black text-primary">₹{item.note.price * item.quantity}</span>
+                        <span className="text-sm font-black text-primary">{formatRupee(item.note.price * item.quantity)}</span>
                       </div>
                     </div>
                   </div>
@@ -123,8 +123,8 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
               {/* Summary */}
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-bold text-text-muted px-1">
-                  <span>Subtotal</span>
-                  <span>₹{subtotal}</span>
+                  <span>Listing Total</span>
+                  <span>{formatRupee(total)}</span>
                 </div>
                 {(() => {
                   const config = getPlatformFeeConfig(PLATFORM_FEE_PERCENTAGE);
@@ -157,8 +157,8 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
                 })()}
                 <div className="h-px bg-border/50 my-2" />
                 <div className="flex justify-between items-center px-1">
-                  <span className="text-sm font-black text-text-main">Estimated Total</span>
-                  <span className="text-xl font-black text-text-main">₹{total}</span>
+                  <span className="text-sm font-black text-text-main">Order Total</span>
+                  <span className="text-xl font-black text-text-main">{formatRupee(total)}</span>
                 </div>
               </div>
 
@@ -167,11 +167,11 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
                 <div className="p-4 bg-primary/5 border border-primary/20 rounded-2xl flex items-center justify-between">
                   <div>
                     <p className="text-[10px] font-black text-primary uppercase tracking-widest">Pay now (Fee)</p>
-                    <p className="text-base font-black text-text-main">₹{fee}</p>
+                    <p className="text-base font-black text-text-main">{formatRupee(fee)}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Due at Meetup</p>
-                    <p className="text-base font-black text-emerald-700 dark:text-emerald-400">₹{subtotal}</p>
+                    <p className="text-base font-black text-emerald-700 dark:text-emerald-400">{formatCashAtMeetup(total, fee)}</p>
                   </div>
                 </div>
               ) : (
@@ -182,7 +182,7 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Total Due</p>
-                    <p className="text-lg font-black text-emerald-700 dark:text-emerald-400">₹{subtotal}</p>
+                    <p className="text-lg font-black text-emerald-700 dark:text-emerald-400">{formatRupee(total)}</p>
                   </div>
                 </div>
               )}

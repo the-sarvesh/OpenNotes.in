@@ -100,6 +100,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
         const removedTitles: string[] = [];
         const adjustedTitles: string[] = [];
         const nextCart: CartItem[] = [];
+        const priceUpdatedTitles: string[] = [];
 
         for (const item of cart) {
           const info = resultMap.get(item.note.id);
@@ -119,6 +120,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
             // Price may have changed — update in cart so checkout total is
             // always fresh (note: this only updates the copy stored in cart)
             if (info.price !== undefined && info.price !== item.note.price) {
+              priceUpdatedTitles.push(item.note.title);
               nextCart.push({
                 ...item,
                 note: { ...item.note, price: info.price },
@@ -155,6 +157,21 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({
             `📦 Quantity for ${label} was reduced to match available stock.`,
             {
               duration: 5000,
+              style: { maxWidth: "360px" },
+            },
+          );
+        }
+
+        if (priceUpdatedTitles.length > 0) {
+          const label =
+            priceUpdatedTitles.length === 1
+              ? `"${priceUpdatedTitles[0]}"`
+              : `${priceUpdatedTitles.length} items`;
+          toast(
+            `💰 Price updated for ${label} to match the current listing.`,
+            {
+              duration: 5000,
+              icon: '🏷️',
               style: { maxWidth: "360px" },
             },
           );
