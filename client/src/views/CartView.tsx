@@ -2,8 +2,10 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ShoppingCart, ArrowLeft, Trash2, Plus, Minus, ChevronRight, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { formatSemester } from '../utils/formatters';
+import { formatSemester, getPlatformFeeConfig } from '../utils/formatters';
 import { View, Listing, Order, OrderItem, CartItem } from '../types';
+import { useSettings } from '../contexts/SettingsContext';
+import { Info, Sparkles } from 'lucide-react';
 
 
 interface CartViewProps {
@@ -18,8 +20,11 @@ export const CartView: React.FC<CartViewProps> = ({
   removeItem,
 }) => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
+  const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
+
   const total = cart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
-  const platformFee = Math.round(total * 0.1); 
+  const platformFee = Math.round(total * (PLATFORM_FEE_PERCENTAGE / 100)); 
   const cashAtMeetup = total - platformFee;
 
   if (cart.length === 0) {
@@ -147,7 +152,9 @@ export const CartView: React.FC<CartViewProps> = ({
               </div>
               <div className="flex justify-between text-text-muted text-sm font-semibold">
                 <span>Platform Fee (Online)</span>
-                <span className="text-primary">{platformFee === 0 ? 'FREE' : `+₹${platformFee}`}</span>
+                <span className={PLATFORM_FEE_PERCENTAGE === 0 ? "text-emerald-500 italic" : "text-primary"}>
+                  {PLATFORM_FEE_PERCENTAGE === 0 ? 'Promo: ₹0' : `+₹${platformFee}`}
+                </span>
               </div>
             </div>
             

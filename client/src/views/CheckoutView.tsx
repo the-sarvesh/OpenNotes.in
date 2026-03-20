@@ -12,6 +12,7 @@ import {
   XCircle,
   Banknote,
   Info,
+  Sparkles,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { Note } from "../types";
@@ -20,6 +21,8 @@ import { useAuth } from "../contexts/AuthContext";
 import toast from "react-hot-toast";
 import { apiRequest } from "../utils/api";
 import { LOCATIONS, STANDARD_SPOTS } from "../utils/constants";
+import { useSettings } from "../contexts/SettingsContext";
+import { formatMaterialType, getPlatformFeeConfig } from "../utils/formatters";
 
 
 interface CheckoutViewProps {
@@ -125,9 +128,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   } | null>(null);
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
 
+  const { settings } = useSettings();
+  const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
+
   const total = activeCart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
-  const rawPlatformFee = 0; // Temporarily 0 for launch promo
-  const platformFee = 0;
+  const rawPlatformFee = Math.round(total * (PLATFORM_FEE_PERCENTAGE / 100));
+  const platformFee = couponResult?.valid ? couponResult.finalFee : rawPlatformFee;
   const subtotal = total;
 
   const needsDelivery = activeCart.some(
@@ -530,7 +536,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                       <p className="text-[9px] font-black text-primary uppercase tracking-wider mb-0.5">{item.note.courseCode}</p>
                       <p className="text-xs font-bold text-text-main leading-snug line-clamp-2 mb-1">{item.note.title}</p>
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-text-main">{item.note.price === 0 ? 'FREE' : `₹${item.note.price * item.quantity}`}</span>
+                        <span className="text-[10px] font-black text-text-main">{item.note.price === 0 ? 'FREE' : `₹${Math.round(item.note.price * item.quantity)}`}</span>
                         <div className="flex gap-1.5">
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.semester}</span>
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.condition}</span>
@@ -564,7 +570,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                       <div className="flex items-center gap-2">
                         <Info className="h-3 w-3 text-text-muted shrink-0" />
                         <span className="text-[10px] font-medium text-text-muted italic capitalize">
-                          {item.note.materialType} material
+                          {formatMaterialType(item.note.materialType)} material
                         </span>
                       </div>
                     )}

@@ -7,6 +7,7 @@ import ErrorBoundary from './components/ErrorBoundary.tsx';
 
 import { BrowserRouter } from 'react-router-dom';
 import { CartProvider } from './contexts/CartContext.tsx';
+import { SettingsProvider } from './contexts/SettingsContext.tsx';
 
 // Global Fetch Interceptor to handle Account Blocking
 const originalFetch = window.fetch;
@@ -36,9 +37,11 @@ createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
       <AuthProvider>
         <CartProvider>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
+          <SettingsProvider>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </SettingsProvider>
         </CartProvider>
       </AuthProvider>
     </ErrorBoundary>

@@ -99,6 +99,7 @@ export const initTelegramBot = () => {
       else if (action === 'ack_ord') {
         const itemRes = await db.execute({
           sql: `SELECT oi.*, 
+                       o.total_amount, o.platform_fee,
                        o.buyer_id, o.buyer_location, o.buyer_preferred_spot, o.buyer_availability, o.buyer_note, o.buyer_meetup_details,
                        u.name as buyer_name, u.telegram_chat_id as buyer_chat,
                        s.id as seller_id, s.name as seller_name, s.telegram_chat_id as seller_chat
@@ -171,11 +172,11 @@ export const initTelegramBot = () => {
           };
 
           if (item.buyer_chat) {
-            const template = telegramTemplates.orderAcknowledged(item.buyer_name, item.title, item.price_at_purchase, item.quantity, 'Buyer', item.seller_name, id, meetupObj);
+            const template = telegramTemplates.orderAcknowledged(item.buyer_name, item.title, item.price_at_purchase, item.quantity, 'Buyer', item.seller_name, id, meetupObj, item.total_amount, item.platform_fee);
             await sendTelegramMessage(item.buyer_chat, template.text, template.reply_markup);
           }
           if (item.seller_chat) {
-            const template = telegramTemplates.orderAcknowledged(item.seller_name, item.title, item.price_at_purchase, item.quantity, 'Seller', item.buyer_name, id, meetupObj);
+            const template = telegramTemplates.orderAcknowledged(item.seller_name, item.title, item.price_at_purchase, item.quantity, 'Seller', item.buyer_name, id, meetupObj, item.total_amount, item.platform_fee);
             await sendTelegramMessage(item.seller_chat, template.text, template.reply_markup);
           }
         } catch (tgErr) {
@@ -187,7 +188,7 @@ export const initTelegramBot = () => {
       }
       else if (action === 'im_here') {
         const result = await db.execute({
-          sql: `SELECT oi.seller_id, o.buyer_id, u.telegram_chat_id as buyer_chat, s.telegram_chat_id as seller_chat, u.name as buyer_name, s.name as seller_name
+          sql: `SELECT oi.id, oi.seller_id, oi.meetup_signal_count, o.buyer_id, u.telegram_chat_id as buyer_chat, s.telegram_chat_id as seller_chat, u.name as buyer_name, s.name as seller_name
                 FROM order_items oi
                 JOIN orders o ON oi.order_id = o.id
                 JOIN users u ON o.buyer_id = u.id
@@ -200,7 +201,13 @@ export const initTelegramBot = () => {
         if (!item) return ctx.answerCbQuery('Order not found.');
 
         if (item.status === 'completed' || item.status === 'cancelled') {
-          return ctx.answerCbQuery('❌ Transaction closed for this item.');
+          return ctx.answerCbQuery('❌ Transaction closed.');
+        }
+
+        // Limit "I'm here" signals to 3
+        if (item.meetup_signal_count >= 3) {
+          await ctx.reply('⚠️ Limit reached. You can only signal arrival 3 times per item. Please use the application chat if you need more coordination.');
+          return ctx.answerCbQuery('Limit reached');
         }
 
         const userRes = await db.execute({
@@ -213,6 +220,12 @@ export const initTelegramBot = () => {
         const targetChatId = isBuyer ? item.seller_chat : item.buyer_chat;
         const targetUserId = isBuyer ? item.seller_id : item.buyer_id;
         const targetName = isBuyer ? item.seller_name : item.buyer_name;
+
+        // Increment signal count
+        await db.execute({
+          sql: 'UPDATE order_items SET meetup_signal_count = meetup_signal_count + 1, last_meetup_signal_at = CURRENT_TIMESTAMP WHERE id = ?',
+          args: [id]
+        });
 
         // Notify via Telegram
         if (targetChatId) {
@@ -229,7 +242,7 @@ export const initTelegramBot = () => {
           '/messages'
         );
 
-        await ctx.reply(`✅ Notified ${targetName} that you've arrived.`);
+        await ctx.reply(`✅ Notified ${targetName} that you've arrived. (Signal ${item.meetup_signal_count + 1}/3)`);
         await ctx.answerCbQuery('Sent arrival alert');
       }
       else if (action === 'msg_reply') {
@@ -253,6 +266,23 @@ export const initTelegramBot = () => {
         await ctx.answerCbQuery();
       }
       else if (action === 'enter_pin') {
+        const result = await db.execute({
+          sql: 'SELECT pin_attempts, last_pin_attempt_at FROM order_items WHERE id = ?',
+          args: [id]
+        });
+        const item = result.rows[0] as any;
+
+        if (item?.pin_attempts >= 3) {
+          const lastAttempt = new Date(item.last_pin_attempt_at).getTime();
+          const now = Date.now();
+          const diffMinutes = (now - lastAttempt) / (1000 * 60);
+
+          if (diffMinutes < 30) {
+            await ctx.reply(`❌ <b>Secure Verification Locked</b>\n\nIncorrect PIN 3 times. Telegram verification is locked for <b>${Math.ceil(30 - diffMinutes)} more minutes</b> to prevent spam.\n\nYou can still verify this PIN on the <a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/profile">Sales Dashboard</a> right now. Please check the 4-digit PIN with the buyer.`, { parse_mode: 'HTML' });
+            return ctx.answerCbQuery('Verification Locked');
+          }
+        }
+
         botState.set(chatId, { type: 'awaiting_pin', itemId: id });
         await ctx.reply('⌨️ Please type the 4-digit PIN provided by the buyer:');
         await ctx.answerCbQuery();
@@ -298,12 +328,23 @@ export const initTelegramBot = () => {
         }
 
         if (item.meetup_pin !== pin) {
-          return ctx.reply('❌ Incorrect PIN. Please ask the buyer to show their PIN and try again:');
+          const newAttempts = (item.pin_attempts || 0) + 1;
+          await db.execute({
+            sql: "UPDATE order_items SET pin_attempts = ?, last_pin_attempt_at = CURRENT_TIMESTAMP WHERE id = ?",
+            args: [newAttempts, state.itemId]
+          });
+
+          if (newAttempts >= 3) {
+            botState.delete(chatId);
+            return ctx.reply(`❌ <b>Verification Final Lockout</b>\n\nIncorrect PIN 3 times. This interactive session has ended. Telegram verification is locked for 30 minutes.\n\nUse the <a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/profile">Website Dashboard</a> to verify if you have the correct PIN from the buyer.`, { parse_mode: 'HTML' });
+          }
+
+          return ctx.reply(`❌ Incorrect PIN (Attempt ${newAttempts}/3). Please ask the buyer to show their PIN and try again:`);
         }
 
         // Mark as completed
         await db.execute({
-          sql: "UPDATE order_items SET status = 'completed' WHERE id = ?",
+          sql: "UPDATE order_items SET status = 'completed', pin_attempts = 0 WHERE id = ?",
           args: [state.itemId]
         });
 
@@ -534,9 +575,22 @@ export const sendTelegramMessage = async (chatId: string, text: string, reply_ma
   }
 };
 
-const formatOrderDetails = (item: string, price: string | number, qty: string | number, otherParty: string, role: 'Buyer' | 'Seller') => {
+const formatOrderDetails = (item: string, price: string | number, qty: string | number, otherParty: string, role: 'Buyer' | 'Seller', total: number, platformFee: number) => {
   const priceDisplay = Number(price) === 0 ? 'FREE' : `₹${price}`;
-  return `📦 <b>Item:</b> ${item}\n💰 <b>Price:</b> ${priceDisplay} x ${qty}\n👤 <b>${role === 'Seller' ? 'Buyer' : 'Seller'}:</b> ${otherParty}`;
+  const cashAmount = Math.round(total - platformFee);
+  
+  let details = `📦 <b>Item:</b> ${item}\n💰 <b>Price:</b> ${priceDisplay} x ${qty}\n👤 <b>${role === 'Seller' ? 'Buyer' : 'Seller'}:</b> ${otherParty}\n\n`;
+  
+  if (role === 'Buyer') {
+    details += `💰 <b>Total Bill:</b> ₹${Math.round(total)}\n`;
+    details += `📱 <b>Paid Online:</b> ₹${Math.round(platformFee)}\n`;
+    details += `💵 <b>Cash to Pay Seller:</b> ₹${cashAmount}`;
+  } else {
+    details += `💰 <b>Total Sale:</b> ₹${Math.round(total)}\n`;
+    details += `💵 <b>Cash to Collect:</b> ₹${cashAmount}`;
+  }
+  
+  return details;
 };
 
 const formatMeetupCard = (location: string, spot: string, availability: string, note?: string, details?: string) => {
@@ -547,8 +601,8 @@ const formatMeetupCard = (location: string, spot: string, availability: string, 
 };
 
 export const telegramTemplates = {
-  orderPlaced: (name: string, item: string, price: number, qty: number, sellerName: string, pin: string, itemId: string, meetup: any) => ({
-    text: `🆕 <b>Order Placed</b>\n\nHi <b>${name}</b>, your order is pending confirmation.\n\n${formatOrderDetails(item, price, qty, sellerName, 'Buyer')}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n<i>Coordinate the meetup via chat once acknowledged.</i>`,
+  orderPlaced: (name: string, item: string, price: number, qty: number, sellerName: string, pin: string, itemId: string, meetup: any, total: number, platformFee: number) => ({
+    text: `🆕 <b>Order Placed</b>\n\nHi <b>${name}</b>, your order is pending confirmation.\n\n${formatOrderDetails(item, price, qty, sellerName, 'Buyer', total, platformFee)}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n<i>Coordinate the meetup via chat once acknowledged.</i>`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -561,8 +615,8 @@ export const telegramTemplates = {
     }
   }),
   
-  newOrder: (name: string, item: string, price: number, qty: number, buyerName: string, itemId: string, meetup: any) => ({
-    text: `🔔 <b>New Order Received!</b>\n\nHi <b>${name}</b>, you have a new request.\n\n${formatOrderDetails(item, price, qty, buyerName, 'Seller')}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n📨 <i>Coordinate the meetup via chat.</i>`,
+  newOrder: (name: string, item: string, price: number, qty: number, buyerName: string, itemId: string, meetup: any, total: number, platformFee: number) => ({
+    text: `🔔 <b>New Order Received!</b>\n\nHi <b>${name}</b>, you have a new request.\n\n${formatOrderDetails(item, price, qty, buyerName, 'Seller', total, platformFee)}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n📨 <i>Coordinate the meetup via chat.</i>`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -576,8 +630,8 @@ export const telegramTemplates = {
     }
   }),
   
-  orderAcknowledged: (name: string, item: string, price: number, qty: number, role: 'Buyer' | 'Seller', otherParty: string, itemId: string, meetup: any) => ({
-    text: `✅ <b>Meetup Confirmed</b>\n\nHi <b>${name}</b>, the ${role === 'Seller' ? 'buyer' : 'seller'} (${otherParty}) is ready.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer')}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n🤝 <i>Meetup is now in progress.</i>`,
+  orderAcknowledged: (name: string, item: string, price: number, qty: number, role: 'Buyer' | 'Seller', otherParty: string, itemId: string, meetup: any, total: number, platformFee: number) => ({
+    text: `✅ <b>Meetup Confirmed</b>\n\nHi <b>${name}</b>, the ${role === 'Seller' ? 'buyer' : 'seller'} (${otherParty}) is ready.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer', total, platformFee)}\n${formatMeetupCard(meetup.location, meetup.spot, meetup.availability, meetup.note, meetup.details)}\n🤝 <i>Meetup is now in progress.</i>`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -589,8 +643,8 @@ export const telegramTemplates = {
     }
   }),
 
-  orderCompleted: (name: string, item: string, price: number, qty: number, role: 'Buyer' | 'Seller', otherParty: string) =>
-    `🎉 <b>Exchange Completed!</b>\n\nHi <b>${name}</b>, the exchange was successful.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer')}\n\n${role === 'Seller' ? '✅ Earnings added to your balance.' : '✅ Purchase confirmed.'}\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`,
+  orderCompleted: (name: string, item: string, price: number, qty: number, role: 'Buyer' | 'Seller', otherParty: string, total: number, platformFee: number) =>
+    `🎉 <b>Exchange Completed!</b>\n\nHi <b>${name}</b>, the exchange was successful.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer', total, platformFee)}\n\n${role === 'Seller' ? '✅ Earnings added to your balance.' : '✅ Purchase confirmed.'}\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`,
 
   newMessage: (name: string, senderName: string, content: string, convoId: string) => ({
     text: `💬 <b>New Message from ${senderName}</b>\n\n"${content}"`,

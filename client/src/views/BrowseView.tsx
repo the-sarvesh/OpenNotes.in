@@ -68,7 +68,14 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
     const params = new URLSearchParams();
     if (selectedSemester !== 'All') params.set('semester', selectedSemester);
     if (debouncedSearch) params.set('search', debouncedSearch);
-    if (selectedType !== 'All') params.set('material_type', selectedType);
+    if (selectedType !== 'All') {
+      const typeMap: Record<string, string> = {
+        'PPT': 'ppt',
+        'Book': 'book',
+        'Handwritten Notes': 'handwritten'
+      };
+      params.set('material_type', typeMap[selectedType] || selectedType.toLowerCase());
+    }
     params.set('page', pageNum.toString());
     params.set('limit', '20');
 

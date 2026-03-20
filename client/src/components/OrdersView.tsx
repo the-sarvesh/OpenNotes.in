@@ -6,7 +6,7 @@ import { apiRequest } from '../utils/api.js';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { statusColors, formatStatus } from '../utils/status.js';
-import { formatSemester } from '../utils/formatters';
+import { formatSemester, formatMaterialType } from '../utils/formatters';
 import { Order, OrderItem } from '../types';
 
 
@@ -187,7 +187,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                             <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-2.5 py-1 rounded-lg">Qty: {item.quantity}</span>
                             {item.material_type && (
                               <span className="text-[10px] font-black text-[#003366] dark:text-blue-300 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 px-2.5 py-1 rounded-lg">
-                                {item.material_type}
+                                {formatMaterialType(item.material_type)}
                               </span>
                             )}
                           </div>
@@ -201,6 +201,11 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                                 </p>
                                 <p className="font-black text-text-main truncate">{item.seller_name}</p>
                                 <p className="text-xs text-text-muted mt-0.5 truncate">{item.seller_email}</p>
+                                {item.material_type && (
+                                  <span className="text-[10px] font-medium text-text-muted italic capitalize">
+                                    {formatMaterialType(item.material_type)} material
+                                  </span>
+                                )}
                                 {item.location && (
                                   <p className="text-[10px] text-text-muted mt-2 flex items-center gap-1">
                                     <MapPin className="h-3 w-3 shrink-0" />
@@ -211,8 +216,8 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                             )}
                             <div className={`${item.seller_name ? 'col-span-2 sm:col-span-1' : 'col-span-2'} bg-surface rounded-xl border border-border p-4 flex flex-row sm:flex-col items-center sm:items-start justify-between sm:justify-start`}>
                               <p className="text-[9px] font-black uppercase tracking-widest text-text-muted sm:mb-1">Item Total</p>
-                              <p className="text-2xl sm:text-3xl font-black text-text-main">{item.price_at_purchase === 0 ? 'FREE' : `₹${item.price_at_purchase * item.quantity}`}</p>
-                              <p className="text-[10px] text-text-muted hidden sm:block mt-0.5">{item.price_at_purchase === 0 ? 'Donation' : `₹${item.price_at_purchase} × ${item.quantity}`}</p>
+                              <p className="text-2xl sm:text-3xl font-black text-text-main">{item.price_at_purchase === 0 ? 'FREE' : `₹${Math.round(item.price_at_purchase * item.quantity)}`}</p>
+                              <p className="text-[10px] text-text-muted hidden sm:block mt-0.5">{item.price_at_purchase === 0 ? 'Donation' : `₹${Math.round(item.price_at_purchase)} × ${item.quantity}`}</p>
                             </div>
                           </div>
 
@@ -267,7 +272,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                           <p className="text-[9px] font-black uppercase tracking-widest text-[#003366] dark:text-blue-400">Cash Due to Seller</p>
                           <p className="text-[10px] text-text-muted mt-0.5">To be paid at meetup</p>
                         </div>
-                        <p className="text-xl font-black text-text-main">{selectedOrder.total_amount - selectedOrder.platform_fee === 0 ? 'FREE' : `₹${selectedOrder.total_amount - selectedOrder.platform_fee}`}</p>
+                        <p className="text-xl font-black text-text-main">{selectedOrder.total_amount - selectedOrder.platform_fee === 0 ? 'FREE' : `₹${Math.round(selectedOrder.total_amount - selectedOrder.platform_fee)}`}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -343,7 +348,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                         {order.items?.map(i => i.title).join(', ')}
                       </p>
                       <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
-                        Total: {order.total_amount === 0 ? 'FREE' : `₹${order.total_amount}`}
+                        Total: {order.total_amount === 0 ? 'FREE' : `₹${Math.round(order.total_amount)}`}
                       </p>
                       <div className="flex items-center justify-between mt-1">
                         <p className="text-[10px] text-text-muted">

@@ -208,7 +208,7 @@ router.post(
         return res.status(400).json({ error: "Invalid semester" });
       }
 
-      const validMaterialTypes = ["handwritten", "printed", "digital", "other"];
+      const validMaterialTypes = ["handwritten", "printed", "digital", "book", "ppt", "other"];
       if (!validMaterialTypes.includes(material_type)) {
         return res.status(400).json({ error: "Invalid material type" });
       }

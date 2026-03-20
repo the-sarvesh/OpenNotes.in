@@ -250,8 +250,8 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       // Map material type labels to backend-expected keys
       const typeMap: Record<string, string> = {
         'Handwritten Notes': 'handwritten',
-        'PPT': 'printed',
-        'Book': 'printed'
+        'PPT': 'ppt',
+        'Book': 'book'
       };
 
       const imageUrls = form.images.map(img => img.url).filter(Boolean) as string[];

@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  X, ShoppingBag, Trash2, ChevronRight, 
-  ShieldCheck, Info, MapPin, Clock, Tag
+  X, ShoppingCart, Trash2, ArrowRight, Info, 
+  ChevronRight, AlertCircle, Sparkles, Gift,
+  ShoppingBag, ShieldCheck, MapPin, Clock, Tag
 } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { getPlatformFeeConfig } from '../utils/formatters';
 import type { Note } from '../types';
 
 interface CartModalProps {
@@ -17,10 +20,12 @@ interface CartModalProps {
 export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckout }) => {
   const { cart, removeFromCart, updateQuantity, clearCart } = useCart();
   const { user } = useAuth();
+  const { settings } = useSettings();
   const [showDelivery, setShowDelivery] = useState(false);
 
+  const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
   const subtotal = cart.reduce((sum, item) => sum + (item.note.price * item.quantity), 0);
-  const fee = Math.round(subtotal * 0.1);
+  const fee = Math.round(subtotal * (PLATFORM_FEE_PERCENTAGE / 100));
   const total = subtotal + fee;
 
   if (!isOpen) return null;
@@ -121,21 +126,35 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
                   <span>Subtotal</span>
                   <span>₹{subtotal}</span>
                 </div>
-                <div className="flex justify-between text-xs font-bold text-text-muted px-1">
-                  <span className="flex items-center gap-1.5">
-                    Platform Fee (10%)
-                    <button onClick={() => setShowDelivery(!showDelivery)} className="text-primary hover:text-primary-hover"><Info className="h-3 w-3" /></button>
-                  </span>
-                  <span>₹{fee}</span>
-                </div>
-                {showDelivery && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-                    className="p-3 bg-primary/5 rounded-xl border border-primary/10 text-[10px] text-text-muted leading-relaxed"
-                  >
-                    The platform fee helps us maintain the service, provide secure real-time chat, and verified handovers. You only pay this amount online; the rest is cash at pickup.
-                  </motion.div>
-                )}
+                {(() => {
+                  const config = getPlatformFeeConfig(PLATFORM_FEE_PERCENTAGE);
+                  return (
+                    <div className="space-y-2">
+                      <div className={`flex justify-between text-xs font-bold px-1 ${config.color} ${config.isPromo ? 'italic' : ''}`}>
+                        <span className="flex items-center gap-1.5">
+                          {config.isPromo && <Sparkles className="h-3 w-3 animate-pulse" />}
+                          {config.label}: {config.desc}
+                          <button onClick={() => setShowDelivery(!showDelivery)} className="text-primary hover:text-primary-hover ml-1">
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </span>
+                        <span>₹{fee}</span>
+                      </div>
+                      
+                      {showDelivery && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                          className={`p-3 rounded-xl border ${config.bgColor} ${config.borderColor} text-[10px] leading-relaxed ${config.color}`}
+                        >
+                          {config.isPromo ? (
+                            <p className="font-bold">✨ Special Offer Applied!</p>
+                          ) : null}
+                          The platform fee helps us maintain the service, provide secure real-time chat, and verified handovers. You only pay this amount online; the rest is cash at pickup.
+                        </motion.div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="h-px bg-border/50 my-2" />
                 <div className="flex justify-between items-center px-1">
                   <span className="text-sm font-black text-text-main">Estimated Total</span>
@@ -144,17 +163,29 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
               </div>
 
               {/* Pay Now Callout */}
-              <div className="p-4 bg-primary/5 border border-primary/20 rounded-2xl flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-black text-primary uppercase tracking-widest">Pay now (Fee)</p>
-                  <p className="text-base font-black text-text-main">₹{fee}</p>
+              {PLATFORM_FEE_PERCENTAGE > 0 ? (
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black text-primary uppercase tracking-widest">Pay now (Fee)</p>
+                    <p className="text-base font-black text-text-main">₹{fee}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Due at Meetup</p>
+                    <p className="text-base font-black text-emerald-700 dark:text-emerald-400">₹{subtotal}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Due at Meetup</p>
-                  <p className="text-base font-black text-emerald-700 dark:text-emerald-400">₹{subtotal}</p>
+              ) : (
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Payment Style</p>
+                    <p className="text-xs font-black text-text-main">🤝 Direct Meetup (Cash)</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Total Due</p>
+                    <p className="text-lg font-black text-emerald-700 dark:text-emerald-400">₹{subtotal}</p>
+                  </div>
                 </div>
-              </div>
-
+              )}
               <button
                 onClick={onCheckout}
                 className="w-full py-4 bg-primary hover:bg-primary-hover text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-lg shadow-primary/20 active:scale-[0.98]"
