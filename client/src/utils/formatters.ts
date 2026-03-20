@@ -70,6 +70,14 @@ export const getPlatformFeeConfig = (percentage: number) => {
     color: "text-text-muted",
     bgColor: "bg-white/5",
     borderColor: "border-white/10",
-    badge: null
   };
+};
+
+export const formatRupee = (amount: number): string => {
+  return `₹${Math.round(amount)}`;
+};
+
+export const formatCashAtMeetup = (total: number, platformFee: number): string => {
+  const cash = total - platformFee;
+  return cash <= 0 ? "FREE" : formatRupee(cash);
 };

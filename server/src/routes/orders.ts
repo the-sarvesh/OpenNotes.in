@@ -4,7 +4,7 @@ import { randomInt } from "crypto";
 import db from "../db/database.js";
 import { authenticate, AuthRequest } from "../middleware/auth.js";
 import { createNotification } from "../utils/notifications.js";
-import { applyCoupon } from "../utils/orders.js";
+import { applyCoupon, calculateOrderFees } from "../utils/orders.js";
 import { io } from "../socket.js";
 import { sendTelegramMessage, telegramTemplates } from "../utils/telegram.js";
 import { getSetting } from "../utils/settings.js";
@@ -25,8 +25,43 @@ const getConversationId = (
   return `${sorted[0]}_${sorted[1]}`;
 };
 
+// Frontend calls this to preview its subtotal, fees, and cash at meetup upfront
+router.post("/quote", authenticate, async (req: AuthRequest, res, next) => {
+  try {
+    const { items, coupon_code } = req.body;
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ error: "items array is required" });
+    }
+
+    let subtotal = 0;
+    for (const item of items) {
+      const listingRes = await db.execute({
+        sql: "SELECT price FROM listings WHERE id = ? AND status = 'active'",
+        args: [item.listing_id],
+      });
+      const listing = listingRes.rows[0] as any;
+      if (listing) {
+        subtotal += Number(listing.price) * (Number(item.quantity) || 1);
+      }
+    }
+
+    const feeResult = await calculateOrderFees(subtotal, coupon_code);
+
+    return res.json({
+      subtotal: feeResult.subtotal,
+      platformFee: feeResult.platformFee,
+      cashAtMeetup: feeResult.subtotal - feeResult.platformFee,
+      couponValid: feeResult.couponValid,
+      couponMessage: feeResult.couponMessage,
+      rawPlatformFee: feeResult.rawPlatformFee
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ─── POST /api/orders/validate-coupon ────────────────────────────────────────
-// Frontend calls this to preview the discount before placing the order
+// @deprecated Use /quote instead for a full picture.
 router.post("/validate-coupon", authenticate, async (req: AuthRequest, res, next) => {
   try {
     const { coupon_code, order_total } = req.body;
@@ -34,30 +69,18 @@ router.post("/validate-coupon", authenticate, async (req: AuthRequest, res, next
     if (!coupon_code) {
       return res.status(400).json({ error: "coupon_code is required" });
     }
-    if (!order_total || isNaN(Number(order_total))) {
-      return res.status(400).json({ error: "order_total is required" });
-    }
+    const feeResult = await calculateOrderFees(Number(order_total) || 0, coupon_code);
 
-    const feeSetting = await getSetting("platform_fee_percentage", "0");
-    const dynamicFeePercentage = Number(feeSetting);
-
-    const originalFee = Math.round(
-      Number(order_total) * (dynamicFeePercentage / 100),
-    );
-    const result = await applyCoupon(coupon_code, originalFee);
-
-    if (!result.valid) {
-      return res.status(400).json({ error: result.message });
+    if (!feeResult.couponValid) {
+      return res.status(400).json({ error: feeResult.couponMessage });
     }
 
     return res.json({
       valid: true,
-      message: result.message,
-      originalFee,
-      finalFee: result.finalFee,
-      feeWaived: result.feeWaived,
-      discountType: result.discountType,
-      discountValue: result.discountValue,
+      message: feeResult.couponMessage,
+      originalFee: feeResult.rawPlatformFee,
+      finalFee: feeResult.platformFee,
+      feeWaived: feeResult.feeWaived
     });
   } catch (error) {
     next(error);
@@ -140,30 +163,17 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
     }
 
     // ── Coupon / fee logic ────────────────────────────────────────────────────
-    // Fetch dynamic platform fee from DB
-    const feeSetting = await getSetting("platform_fee_percentage", "0");
-    const dynamicFeePercentage = Number(feeSetting);
-
-    const totalAmount = subtotal;
-    const rawPlatformFee = Math.round(
-      totalAmount * (dynamicFeePercentage / 100),
-    );
-
-    let platformFee = rawPlatformFee;
-    let feeWaived = false;
-    let appliedCouponCode: string | null = null;
-    let appliedCouponId: string | null = null;
-
-    if (coupon_code && coupon_code.trim()) {
-      const couponResult = await applyCoupon(coupon_code, rawPlatformFee);
-      if (!couponResult.valid) {
-        return res.status(400).json({ error: couponResult.message });
-      }
-      platformFee = couponResult.finalFee;
-      feeWaived = couponResult.feeWaived;
-      appliedCouponCode = coupon_code.toUpperCase().trim();
-      appliedCouponId = couponResult.couponId;
+    const feeResult = await calculateOrderFees(subtotal, coupon_code);
+    
+    if (coupon_code && !feeResult.couponValid) {
+      return res.status(400).json({ error: feeResult.couponMessage });
     }
+
+    const totalAmount = feeResult.subtotal;
+    const platformFee = feeResult.platformFee;
+    const feeWaived = feeResult.feeWaived;
+    const appliedCouponCode = feeResult.appliedCouponCode;
+    const appliedCouponId = feeResult.couponId;
 
     // ── Insert order atomically ───────────────────────────────────────────────
     const tx = await db.transaction("write");
