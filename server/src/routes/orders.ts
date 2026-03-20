@@ -698,7 +698,7 @@ router.post(
 
       const itemRes = await db.execute({
         sql: `
-          SELECT oi.*, o.id as order_id, o.status as order_status, o.buyer_id, l.title
+          SELECT oi.*, o.id as order_id, o.status as order_status, o.buyer_id, o.total_amount, o.platform_fee, l.title
           FROM order_items oi
           JOIN orders o ON oi.order_id = o.id
           JOIN listings l ON oi.listing_id = l.id
@@ -825,15 +825,20 @@ router.post(
         const buyer = buyerRow.rows[0] as any;
         const seller = sellerRow.rows[0] as any;
 
+        const itemSubtotal = Number(item.price_at_purchase) * Number(item.quantity);
+        const orderTotal = Number(item.total_amount) || itemSubtotal;
+        const orderFee = Number(item.platform_fee) || 0;
+        const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+
         if (buyer?.telegram_chat_id) {
           await sendTelegramMessage(buyer.telegram_chat_id,
-            telegramTemplates.orderCompleted(buyer.name, item.title as string, Number(item.price_at_purchase), Number(item.quantity), 'Buyer', seller.name, Number(item.total_amount), Number(item.platform_fee))
+            telegramTemplates.orderCompleted(buyer.name, item.title as string, Number(item.price_at_purchase), Number(item.quantity), 'Buyer', seller.name, itemSubtotal, itemFee)
           );
         }
 
         if (seller?.telegram_chat_id) {
           await sendTelegramMessage(seller.telegram_chat_id,
-            telegramTemplates.orderCompleted(seller.name, item.title as string, Number(item.price_at_purchase), Number(item.quantity), 'Seller', buyer.name, Number(item.total_amount), Number(item.platform_fee))
+            telegramTemplates.orderCompleted(seller.name, item.title as string, Number(item.price_at_purchase), Number(item.quantity), 'Seller', buyer.name, itemSubtotal, itemFee)
           );
         }
       } catch (tgErr) {
