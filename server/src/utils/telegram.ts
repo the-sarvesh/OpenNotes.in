@@ -26,10 +26,15 @@ export const initTelegramBot = () => {
 
   // Handle /start command for deep linking
   bot.start(async (ctx) => {
-    const payload = ctx.payload; // This is the token from /start <token>
+    const payload = ctx.payload;
+    const fromId = ctx.from?.id.toString();
     
     if (!payload || !payload.startsWith('tl-')) {
       return ctx.reply('Welcome to OpenNotes.in Bot! 👋\n\nTo link your account, please click the "Connect Telegram" button in your profile settings on the website.');
+    }
+
+    if (!fromId) {
+      return ctx.reply('❌ Error: Could not identify your Telegram account ID.');
     }
 
     try {
@@ -40,19 +45,19 @@ export const initTelegramBot = () => {
       });
 
       if (result.rows.length === 0) {
-        return ctx.reply('❌ Invalid or expired linking token. Please generate a new one from your profile settings.');
+        return ctx.reply('❌ Invalid or expired linking token. Please generate a new one from your profile settings on the website.');
       }
 
       const user = result.rows[0] as any;
-      const chatId = ctx.chat.id.toString();
 
-      // Link the chat ID and clear the token
+      // Link the fromId and clear the token
       await db.execute({
         sql: 'UPDATE users SET telegram_chat_id = ?, telegram_link_token = NULL WHERE id = ?',
-        args: [chatId, user.id]
+        args: [fromId, user.id]
       });
 
-      return ctx.reply(`✅ Success! Your account (${user.name}) is now linked to Telegram. You will receive real-time order notifications and can manage them directly from here.`);
+      console.info(`[Telegram] Linked user ${user.name} to ID ${fromId}`);
+      return ctx.reply(`✅ Success! Your account (${user.name}) is now linked to Telegram ID: ${fromId}. You will receive real-time updates and can manage orders directly from here.`);
     } catch (err) {
       console.error('[Telegram] Linking error:', err);
       return ctx.reply('❌ An error occurred while linking your account. Please try again later.');
