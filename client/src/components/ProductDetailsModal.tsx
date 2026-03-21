@@ -238,12 +238,12 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 </div>
               </div>
 
-              {/* Seller pill */}
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-full">
+              {/* Seller pill (Hidden until purchase) */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-full" title="Seller identity is revealed after purchase">
                 <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center text-black text-[9px] font-black shrink-0">
-                  {note.seller.charAt(0).toUpperCase()}
+                  <ShieldCheck className="h-3 w-3" />
                 </div>
-                <span className="text-xs font-bold text-text-muted">{note.seller}</span>
+                <span className="text-xs font-bold text-text-muted">Seller identity hidden</span>
               </div>
             </div>
 
