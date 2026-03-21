@@ -253,6 +253,8 @@ const initDb = async () => {
       "ALTER TABLE orders ADD COLUMN buyer_note TEXT",
       "ALTER TABLE orders ADD COLUMN buyer_meetup_details TEXT",
       "ALTER TABLE order_items ADD COLUMN meetup_pin TEXT",
+      "ALTER TABLE order_items ADD COLUMN meetup_signal_count INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE order_items ADD COLUMN last_meetup_signal_at DATETIME",
       // ── Coupon / fee-waiver migrations ────────────────────────────────────
       "ALTER TABLE orders ADD COLUMN platform_fee_waived INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE orders ADD COLUMN coupon_code TEXT",
