@@ -551,38 +551,40 @@ export const AdminView: React.FC = () => {
                                 {(() => {
                                   const semLink = subjectLinks.find(l => l.semester === sem && (l.subject_name === '' || l.subject_name === null));
                                   return (
-                                    <div className="flex items-center gap-2 max-w-xs flex-1">
-                                      <input
-                                        type="url"
-                                        placeholder={`${sem} General Drive Link`}
-                                        defaultValue={semLink?.drive_link || ''}
-                                        className="w-full bg-slate-800 border border-[#FFC000]/20 rounded-lg px-2 py-1 text-[10px] text-[#FFC000] focus:outline-none focus:ring-1 focus:ring-[#FFC000]/50 placeholder:text-[#FFC000]/30"
-                                        onBlur={async (e) => {
-                                          const newLink = e.target.value.trim();
-                                          if (newLink !== (semLink?.drive_link || '')) {
-                                            try {
-                                              const res = await apiRequest('/api/admin/subject-links', {
-                                                method: 'POST',
-                                                body: JSON.stringify({
-                                                  semester: sem,
-                                                  subject_name: '',
-                                                  drive_link: newLink
-                                                })
-                                              });
-                                              if (res.ok) {
-                                                setActionMsg(`${sem} link updated`);
-                                                const linksRes = await apiRequest('/api/resources/subject-links');
-                                                if (linksRes.ok) setSubjectLinks(await linksRes.json());
-                                              }
-                                            } catch (err) {
-                                              setActionMsg('Failed to update link');
+                                    <div className="flex items-center gap-2 max-w-sm flex-1">
+                                      <div className="relative flex-1">
+                                        <input
+                                          id={`sem-link-${sem}`}
+                                          type="url"
+                                          placeholder={`${sem} General Drive Link`}
+                                          defaultValue={semLink?.drive_link || ''}
+                                          className="w-full bg-slate-800 border border-[#FFC000]/20 rounded-lg px-2 py-1 text-[10px] text-[#FFC000] focus:outline-none focus:ring-1 focus:ring-[#FFC000]/50 placeholder:text-[#FFC000]/30"
+                                        />
+                                      </div>
+                                      <button 
+                                        onClick={async () => {
+                                          const input = document.getElementById(`sem-link-${sem}`) as HTMLInputElement;
+                                          const newLink = input.value.trim();
+                                          try {
+                                            const res = await apiRequest('/api/admin/subject-links', {
+                                              method: 'POST',
+                                              body: JSON.stringify({ semester: sem, subject_name: '', drive_link: newLink })
+                                            });
+                                            if (res.ok) {
+                                              setActionMsg(`${sem} link updated`);
+                                              const linksRes = await apiRequest('/api/resources/subject-links');
+                                              if (linksRes.ok) setSubjectLinks(await linksRes.json());
                                             }
-                                            setTimeout(() => setActionMsg(''), 3000);
-                                          }
+                                          } catch (err) { setActionMsg('Failed to update link'); }
+                                          setTimeout(() => setActionMsg(''), 3000);
                                         }}
-                                      />
+                                        className="p-1.5 bg-[#FFC000]/10 hover:bg-[#FFC000]/20 border border-[#FFC000]/20 rounded-lg text-[#FFC000] transition-all active:scale-90"
+                                        title="Save Link"
+                                      >
+                                        <Save className="h-3 w-3" />
+                                      </button>
                                       {semLink?.drive_link && (
-                                        <a href={semLink.drive_link} target="_blank" rel="noreferrer" className="shrink-0 p-1 text-[#FFC000] hover:bg-[#FFC000]/10 rounded transition-colors">
+                                        <a href={semLink.drive_link} target="_blank" rel="noreferrer" className="shrink-0 p-1.5 text-[#FFC000] hover:bg-[#FFC000]/10 rounded-lg border border-transparent hover:border-[#FFC000]/20 transition-colors">
                                           <ExternalLink className="h-3 w-3" />
                                         </a>
                                       )}
@@ -599,35 +601,35 @@ export const AdminView: React.FC = () => {
                                       <div className="flex gap-2">
                                         <div className="relative flex-1">
                                           <input
+                                            id={`sub-link-${sem}-${subject}`}
                                             type="url"
                                             placeholder="Drive Link (https://...)"
                                             defaultValue={existingLink?.drive_link || ''}
                                             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#FFC000]/50"
-                                            onBlur={async (e) => {
-                                              const newLink = e.target.value.trim();
-                                              if (newLink !== (existingLink?.drive_link || '')) {
-                                                try {
-                                                  const res = await apiRequest('/api/admin/subject-links', {
-                                                    method: 'POST',
-                                                    body: JSON.stringify({
-                                                      semester: sem,
-                                                      subject_name: subject,
-                                                      drive_link: newLink
-                                                    })
-                                                  });
-                                                  if (res.ok) {
-                                                    setActionMsg(`Link updated for ${subject}`);
-                                                    const linksRes = await apiRequest('/api/resources/subject-links');
-                                                    if (linksRes.ok) setSubjectLinks(await linksRes.json());
-                                                  }
-                                                } catch (err) {
-                                                  setActionMsg('Failed to update link');
-                                                }
-                                                setTimeout(() => setActionMsg(''), 3000);
-                                              }
-                                            }}
                                           />
                                         </div>
+                                        <button 
+                                          onClick={async () => {
+                                            const input = document.getElementById(`sub-link-${sem}-${subject}`) as HTMLInputElement;
+                                            const newLink = input.value.trim();
+                                            try {
+                                              const res = await apiRequest('/api/admin/subject-links', {
+                                                method: 'POST',
+                                                body: JSON.stringify({ semester: sem, subject_name: subject, drive_link: newLink })
+                                              });
+                                              if (res.ok) {
+                                                setActionMsg(`Link updated for ${subject}`);
+                                                const linksRes = await apiRequest('/api/resources/subject-links');
+                                                if (linksRes.ok) setSubjectLinks(await linksRes.json());
+                                              }
+                                            } catch (err) { setActionMsg('Failed to update link'); }
+                                            setTimeout(() => setActionMsg(''), 3000);
+                                          }}
+                                          className="p-2 bg-[#FFC000]/10 hover:bg-[#FFC000]/20 border border-[#FFC000]/20 rounded-lg text-[#FFC000] transition-all active:scale-90"
+                                          title="Save Link"
+                                        >
+                                          <Save className="h-4 w-4" />
+                                        </button>
                                         {existingLink?.drive_link && (
                                           <a 
                                             href={existingLink.drive_link} 
