@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, X, SlidersHorizontal, BookOpen, BookMarked, FileText, Layers } from 'lucide-react';
+import { Search, X, SlidersHorizontal, BookOpen, BookMarked, FileText, Layers, ChevronDown } from 'lucide-react';
 import { formatSemester } from '../utils/formatters';
 import { NoteCard } from '../components/NoteCard';
 import { mapListing } from '../utils/listings';
@@ -25,8 +25,8 @@ const MATERIAL_TYPES = [
   { label: 'Book', icon: BookOpen },
 ];
 
-export const BrowseView: React.FC<BrowseViewProps> = ({ 
-  onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart, refreshKey 
+export const BrowseView: React.FC<BrowseViewProps> = ({
+  onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart, refreshKey,
 }) => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,9 +44,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
     if (loading || loadingMore) return;
     if (observer.current) observer.current.disconnect();
     observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) {
-        setPage(prevPage => prevPage + 1);
-      }
+      if (entries[0].isIntersecting && hasMore) setPage(prev => prev + 1);
     });
     if (node) observer.current.observe(node);
   }, [loading, loadingMore, hasMore]);
@@ -56,12 +54,8 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  // Reset when filters change
   useEffect(() => {
-    setNotes([]);
-    setPage(1);
-    setHasMore(true);
-    setLoading(true);
+    setNotes([]); setPage(1); setHasMore(true); setLoading(true);
   }, [debouncedSearch, selectedSemester, selectedType, refreshKey]);
 
   const fetchNotes = useCallback((pageNum: number) => {
@@ -69,61 +63,51 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
     if (selectedSemester !== 'All') params.set('semester', selectedSemester);
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (selectedType !== 'All') {
-      const typeMap: Record<string, string> = {
-        'PPT': 'ppt',
-        'Book': 'book',
-        'Handwritten Notes': 'handwritten'
-      };
+      const typeMap: Record<string, string> = { 'PPT': 'ppt', 'Book': 'book', 'Handwritten Notes': 'handwritten' };
       params.set('material_type', typeMap[selectedType] || selectedType.toLowerCase());
     }
     params.set('page', pageNum.toString());
     params.set('limit', '20');
 
-    const isFirstPage = pageNum === 1;
-    if (isFirstPage) setLoading(true);
-    else setLoadingMore(true);
+    const isFirst = pageNum === 1;
+    if (isFirst) setLoading(true); else setLoadingMore(true);
 
     apiRequest(`/api/listings?${params}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
           const mapped = data.map(mapListing);
-          setNotes(prev => isFirstPage ? mapped : [...prev, ...mapped]);
+          setNotes(prev => isFirst ? mapped : [...prev, ...mapped]);
           setHasMore(data.length === 20);
         } else {
-          if (isFirstPage) setNotes([]);
+          if (isFirst) setNotes([]);
           setHasMore(false);
         }
       })
       .catch(console.error)
-      .finally(() => {
-        setLoading(false);
-        setLoadingMore(false);
-      });
+      .finally(() => { setLoading(false); setLoadingMore(false); });
   }, [debouncedSearch, selectedSemester, selectedType, refreshKey]);
 
-  useEffect(() => { 
-    fetchNotes(page); 
-  }, [page, debouncedSearch, selectedSemester, selectedType, refreshKey, fetchNotes]);
+  useEffect(() => { fetchNotes(page); }, [page, debouncedSearch, selectedSemester, selectedType, refreshKey, fetchNotes]);
 
   const activeFiltersCount = [selectedSemester !== 'All', selectedType !== 'All'].filter(Boolean).length;
   const clearFilters = () => { setSelectedSemester('All'); setSelectedType('All'); };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+      transition={{ duration: 0.25 }}
       className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24"
     >
-      {/* Header */}
-      <div className="mb-7">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#003366] dark:text-blue-400 mb-1">Marketplace</p>
+      {/* ── Header ── */}
+      <div className="mb-6">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-1">Marketplace</p>
         <div className="flex items-end justify-between gap-4">
-          <h1 className="text-3xl sm:text-4xl font-black text-text-main leading-none">Browse Notes</h1>
+          <h1 className="text-2xl sm:text-4xl font-black text-text-main leading-none">Browse Notes</h1>
           {!loading && notes.length > 0 && (
-            <span className="text-[11px] font-black text-text-muted bg-surface border border-border px-3 py-1.5 rounded-full shrink-0 mb-0.5">
+            <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-3 py-1.5 rounded-full shrink-0">
               {notes.length} listing{notes.length !== 1 ? 's' : ''}
             </span>
           )}
@@ -131,8 +115,8 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
         <p className="text-sm text-text-muted mt-1.5">Find materials for your upcoming open-book exams.</p>
       </div>
 
-      {/* Search + Filter bar */}
-      <div className="flex gap-2.5 mb-4">
+      {/* ── Search + filter bar ── */}
+      <div className="flex gap-2 mb-3">
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted pointer-events-none" />
           <input
@@ -140,7 +124,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
             placeholder="Course code, title, subject…"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-9 py-3 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/15 focus:border-[#003366] transition-all text-text-main placeholder:text-text-muted/60"
+            className="w-full pl-10 pr-9 py-3 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-text-main placeholder:text-text-muted/60"
           />
           <AnimatePresence>
             {searchTerm && (
@@ -160,36 +144,38 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`relative flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-bold transition-all shrink-0 ${showFilters || activeFiltersCount > 0
-              ? 'bg-[#003366] text-white border-[#003366] shadow-lg shadow-[#003366]/20'
-              : 'bg-surface border-border text-text-muted hover:border-[#003366]/30 hover:text-text-main'
+              ? 'bg-primary text-black border-primary shadow-lg shadow-primary/20'
+              : 'bg-surface border-border text-text-muted hover:border-primary/30 hover:text-text-main'
             }`}
         >
           <SlidersHorizontal className="h-4 w-4" />
           <span className="hidden sm:inline">Filters</span>
-          {activeFiltersCount > 0 && (
-            <span className="flex items-center justify-center w-4 h-4 bg-white/20 rounded-full text-[9px] font-black">
+          {activeFiltersCount > 0 ? (
+            <span className="flex items-center justify-center w-4 h-4 bg-black/20 rounded-full text-[9px] font-black">
               {activeFiltersCount}
             </span>
+          ) : (
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform hidden sm:block ${showFilters ? 'rotate-180' : ''}`} />
           )}
         </button>
       </div>
 
-      {/* Filter panel */}
+      {/* ── Filter panel ── */}
       <AnimatePresence>
         {showFilters && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-            className="overflow-hidden mb-4"
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden mb-3"
           >
-            <div className="p-4 sm:p-5 bg-surface border border-border rounded-2xl space-y-4">
+            <div className="p-4 bg-surface border border-border rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-black text-text-main uppercase tracking-widest">Material Type</p>
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Material Type</p>
                 {activeFiltersCount > 0 && (
-                  <button onClick={clearFilters} className="flex items-center gap-1 text-[10px] font-black text-[#003366] dark:text-blue-400 hover:underline uppercase tracking-widest">
-                    <X className="h-3 w-3" /> Clear
+                  <button onClick={clearFilters} className="flex items-center gap-1 text-[10px] font-black text-primary hover:underline uppercase tracking-widest">
+                    <X className="h-3 w-3" /> Clear all
                   </button>
                 )}
               </div>
@@ -199,8 +185,8 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                     key={label}
                     onClick={() => setSelectedType(label)}
                     className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${selectedType === label
-                        ? 'bg-[#003366] text-white border-[#003366] shadow-md shadow-[#003366]/20'
-                        : 'bg-background border-border text-text-muted hover:border-[#003366]/30 hover:text-text-main'
+                        ? 'bg-primary text-black border-primary shadow-sm shadow-primary/20'
+                        : 'bg-background border-border text-text-muted hover:border-primary/30 hover:text-text-main'
                       }`}
                   >
                     <Icon className="h-3.5 w-3.5" />
@@ -213,66 +199,92 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Semester tabs — scrollable */}
-      <div className="relative mb-7">
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
-          {SEMESTERS.map(sem => (
-            <button
-              key={sem}
-              onClick={() => setSelectedSemester(sem)}
-              className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${selectedSemester === sem
-                  ? 'bg-[#003366] text-white border-[#003366] shadow-md shadow-[#003366]/15'
-                  : 'bg-surface border-border text-text-muted hover:border-[#003366]/30 hover:text-text-main'
-                }`}
-            >
-              {sem === 'All' ? 'All' : formatSemester(sem)}
-            </button>
-          ))}
-        </div>
+      {/* ── Semester tabs ── */}
+      <div className="flex gap-2 overflow-x-auto pb-1 mb-7 scrollbar-hide -mx-1 px-1">
+        {SEMESTERS.map(sem => (
+          <button
+            key={sem}
+            onClick={() => setSelectedSemester(sem)}
+            className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${selectedSemester === sem
+                ? 'bg-primary text-black border-primary shadow-sm shadow-primary/15'
+                : 'bg-surface border-border text-text-muted hover:border-primary/30 hover:text-text-main'
+              }`}
+          >
+            {sem === 'All' ? 'All Sems' : formatSemester(sem)}
+          </button>
+        ))}
       </div>
 
-      {/* Results */}
+      {/* Active filter pills */}
+      <AnimatePresence>
+        {activeFiltersCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex flex-wrap gap-2 mb-5"
+          >
+            {selectedSemester !== 'All' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary rounded-xl text-[10px] font-black uppercase tracking-wider">
+                {formatSemester(selectedSemester)}
+                <button onClick={() => setSelectedSemester('All')} className="hover:opacity-70 transition-opacity">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {selectedType !== 'All' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary rounded-xl text-[10px] font-black uppercase tracking-wider">
+                {selectedType}
+                <button onClick={() => setSelectedType('All')} className="hover:opacity-70 transition-opacity">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Results ── */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <div className="relative h-10 w-10">
-            <span className="absolute inset-0 rounded-full border-4 border-primary/20"></span>
-            <span className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></span>
-          </div>
+        <div className="flex flex-col items-center justify-center py-24 gap-3">
+          <span className="h-8 w-8 rounded-full border-[3px] border-primary border-t-transparent animate-spin" />
           <p className="text-xs font-bold text-text-muted animate-pulse">Finding listings…</p>
         </div>
+
       ) : notes.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col items-center justify-center py-24 text-center"
         >
-          <div className="w-16 h-16 rounded-2xl bg-surface border border-border flex items-center justify-center mb-4 text-2xl shadow-inner">
+          <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center mb-4 text-2xl">
             🔍
           </div>
-          <p className="text-lg font-black text-text-main mb-1.5">No listings found</p>
-          <p className="text-sm text-text-muted mb-5 max-w-xs">Try adjusting your search terms or removing some filters.</p>
+          <p className="text-base font-black text-text-main mb-1.5">No listings found</p>
+          <p className="text-sm text-text-muted mb-5 max-w-xs leading-relaxed">Try adjusting your search or removing some filters.</p>
           {activeFiltersCount > 0 && (
             <button
               onClick={clearFilters}
-              className="text-xs font-black text-[#003366] dark:text-blue-400 uppercase tracking-widest hover:underline"
+              className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline"
             >
-              Clear filters
+              Clear all filters
             </button>
           )}
         </motion.div>
+
       ) : (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.18 }}
           className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5"
         >
           {notes.map((note, idx) => (
             <motion.div
               key={note.id}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(idx * 0.04, 0.3), duration: 0.25 }}
+              transition={{ delay: Math.min(idx * 0.035, 0.25), duration: 0.22 }}
               ref={idx === notes.length - 1 ? lastNoteElementRef : null}
             >
               <NoteCard
@@ -289,20 +301,22 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
         </motion.div>
       )}
 
-      {/* Loading states for subsequent pages */}
+      {/* Load more spinner */}
       {loadingMore && (
         <div className="flex justify-center py-8">
-          <div className="relative h-8 w-8">
-            <span className="absolute inset-0 rounded-full border-2 border-primary/20"></span>
-            <span className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin"></span>
-          </div>
+          <span className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
         </div>
       )}
 
+      {/* End of results */}
       {!hasMore && notes.length > 0 && (
-        <p className="text-center text-text-muted text-[11px] font-bold mt-12 mb-6 uppercase tracking-widest opacity-60">
-          ✨ You've reached the end of the marketplace
-        </p>
+        <div className="flex items-center gap-4 my-10">
+          <div className="flex-1 h-px bg-border/50" />
+          <p className="text-[10px] font-black text-text-muted uppercase tracking-widest opacity-60 shrink-0">
+            End of marketplace ✨
+          </p>
+          <div className="flex-1 h-px bg-border/50" />
+        </div>
       )}
     </motion.div>
   );
