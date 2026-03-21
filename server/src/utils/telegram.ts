@@ -195,6 +195,10 @@ export const initTelegramBot = () => {
         try {
           await ctx.answerCbQuery();
           
+          if (!id) {
+            return await ctx.reply('❌ Error: Missing order identification in button data.');
+          }
+
           const result = await db.execute({
             sql: `SELECT oi.id, oi.seller_id, oi.status, oi.meetup_signal_count, o.buyer_id, u.telegram_chat_id as buyer_chat, s.telegram_chat_id as seller_chat, u.name as buyer_name, s.name as seller_name
                   FROM order_items oi
@@ -208,26 +212,28 @@ export const initTelegramBot = () => {
           const item = result.rows[0] as any;
           if (!item) {
             console.error(`[Telegram] Order item not found for im_here ID: ${id}`);
-            return await ctx.reply('❌ Error: Order item not found or invalid session.');
+            return await ctx.reply('❌ Error: This order session could not be found or has expired.');
           }
 
           if (item.status === 'completed' || item.status === 'cancelled') {
             return await ctx.reply('❌ This transaction is already closed.');
           }
 
+          // Important: Link via 'from.id' instead of 'chat.id' to be more reliable in callbacks
+          const effectiveChatId = ctx.from?.id.toString() || chatId;
           const userRes = await db.execute({
             sql: 'SELECT id, name FROM users WHERE telegram_chat_id = ?',
-            args: [chatId]
+            args: [effectiveChatId]
           });
           const sender = userRes.rows[0] as any;
           if (!sender) {
-            console.warn(`[Telegram] Sender not found for chatId: ${chatId}`);
-            return await ctx.reply('❌ Your Telegram account is not correctly linked to your OpenNotes profile. Please use /start to re-link.');
+            console.warn(`[Telegram] Sender not found for effectiveChatId: ${effectiveChatId}`);
+            return await ctx.reply(`❌ Your account (${effectiveChatId}) is not linked to your OpenNotes profile. Please click "Connect Telegram" in your website profile settings.`);
           }
 
           // Limit "I'm here" signals to 3
           if (item.meetup_signal_count >= 3) {
-            return await ctx.reply('⚠️ Signaling Limit Reached: You can only notify the other party 3 times. Please use the application chat for further coordination.');
+            return await ctx.reply('⚠️ Signaling Limit Reached: You\'ve already notified the other party 3 times. Please coordinate via the message section on the site.');
           }
 
           const isBuyer = sender.id === item.buyer_id;
@@ -247,20 +253,24 @@ export const initTelegramBot = () => {
             tgOk = await sendTelegramMessage(targetChatId, `📍 <b>Arrival Alert!</b>\n\n<b>${sender.name}</b> has arrived at the meetup spot.`);
           }
 
-          // Always notify via Website
-          const { createNotification } = await import('./notifications.js');
-          await createNotification(
-            targetUserId,
-            'meetup_update',
-            'Arrived! 📍',
-            `${sender.name} has signaled they are at the meetup spot.`,
-            '/messages'
-          );
+          // Notify via Website
+          try {
+            const { createNotification } = await import('./notifications.js');
+            await createNotification(
+              targetUserId,
+              'meetup_update',
+              'Arrived! 📍',
+              `${sender.name} has signaled they are at the meetup spot.`,
+              '/messages'
+            );
+          } catch (notifErr) {
+            console.error('[Telegram] App notification failed but continuing:', notifErr);
+          }
 
           await ctx.reply(`✅ Signal Sent! ${targetName} has been notified on ${tgOk ? 'Telegram and the Website' : 'the Website'}. (Signal ${item.meetup_signal_count + 1}/3)`);
-        } catch (err) {
+        } catch (err: any) {
           console.error('[Telegram] im_here handler failure:', err);
-          await ctx.reply('❌ Something went wrong while sending the signal. Please try again or use the website chat.');
+          await ctx.reply(`❌ Operation failed: ${err.message || 'Unknown error'}. Please use the website chat to communicate.`);
         }
       }
       else if (action === 'msg_reply') {
