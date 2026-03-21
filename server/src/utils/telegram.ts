@@ -26,9 +26,12 @@ export const initTelegramBot = () => {
 
   // Handle /start command for deep linking
   bot.start(async (ctx) => {
-    const payload = ctx.payload;
+    // In Telegraf v4, the deep-link payload is typically in ctx.startPayload
+    const payload = ctx.startPayload || (ctx as any).payload || '';
     const fromId = ctx.from?.id.toString();
     
+    console.info(`[Telegram] Start received. Raw Payload: "${payload}", From ID: ${fromId}`);
+
     if (!payload || !payload.startsWith('tl-')) {
       return ctx.reply('Welcome to OpenNotes.in Bot! 👋\n\nTo link your account, please click the "Connect Telegram" button in your profile settings on the website.');
     }
@@ -40,12 +43,16 @@ export const initTelegramBot = () => {
     try {
       // Find user with this linking token
       const result = await db.execute({
-        sql: 'SELECT id, name FROM users WHERE telegram_link_token = ?',
+        sql: 'SELECT id, name, telegram_chat_id FROM users WHERE telegram_link_token = ?',
         args: [payload]
       });
 
       if (result.rows.length === 0) {
-        return ctx.reply('❌ Invalid or expired linking token. Please generate a new one from your profile settings on the website.');
+        // This usually happens if:
+        // 1. The token actually expired/was used.
+        // 2. A local dev server (polling) stole the webhook message but checks a local DB.
+        console.warn(`[Telegram] Invalid/Expired token attempt: "${payload}" from ID ${fromId}. Ensure no local dev servers are polling!`);
+        return ctx.reply(`❌ Invalid or expired linking token.\n\nToken received: ${payload}\n\nPlease generate a new one from your profile settings on the website.`);
       }
 
       const user = result.rows[0] as any;
@@ -56,8 +63,8 @@ export const initTelegramBot = () => {
         args: [fromId, user.id]
       });
 
-      console.info(`[Telegram] Linked user ${user.name} to ID ${fromId}`);
-      return ctx.reply(`✅ Success! Your account (${user.name}) is now linked to Telegram ID: ${fromId}. You will receive real-time updates and can manage orders directly from here.`);
+      console.info(`[Telegram] Linked user ${user.name} (ID: ${user.id}) to Telegram: ${fromId}`);
+      return ctx.reply(`✅ Success! Your account (${user.name}) is now linked to Telegram ID: ${fromId}.\n\nYou'll now receive real-time updates for orders and messages!`);
     } catch (err) {
       console.error('[Telegram] Linking error:', err);
       return ctx.reply('❌ An error occurred while linking your account. Please try again later.');

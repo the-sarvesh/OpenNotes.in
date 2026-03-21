@@ -226,12 +226,15 @@ httpServer.listen(PORT, async () => {
   const appUrl = process.env.BACKEND_URL;
   if (appUrl && appUrl.startsWith('https://')) {
     registerTelegramWebhook();
-  } else {
-    // In local development, use polling as fallback
+  } else if (process.env.USE_POLLING === 'true') {
+    // In local development, ONLY use polling if explicitly enabled
+    // Otherwise, a local dev server will "steal" webhook traffic from the production bot
     const bot = (await import('./utils/telegram.js')).getBot();
     if (bot) {
-      bot.launch().then(() => console.log('[Telegram] Bot started in polling mode')).catch(e => console.error('[Telegram] Polling error:', e));
+      bot.launch().then(() => console.log('[Telegram] Bot started in polling mode (USE_POLLING=true)')).catch(e => console.error('[Telegram] Polling error:', e));
     }
+  } else {
+    console.log('[Telegram] Skipping bot polling (Set USE_POLLING=true if testing locally)');
   }
 });
 
