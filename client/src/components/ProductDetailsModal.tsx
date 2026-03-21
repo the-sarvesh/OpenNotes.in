@@ -8,7 +8,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
-import { formatSemester, formatMaterialType } from '../utils/formatters';
+import { formatSemester } from '../utils/formatters';
 import type { Note } from '../types';
 
 interface ProductDetailsModalProps {
@@ -238,6 +238,13 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 </div>
               </div>
 
+              {/* Seller pill */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-full">
+                <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center text-black text-[9px] font-black shrink-0">
+                  {note.seller.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-xs font-bold text-text-muted">{note.seller}</span>
+              </div>
             </div>
 
             {/* ── Exchange details ─────────────────────────────────── */}
@@ -255,11 +262,6 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                       📍 {note.preferredMeetupSpot}
                     </p>
                   )}
-                  {note.meetupLocation && (
-                    <p className="text-[11px] text-text-muted mt-1 italic">
-                      ({note.meetupLocation})
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
@@ -269,23 +271,6 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               <div className="p-4 bg-background border border-border rounded-2xl">
                 <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-2">About this material</p>
                 <p className="text-xs text-text-muted leading-relaxed italic">"{note.description}"</p>
-              </div>
-            )}
-
-            {/* ── Subjects (Multiple) ────────────────────────────────── */}
-            {note.isMultipleSubjects && note.subjects && note.subjects.length > 0 && (
-              <div className="p-4 bg-background border border-border rounded-2xl">
-                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-3">Included Subjects</p>
-                <div className="flex flex-wrap gap-2">
-                  {note.subjects.map((subject, idx) => (
-                    <span 
-                      key={idx}
-                      className="px-3 py-1.5 bg-primary/5 border border-primary/10 rounded-xl text-[11px] font-bold text-text-main"
-                    >
-                      {subject}
-                    </span>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -314,7 +299,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 <p className="text-[9px] font-black uppercase tracking-widest mb-1 opacity-70">Condition</p>
                 <p className="text-sm font-bold leading-tight">{note.condition}</p>
               </div>
-              <Tile label="Material" value={formatMaterialType(note.materialType)} />
+              <Tile label="Material" value={note.materialType} />
               <Tile label="Availability" value={`${note.quantity} left`} />
             </div>
           </div>
@@ -324,7 +309,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             {/* Price line */}
             <div className="flex items-baseline justify-between">
               <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Total Price</span>
-              <span className="text-3xl font-black text-text-main tracking-tight">{note.price === 0 ? 'FREE' : `₹${Math.round(note.price)}`}</span>
+              <span className="text-3xl font-black text-text-main tracking-tight">₹{note.price}</span>
             </div>
 
             {/* Action buttons — single row on both mobile and desktop */}
@@ -364,7 +349,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 
               {/* Buy Now — always in the same row */}
               <button
-                onClick={() => onBuyNow(note)}
+                onClick={() => { onClose(); onBuyNow(note); }}
                 disabled={note.quantity === 0}
                 className="flex-1 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-[0.15em] transition-all active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-1.5"
                 style={{ background: '#fb641b', color: '#fff', boxShadow: '0 3px 14px rgba(251,100,27,0.3)' }}
