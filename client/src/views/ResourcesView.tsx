@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, X, Download, FileText, Upload, Filter,
   ChevronRight, Calendar, BookOpen, Clock,
-  FolderOpen, ArrowLeft,
+  FolderOpen, ArrowLeft, ExternalLink
 } from 'lucide-react';
 import { apiRequest, API_BASE_URL } from '../utils/api.js';
 import { useAuth } from '../contexts/AuthContext';
@@ -54,6 +54,7 @@ export const ResourcesView: React.FC = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [subjectLinks, setSubjectLinks] = useState<any[]>([]);
 
   const availableSubjects = useMemo(() => {
     if (navigationPath.length === 0) return [];
@@ -115,7 +116,17 @@ export const ResourcesView: React.FC = () => {
     }
   }, [page]);
 
-  useEffect(() => { fetchResources(); }, [fetchResources]);
+  const fetchSubjectLinks = useCallback(async () => {
+    try {
+      const res = await apiRequest('/api/resources/subject-links');
+      if (res.ok) setSubjectLinks(await res.json());
+    } catch (error) { console.error('Failed to fetch subject links:', error); }
+  }, []);
+
+  useEffect(() => { 
+    fetchResources(); 
+    fetchSubjectLinks();
+  }, [fetchResources, fetchSubjectLinks]);
 
   const handleDownload = (resource: Resource) => {
     const a = document.createElement('a');
@@ -295,14 +306,18 @@ export const ResourcesView: React.FC = () => {
           /* Root — semester folders */
         ) : navigationPath.length === 0 ? (
           <motion.div key="root" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-            {SEMESTERS.slice(1).map(sem => (
-              <FolderItem
-                key={sem}
-                label={sem.replace('Sem', 'Sem ')}
-                count={getResourceCount(sem)}
-                onClick={() => setNavigationPath([sem])}
-              />
-            ))}
+            {SEMESTERS.slice(1).map(sem => {
+              const semLink = subjectLinks.find(l => l.semester === sem && (l.subject_name === '' || l.subject_name === null));
+              return (
+                <FolderItem
+                  key={sem}
+                  label={sem.replace('Sem', 'Sem ')}
+                  count={getResourceCount(sem)}
+                  hasDriveLink={!!semLink}
+                  onClick={() => setNavigationPath([sem])}
+                />
+              );
+            })}
           </motion.div>
 
           /* Semester — subject folders */
@@ -312,23 +327,78 @@ export const ResourcesView: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {availableSubjects.length === 0
                 ? <EmptyState message="No subjects found in this semester yet." />
-                : availableSubjects.map(sub => (
-                  <FolderItem
-                    key={sub}
-                    label={sub}
-                    icon={<BookOpen className="h-7 w-7" />}
-                    count={getResourceCount(navigationPath[0], sub)}
-                    onClick={() => setNavigationPath([navigationPath[0], sub])}
-                  />
-                ))
+                : availableSubjects.map(sub => {
+                  const subLink = subjectLinks.find(l => l.semester === navigationPath[0] && l.subject_name === sub);
+                  return (
+                    <FolderItem
+                      key={sub}
+                      label={sub}
+                      icon={<BookOpen className="h-7 w-7" />}
+                      count={getResourceCount(navigationPath[0], sub)}
+                      hasDriveLink={!!subLink}
+                      onClick={() => setNavigationPath([navigationPath[0], sub])}
+                    />
+                  );
+                })
               }
             </div>
+            
+            {/* Semester General Drive Link */}
+            {(() => {
+              const semLink = subjectLinks.find(l => l.semester === navigationPath[0] && (l.subject_name === '' || l.subject_name === null));
+              if (!semLink) return null;
+              return (
+                <a 
+                  href={semLink.drive_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-5 bg-[#FFC000]/10 border border-[#FFC000]/20 rounded-3xl group hover:bg-[#FFC000]/20 transition-all"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[#FFC000] flex items-center justify-center text-slate-900 shadow-lg shadow-[#FFC000]/20">
+                      <FolderOpen className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-white text-base">Open {navigationPath[0].replace('Sem', 'Semester ')} Google Drive</h4>
+                      <p className="text-xs text-[#FFC000]/70 font-bold uppercase tracking-widest">Shared Resource Folder</p>
+                    </div>
+                  </div>
+                  <ExternalLink className="h-5 w-5 text-[#FFC000] group-hover:translate-x-1 transition-transform" />
+                </a>
+              );
+            })()}
           </motion.div>
 
           /* Subject — category folders */
         ) : navigationPath.length === 2 ? (
           <motion.div key="subject" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
             <BackButton label={`Back to ${navigationPath[0].replace('Sem', 'Semester ')}`} onClick={() => setNavigationPath([navigationPath[0]])} />
+            
+            {/* Subject General Drive Link */}
+            {(() => {
+              const subLink = subjectLinks.find(l => l.semester === navigationPath[0] && l.subject_name === navigationPath[1]);
+              if (!subLink) return null;
+              return (
+                <a 
+                  href={subLink.drive_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-5 bg-[#FFC000]/10 border border-[#FFC000]/20 rounded-3xl group hover:bg-[#FFC000]/20 transition-all mb-6"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[#FFC000] flex items-center justify-center text-slate-900 shadow-lg shadow-[#FFC000]/20">
+                      <FolderOpen className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-white text-base">Open {navigationPath[1]} Google Drive</h4>
+                      <p className="text-xs text-[#FFC000]/70 font-bold uppercase tracking-widest">Subject Reference Folder</p>
+                    </div>
+                  </div>
+                  <ExternalLink className="h-5 w-5 text-[#FFC000] group-hover:translate-x-1 transition-transform" />
+                </a>
+              );
+            })()}
+
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {CATEGORIES.slice(1).map(cat => (
                 <FolderItem
@@ -501,12 +571,17 @@ export const ResourcesView: React.FC = () => {
 
 // ── FolderItem ─────────────────────────────────────────────────────
 const FolderItem: React.FC<{
-  label: string; count: number; icon?: React.ReactNode; onClick: () => void;
-}> = ({ label, count, icon, onClick }) => (
+  label: string; count: number; icon?: React.ReactNode; hasDriveLink?: boolean; onClick: () => void;
+}> = ({ label, count, icon, hasDriveLink, onClick }) => (
   <button
     onClick={onClick}
-    className="group flex flex-col items-center p-4 rounded-2xl bg-slate-900/60 border border-white/5 hover:border-[#FFC000]/30 hover:bg-[#FFC000]/5 transition-all active:scale-95"
+    className="group flex flex-col items-center p-4 rounded-2xl bg-slate-900/60 border border-white/5 hover:border-[#FFC000]/30 hover:bg-[#FFC000]/5 transition-all active:scale-95 relative"
   >
+    {hasDriveLink && (
+      <div className="absolute top-2 right-2 p-1 bg-[#FFC000]/10 rounded-lg text-[#FFC000]">
+        <ExternalLink className="h-2.5 w-2.5" />
+      </div>
+    )}
     <div className="relative w-12 h-12 flex items-center justify-center text-slate-600 group-hover:text-[#FFC000] transition-colors mb-2.5">
       {icon || <FolderOpen className="h-8 w-8" />}
       {count > 0 && (

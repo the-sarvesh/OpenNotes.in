@@ -316,4 +316,17 @@ router.delete("/:id", authenticate as any, async (req: AuthRequest, res, next) =
   }
 });
 
+/**
+ * @route GET /api/resources/subject-links
+ * @desc Get all subject drive links
+ */
+router.get("/subject-links", async (_req, res, next) => {
+  try {
+    const result = await db.execute("SELECT * FROM subject_drive_links");
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

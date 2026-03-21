@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
+import { SUBJECTS_BY_SEM, SEMESTERS } from '../utils/constants.js';
+import { ExternalLink, Link as LinkIcon, Save } from 'lucide-react';
 import { statusColors, formatStatus } from '../utils/status';
 
 type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats' | 'settings';
@@ -82,6 +84,7 @@ export const AdminView: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
+  const [subjectLinks, setSubjectLinks] = useState<any[]>([]);
   const [dbSettings, setDbSettings] = useState<any>(null);
   const [localFee, setLocalFee] = useState<string>('0');
   const [loading, setLoading] = useState(true);
@@ -122,6 +125,8 @@ export const AdminView: React.FC = () => {
       } else if (tab === 'resources') {
         const res = await apiRequest('/api/admin/resources');
         if (res.ok) setResources(await res.json());
+        const linksRes = await apiRequest('/api/resources/subject-links');
+        if (linksRes.ok) setSubjectLinks(await linksRes.json());
       } else if (tab === 'users') {
         const res = await apiRequest('/api/admin/users');
         if (res.ok) setUsers(await res.json());
@@ -524,7 +529,138 @@ export const AdminView: React.FC = () => {
                       </div>
                     </DetailPanel>
                   ) : (
-                    <motion.div key="resource-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                    <motion.div key="resource-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
+                      {/* Subject Drive Links Management */}
+                      <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="p-2 bg-[#FFC000]/10 rounded-xl text-[#FFC000]">
+                            <LinkIcon className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-black text-white text-base">Subject Drive Links</h3>
+                            <p className="text-xs text-slate-500">Attach a Google Drive folder for each subject</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-6">
+                          {SEMESTERS.map(sem => (
+                            <div key={sem} className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FFC000]/60">{sem}</h4>
+                                {/* Semester level link */}
+                                {(() => {
+                                  const semLink = subjectLinks.find(l => l.semester === sem && (l.subject_name === '' || l.subject_name === null));
+                                  return (
+                                    <div className="flex items-center gap-2 max-w-xs flex-1">
+                                      <input
+                                        type="url"
+                                        placeholder={`${sem} General Drive Link`}
+                                        defaultValue={semLink?.drive_link || ''}
+                                        className="w-full bg-slate-800 border border-[#FFC000]/20 rounded-lg px-2 py-1 text-[10px] text-[#FFC000] focus:outline-none focus:ring-1 focus:ring-[#FFC000]/50 placeholder:text-[#FFC000]/30"
+                                        onBlur={async (e) => {
+                                          const newLink = e.target.value.trim();
+                                          if (newLink !== (semLink?.drive_link || '')) {
+                                            try {
+                                              const res = await apiRequest('/api/admin/subject-links', {
+                                                method: 'POST',
+                                                body: JSON.stringify({
+                                                  semester: sem,
+                                                  subject_name: '',
+                                                  drive_link: newLink
+                                                })
+                                              });
+                                              if (res.ok) {
+                                                setActionMsg(`${sem} link updated`);
+                                                const linksRes = await apiRequest('/api/resources/subject-links');
+                                                if (linksRes.ok) setSubjectLinks(await linksRes.json());
+                                              }
+                                            } catch (err) {
+                                              setActionMsg('Failed to update link');
+                                            }
+                                            setTimeout(() => setActionMsg(''), 3000);
+                                          }
+                                        }}
+                                      />
+                                      {semLink?.drive_link && (
+                                        <a href={semLink.drive_link} target="_blank" rel="noreferrer" className="shrink-0 p-1 text-[#FFC000] hover:bg-[#FFC000]/10 rounded transition-colors">
+                                          <ExternalLink className="h-3 w-3" />
+                                        </a>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                              <div className="grid sm:grid-cols-2 gap-3">
+                                {SUBJECTS_BY_SEM[sem]?.map(subject => {
+                                  const existingLink = subjectLinks.find(l => l.semester === sem && l.subject_name === subject);
+                                  return (
+                                    <div key={subject} className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
+                                      <p className="text-xs font-bold text-white leading-tight">{subject}</p>
+                                      <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                          <input
+                                            type="url"
+                                            placeholder="Drive Link (https://...)"
+                                            defaultValue={existingLink?.drive_link || ''}
+                                            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#FFC000]/50"
+                                            onBlur={async (e) => {
+                                              const newLink = e.target.value.trim();
+                                              if (newLink !== (existingLink?.drive_link || '')) {
+                                                try {
+                                                  const res = await apiRequest('/api/admin/subject-links', {
+                                                    method: 'POST',
+                                                    body: JSON.stringify({
+                                                      semester: sem,
+                                                      subject_name: subject,
+                                                      drive_link: newLink
+                                                    })
+                                                  });
+                                                  if (res.ok) {
+                                                    setActionMsg(`Link updated for ${subject}`);
+                                                    const linksRes = await apiRequest('/api/resources/subject-links');
+                                                    if (linksRes.ok) setSubjectLinks(await linksRes.json());
+                                                  }
+                                                } catch (err) {
+                                                  setActionMsg('Failed to update link');
+                                                }
+                                                setTimeout(() => setActionMsg(''), 3000);
+                                              }
+                                            }}
+                                          />
+                                        </div>
+                                        {existingLink?.drive_link && (
+                                          <a 
+                                            href={existingLink.drive_link} 
+                                            target="_blank" 
+                                            rel="noreferrer"
+                                            className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-slate-400 hover:text-[#FFC000] transition-colors"
+                                          >
+                                            <ExternalLink className="h-4 w-4" />
+                                          </a>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="h-px bg-white/5" />
+
+                      {/* Existing Resource List Section Header */}
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-500/10 rounded-xl text-blue-400">
+                          <BookOpen className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-white text-base">User Uploads</h3>
+                          <p className="text-xs text-slate-500">Manage all study materials uploaded by users</p>
+                        </div>
+                      </div>
+
                       {resources.length === 0 ? (
                         <p className="text-center py-16 text-slate-500 text-sm">No study material found</p>
                       ) : (

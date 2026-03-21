@@ -658,4 +658,30 @@ router.delete("/coupons/:id", async (req, res, next) => {
   }
 });
 
+// ─── SUBJECT DRIVE LINKS ──────────────────────────────────────────────────
+
+// POST /api/admin/subject-links — set or update a drive link for a subject
+router.post("/subject-links", async (req, res, next) => {
+  try {
+    const { semester, subject_name, drive_link } = req.body;
+
+    if (!semester || !subject_name || drive_link === undefined) {
+      return res.status(400).json({ error: "semester, subject_name, and drive_link are required" });
+    }
+
+    await db.execute({
+      sql: `INSERT INTO subject_drive_links (semester, subject_name, drive_link, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(semester, subject_name) DO UPDATE SET
+              drive_link = excluded.drive_link,
+              updated_at = CURRENT_TIMESTAMP`,
+      args: [semester, subject_name, drive_link]
+    });
+
+    res.json({ message: "Drive link updated successfully" });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

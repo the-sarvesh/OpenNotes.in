@@ -215,6 +215,14 @@ const initDb = async () => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (uploader_id) REFERENCES users(id)
       );
+
+      CREATE TABLE IF NOT EXISTS subject_drive_links (
+        semester TEXT NOT NULL,
+        subject_name TEXT NOT NULL,
+        drive_link TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (semester, subject_name)
+      );
     `);
 
     console.log("Core tables created or verified.");
@@ -295,6 +303,7 @@ const initDb = async () => {
       "ALTER TABLE orders ADD COLUMN platform_fee REAL NOT NULL DEFAULT 0",
       "UPDATE orders SET total_amount = COALESCE((SELECT SUM(price_at_purchase * quantity) FROM order_items WHERE order_items.order_id = orders.id), 0)",
       "UPDATE orders SET platform_fee = COALESCE((SELECT SUM(platform_fee) FROM order_items WHERE order_items.order_id = orders.id), 0)",
+      "CREATE TABLE IF NOT EXISTS subject_drive_links (semester TEXT NOT NULL, subject_name TEXT NOT NULL, drive_link TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (semester, subject_name))",
     ];
 
     for (const migration of migrations) {
