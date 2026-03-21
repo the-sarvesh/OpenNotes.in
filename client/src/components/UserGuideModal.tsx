@@ -4,7 +4,7 @@ import {
   X, ChevronRight, ChevronLeft, ShoppingCart,
   PlusCircle, ShieldCheck, MapPin, CheckCircle2,
   Coins, MessageCircle, Lock, BookOpen, Compass,
-  Search, Bell, ArrowUpRight
+  Search, Bell, ArrowUpRight, Layers, Share2
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -13,7 +13,7 @@ interface UserGuideModalProps {
   onClose: () => void;
 }
 
-type GuideTab = 'welcome' | 'buying' | 'selling' | 'safety';
+type GuideTab = 'welcome' | 'buying' | 'selling' | 'resources' | 'safety';
 
 const COLOR_MAP: Record<string, string> = {
   emerald: 'bg-emerald-400',
@@ -30,7 +30,7 @@ const COLOR_MAP: Record<string, string> = {
   purple_text: 'text-purple-400',
 };
 
-const TAB_ORDER: GuideTab[] = ['welcome', 'buying', 'selling', 'safety'];
+const TAB_ORDER: GuideTab[] = ['welcome', 'buying', 'selling', 'resources', 'safety'];
 
 
 export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose }) => {
@@ -57,6 +57,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
     { id: 'welcome', label: 'Welcome', icon: <Compass className="h-4 w-4" /> },
     { id: 'buying', label: 'Buying', icon: <ShoppingCart className="h-4 w-4" /> },
     { id: 'selling', label: 'Selling', icon: <PlusCircle className="h-4 w-4" /> },
+    { id: 'resources', label: 'Free Resources', icon: <BookOpen className="h-4 w-4" /> },
     { id: 'safety', label: 'Safety', icon: <ShieldCheck className="h-4 w-4" /> },
   ];
 
@@ -246,6 +247,43 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Step {i + 1}</span>
                           </div>
+                          <p className="font-black text-white text-sm mb-1">{title}</p>
+                          <p className="text-xs text-slate-400 leading-relaxed">{desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ── RESOURCES ─────────────────────────────── */}
+              {activeTab === 'resources' && (
+                <motion.div
+                  key="resources"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.22 }}
+                  className="space-y-5"
+                >
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FFC000] mb-2">Digital Content</p>
+                    <h3 className="text-2xl font-black text-white">Free Resources</h3>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed text-sm">
+                    Not everything needs to be physically bought. We host a completely free, crowd-sourced digital vault for the community.
+                  </p>
+                  <div className="space-y-3 mt-4">
+                    {[
+                      { icon: BookOpen, color: 'emerald', title: 'Previous Year Papers', desc: 'Browse through mid-sem and compre PYQs uploaded by seniors.' },
+                      { icon: Layers, color: 'blue', title: 'Class PPTs & Slides', desc: 'Download official course presentations, handouts, and assignment solutions.' },
+                      { icon: Share2, color: 'purple', title: 'Contribute & Help', desc: 'Have a useful PDF? Upload your own digital notes to help the next batch!' },
+                    ].map(({ icon: Icon, color, title, desc }) => (
+                      <div key={title} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors group">
+                        <div className={`w-9 h-9 rounded-xl ${COLOR_MAP[`${color}_bg`]} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
+                          <Icon className={`h-4 w-4 ${COLOR_MAP[`${color}_text`]}`} />
+                        </div>
+                        <div>
                           <p className="font-black text-white text-sm mb-1">{title}</p>
                           <p className="text-xs text-slate-400 leading-relaxed">{desc}</p>
                         </div>
