@@ -127,8 +127,12 @@ const ParticleField: React.FC = () => {
     const CONN = mobile ? 80 : 120;
     const PUSH = 100;
 
-    const primary = getComputedStyle(document.documentElement)
-      .getPropertyValue('--color-primary').trim() || '#003366';
+    let primary = '#003366';
+    const updateColor = () => {
+      const c = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim();
+      if (c && c !== 'transparent' && c !== 'rgba(0, 0, 0, 0)') primary = c;
+    };
+    updateColor();
 
     let W = 0, H = 0;
     const resize = () => {
@@ -148,6 +152,9 @@ const ParticleField: React.FC = () => {
     }));
 
     const draw = () => {
+      // Periodic check for color if it's still fallback
+      if (primary === '#003366') updateColor();
+
       ctx.clearRect(0, 0, W, H);
       for (const p of particles) {
         const dx = p.x - mouseRef.current.x;
@@ -164,8 +171,10 @@ const ParticleField: React.FC = () => {
         if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = primary + '99';
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = primary;
         ctx.fill();
+        ctx.globalAlpha = 1.0;
       }
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
@@ -176,9 +185,11 @@ const ParticleField: React.FC = () => {
             ctx.beginPath();
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = primary + Math.floor((1 - d / CONN) * 80).toString(16).padStart(2, '0');
+            ctx.globalAlpha = (1 - d / CONN) * 0.5;
+            ctx.strokeStyle = primary;
             ctx.lineWidth = 0.8;
             ctx.stroke();
+            ctx.globalAlpha = 1.0;
           }
         }
       }
