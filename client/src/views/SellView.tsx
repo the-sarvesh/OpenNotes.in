@@ -566,6 +566,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-semibold text-sm pointer-events-none">₹</span>
                     <input type="number" value={form.price} onChange={e => set('price', e.target.value)} placeholder="250" disabled={form.isDonation} className={`${inputClass} pl-8`} />
                   </div>
+                  <p className="text-[9px] text-text-muted mt-1.5 italic">Tip: Notes sell fastest at 40-50% of print cost.</p>
                 </div>
                 <div>
                   <Label>Quantity</Label>
@@ -576,7 +577,15 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
               {/* Condition + location */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Condition</Label>
+                  <Label>
+                    Condition 
+                    <span 
+                      className="cursor-help text-text-muted hover:text-primary transition-colors inline-block ml-1" 
+                      title="Good: minimal highlighting, clean pages. Fair: well-used but readable."
+                    >
+                      (?)
+                    </span>
+                  </Label>
                   <select value={form.condition} onChange={e => set('condition', e.target.value)} className={inputClass}>
                     {['Like New', 'Good', 'Fair', 'Heavily Annotated'].map(c => <option key={c}>{c}</option>)}
                   </select>
@@ -637,7 +646,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                   </div>
                   <div>
                     <Label>Specific Instructions / Custom Location <span className="text-red-500 text-[9px] font-bold">(Required)</span></Label>
-                    <input type="text" value={form.meetupLocation} onChange={e => set('meetupLocation', e.target.value)} placeholder="e.g. hcl 126, cafe 3..." className={inputClass} />
+                    <input type="text" value={form.meetupLocation} onChange={e => set('meetupLocation', e.target.value)} placeholder="e.g. Cafe 2, hcl sec 126 offic, Mon/Wed evenings" className={inputClass} />
                   </div>
                 </>
               )}

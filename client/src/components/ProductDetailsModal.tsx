@@ -304,21 +304,6 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                   <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-wider">Only 1 left!</p>
                 </div>
               )}
-              {/* Platform Config Alert */}
-              {(() => {
-                 const config = getPlatformFeeConfig(feeInfo);
-                 if (!config.isPromo) return null;
-                 return (
-                  <div className={`px-4 py-2.5 ${config.bgColor} border ${config.borderColor} rounded-xl flex items-center gap-2`}>
-                    <div className={`p-1 ${config.isPromo ? "bg-emerald-500" : "bg-primary"} rounded-lg text-white shrink-0`}>
-                      <ShieldCheck className="h-3 w-3" />
-                    </div>
-                    <p className={`text-[10px] font-black ${config.color} uppercase tracking-[0.1em]`}>
-                      Limited Time: {config.desc}! 🚀
-                    </p>
-                  </div>
-                 );
-              })()}
             </div>
 
             {/* ── Info grid ────────────────────────────────────────── */}
@@ -335,11 +320,29 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 
           {/* ── Footer actions ───────────────────────────────────────── */}
           <div className="px-5 sm:px-7 py-4 bg-background border-t border-border space-y-3 shrink-0">
+            {/* Promo Banner */}
+            {(() => {
+               const config = getPlatformFeeConfig(feeInfo);
+               if (!config.isPromo) return null;
+               return (
+                <div className={`px-3 py-2.5 ${config.bgColor} border ${config.borderColor} rounded-xl flex items-center gap-2 mb-2`}>
+                  <div className={`p-1 ${config.isPromo ? "bg-emerald-500" : "bg-primary"} rounded-lg text-white shrink-0`}>
+                    <ShieldCheck className="h-3 w-3" />
+                  </div>
+                  <p className={`text-[10px] font-black ${config.color} uppercase tracking-[0.1em]`}>
+                    Limited Time: {config.desc}, Reserve Now !!
+                  </p>
+                </div>
+               );
+            })()}
+
             {/* Price line */}
-            <div className="flex items-baseline justify-between">
+            <div className="flex items-baseline justify-between mb-1">
               <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Total Price</span>
               <span className="text-3xl font-black text-text-main tracking-tight">₹{note.price}</span>
             </div>
+            
+
 
             {/* Action buttons — single row on both mobile and desktop */}
             <div className="flex gap-2">

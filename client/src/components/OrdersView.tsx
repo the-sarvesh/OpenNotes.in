@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, Star, MessageCircle, MapPin, ChevronLeft, ChevronRight, Users, Package, Clock, CheckCircle2, XCircle, Truck, Hash } from 'lucide-react';
+import { ShoppingBag, Star, MessageCircle, MapPin, ChevronLeft, ChevronRight, Users, Package, Clock, CheckCircle2, XCircle, Truck, Hash, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +33,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [pinVisible, setPinVisible] = useState<Record<string, boolean>>({});
+  const [telegramLinked, setTelegramLinked] = useState(true);
 
   useEffect(() => {
     if (!user) return;
@@ -42,6 +43,11 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
       .then(data => { if (Array.isArray(data)) setOrders(data); })
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    apiRequest('/api/telegram/status')
+      .then(r => r.json())
+      .then(data => setTelegramLinked(data.isLinked))
+      .catch(console.error);
   }, [user]);
 
   const handleLeaveReview = async () => {
@@ -94,6 +100,40 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
           </span>
         )}
       </div>
+
+      {/* Telegram Nudge */}
+      {!loading && !telegramLinked && (
+        <div className="mb-6 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="bg-blue-500 text-white p-2.5 rounded-xl shrink-0 shadow-lg shadow-blue-500/20">
+              <Send className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-blue-700 dark:text-blue-400 mb-0.5">Connect Telegram</h3>
+              <p className="text-[11px] text-blue-800/70 dark:text-blue-300/70 leading-relaxed font-medium">
+                Get instant Notification and updates on ur products.
+              </p>
+            </div>
+          </div>
+          <button 
+             onClick={async () => {
+               try {
+                 const res = await apiRequest('/api/telegram/generate-token');
+                 const data = await res.json();
+                 if (res.ok && data.link) {
+                   window.open(data.link, '_blank', 'noopener,noreferrer');
+                   toast.success('Opening Telegram in a new tab...');
+                 }
+               } catch (e) {
+                 toast.error('Failed to connect');
+               }
+             }}
+             className="w-full sm:w-auto px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all active:scale-95 shrink-0 shadow-lg shadow-blue-600/20"
+          >
+            connet now.
+          </button>
+        </div>
+      )}
 
       <div className="bg-surface rounded-3xl border border-border shadow-xl shadow-slate-200/40 dark:shadow-none overflow-hidden">
         {loading ? (

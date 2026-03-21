@@ -240,7 +240,7 @@ export const CartView: React.FC<CartViewProps> = ({ cart, updateQuantity, remove
                 <div className="p-3.5 bg-primary/5 flex flex-col gap-0.5">
                   <span className="text-[9px] font-black text-primary uppercase tracking-widest">Pay Online</span>
                   <span className="text-xl font-black text-text-main">{formatRupee(platformFee)}</span>
-                  <span className="text-[9px] text-text-muted">Platform fee</span>
+                  <span className="text-[9px] text-text-muted">Platform fee (Secures notes)</span>
                 </div>
                 <div className="p-3.5 bg-surface flex flex-col gap-0.5 border-l border-border">
                   <span className="text-[9px] font-black text-text-muted uppercase tracking-widest">Cash at Meetup</span>
@@ -256,7 +256,7 @@ export const CartView: React.FC<CartViewProps> = ({ cart, updateQuantity, remove
                 onClick={() => navigate('/checkout')}
                 className="w-full py-4 bg-[#003366] hover:bg-[#002244] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#003366]/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
-                Checkout Now <ChevronRight className="h-4 w-4" />
+                Reserve Notes Now <ChevronRight className="h-4 w-4" />
               </button>
 
               <div className="mt-4 flex items-center gap-2.5 px-3 py-2.5 bg-background rounded-xl border border-border">
@@ -276,6 +276,7 @@ export const CartView: React.FC<CartViewProps> = ({ cart, updateQuantity, remove
           <div>
             <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Pay Online Now</p>
             <p className="text-xl font-black text-text-main">{formatRupee(platformFee)}</p>
+            <p className="text-[9px] text-text-muted">(Secures notes)</p>
           </div>
           <div className="text-right">
             <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Cash at Meetup</p>
@@ -286,7 +287,7 @@ export const CartView: React.FC<CartViewProps> = ({ cart, updateQuantity, remove
           onClick={() => navigate('/checkout')}
           className="w-full py-4 bg-[#003366] hover:bg-[#002244] text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#003366]/25"
         >
-          Checkout Now <ChevronRight className="h-4 w-4" />
+          Reserve Notes Now <ChevronRight className="h-4 w-4" />
         </button>
       </div>
     </div>

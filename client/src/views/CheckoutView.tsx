@@ -105,8 +105,8 @@ const StepBar: React.FC<{ step: number }> = ({ step }) => (
           <React.Fragment key={s.id}>
             <div className="flex items-center gap-2 min-w-0">
               <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center font-black text-sm transition-all ${done ? "bg-emerald-500 text-white" :
-                  active ? "bg-primary text-black" :
-                    "bg-background text-text-muted border border-border"
+                active ? "bg-primary text-black" :
+                  "bg-background text-text-muted border border-border"
                 }`}>
                 {done ? <Check className="h-4 w-4" /> : s.icon}
               </div>
@@ -415,8 +415,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                     </div>
                     <span className="text-xs font-medium text-text-muted leading-relaxed">
                       I agree: I'll pay <strong className="text-text-main">{formatRupee(platformFee)} online</strong>{" "}
-                      {PLATFORM_FEE_PERCENTAGE > 0 ? "as the platform's share" : "(Waived)"}, and{" "}
-                      <strong className="text-text-main">{total - platformFee === 0 ? "nothing" : `${formatRupee(total - platformFee)} cash`}</strong>{" "}
+                      {PLATFORM_FEE_PERCENTAGE > 0 ? "to reserve the item" : "(Waived)"}, and{" "}
+                      <strong className="text-text-main uppercase">{total - platformFee === 0 ? "nothing" : `${formatRupee(total - platformFee)} IN CASH OR UPI directly`}</strong>{" "}
                       to the seller at the meetup after inspecting the notes.
                     </span>
                   </label>

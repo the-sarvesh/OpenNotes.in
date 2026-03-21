@@ -555,6 +555,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </FadeUp>
         </div>
       </section>
+
+      {/* ══════════ TAGLINE BEFORE FOOTER ══════════ */}
+      <div className="py-12 border-t border-border bg-surface text-center">
+        <div className="inline-flex items-center gap-2 text-xs sm:text-sm text-text-muted font-black uppercase tracking-widest px-4 py-2 rounded-xl bg-background border border-border">
+          <span className="text-primary">✦</span> Built by BITSians. Built for BITSians.
+        </div>
+      </div>
     </motion.div>
   );
 };

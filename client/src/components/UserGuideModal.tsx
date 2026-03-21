@@ -108,8 +108,8 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${activeTab === tab.id
-                    ? 'bg-[#FFC000] text-black border-[#FFC000] shadow-lg shadow-[#FFC000]/20'
-                    : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-white'
+                  ? 'bg-[#FFC000] text-black border-[#FFC000] shadow-lg shadow-[#FFC000]/20'
+                  : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-white'
                   }`}
               >
                 {/* Completed dot */}
@@ -194,7 +194,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                   <div className="space-y-3">
                     {[
                       { icon: Search, color: 'blue', title: 'Browse & Add to Cart', desc: 'Search by course code or title. Add what you need — you can buy from multiple sellers in one checkout.' },
-                      { icon: Coins, color: 'amber', title: 'Pay the Platform Fee', desc: `At checkout you pay a small ${feePercent}% fee online. This "unlocks" seller contact details and secures your listing slot.` },
+                      { icon: Coins, color: 'amber', title: feePercent === 0 ? 'Reserve the Listing' : 'Pay the Platform Fee', desc: feePercent === 0 ? 'At checkout you simply reserve the notes online for free. This "unlocks" seller contact details and secures your listing slot.' : `At checkout you pay a small ${feePercent}% fee online. This "unlocks" seller contact details and secures your listing slot.` },
                       { icon: MessageCircle, color: 'emerald', title: 'Coordinate a Meetup', desc: 'Use the built-in chat to arrange a time and place — usually your exam centre or a campus common area.' },
                       { icon: CheckCircle2, color: 'purple', title: 'Inspect & Pay Cash', desc: 'Check the notes in person first. If satisfied, share your 4-digit PIN (from My Orders) with the seller and pay the notes price in cash.' },
                     ].map(({ icon: Icon, color, title, desc }, i) => (
@@ -338,10 +338,10 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                   key={t}
                   onClick={() => setActiveTab(t)}
                   className={`rounded-full transition-all duration-300 ${i === currentIdx
-                      ? 'w-5 h-2 bg-[#FFC000]'
-                      : i < currentIdx
-                        ? 'w-2 h-2 bg-emerald-500'
-                        : 'w-2 h-2 bg-white/20'
+                    ? 'w-5 h-2 bg-[#FFC000]'
+                    : i < currentIdx
+                      ? 'w-2 h-2 bg-emerald-500'
+                      : 'w-2 h-2 bg-white/20'
                     }`}
                 />
               ))}
