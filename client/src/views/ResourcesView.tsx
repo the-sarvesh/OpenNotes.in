@@ -324,6 +324,32 @@ export const ResourcesView: React.FC = () => {
         ) : navigationPath.length === 1 ? (
           <motion.div key="semester" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
             <BackButton label="All Semesters" onClick={() => setNavigationPath([])} />
+            
+            {/* Semester General Drive Link (Moved to top) */}
+            {(() => {
+              const semLink = subjectLinks.find(l => l.semester === navigationPath[0] && (l.subject_name === '' || l.subject_name === null));
+              if (!semLink) return null;
+              return (
+                <a 
+                  href={semLink.drive_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between p-5 bg-[#FFC000]/10 border border-[#FFC000]/20 rounded-3xl group hover:bg-[#FFC000]/20 transition-all mb-4"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[#FFC000] flex items-center justify-center text-slate-900 shadow-lg shadow-[#FFC000]/20">
+                      <FolderOpen className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-white text-base">Open {navigationPath[0].replace('Sem', 'Semester ')} Google Drive</h4>
+                      <p className="text-xs text-[#FFC000]/70 font-bold uppercase tracking-widest">Shared Resource Folder</p>
+                    </div>
+                  </div>
+                  <ExternalLink className="h-5 w-5 text-[#FFC000] group-hover:translate-x-1 transition-transform" />
+                </a>
+              );
+            })()}
+
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {availableSubjects.length === 0
                 ? <EmptyState message="No subjects found in this semester yet." />
@@ -342,31 +368,6 @@ export const ResourcesView: React.FC = () => {
                 })
               }
             </div>
-            
-            {/* Semester General Drive Link */}
-            {(() => {
-              const semLink = subjectLinks.find(l => l.semester === navigationPath[0] && (l.subject_name === '' || l.subject_name === null));
-              if (!semLink) return null;
-              return (
-                <a 
-                  href={semLink.drive_link}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-5 bg-[#FFC000]/10 border border-[#FFC000]/20 rounded-3xl group hover:bg-[#FFC000]/20 transition-all"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-[#FFC000] flex items-center justify-center text-slate-900 shadow-lg shadow-[#FFC000]/20">
-                      <FolderOpen className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-white text-base">Open {navigationPath[0].replace('Sem', 'Semester ')} Google Drive</h4>
-                      <p className="text-xs text-[#FFC000]/70 font-bold uppercase tracking-widest">Shared Resource Folder</p>
-                    </div>
-                  </div>
-                  <ExternalLink className="h-5 w-5 text-[#FFC000] group-hover:translate-x-1 transition-transform" />
-                </a>
-              );
-            })()}
           </motion.div>
 
           /* Subject — category folders */

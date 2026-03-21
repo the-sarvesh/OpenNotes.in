@@ -665,7 +665,7 @@ router.post("/subject-links", async (req, res, next) => {
   try {
     const { semester, subject_name, drive_link } = req.body;
 
-    if (!semester || !subject_name || drive_link === undefined) {
+    if (!semester || subject_name === undefined || drive_link === undefined) {
       return res.status(400).json({ error: "semester, subject_name, and drive_link are required" });
     }
 
