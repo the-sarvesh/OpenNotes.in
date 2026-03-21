@@ -14,8 +14,14 @@ export const Footer: React.FC = () => {
     <footer className="relative bg-slate-900 border-t border-white/[0.08] py-8 mt-auto overflow-hidden">
       {/* Subtle bottom glow */}
       <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[400px] h-20 bg-[#FFC000]/5 rounded-full blur-3xl pointer-events-none" />
-      
+
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 text-center flex 
+ justify-center w-full">
+          <p className="flex items-center justify-center gap-1.5 text-[10px] sm:text-[11px] text-slate-400 font-black uppercase tracking-[0.2em]">
+            <span className="text-[#FFC000]">✦</span> Built by BITSian. Built for BITSians.
+          </p>
+        </div>
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Brand & Mission - Compact */}
           <div className="flex items-center gap-6">
@@ -59,10 +65,10 @@ export const Footer: React.FC = () => {
         </div>
       </div>
 
-      <LegalModal 
-        isOpen={legal.open} 
-        onClose={() => setLegal({ ...legal, open: false })} 
-        type={legal.type} 
+      <LegalModal
+        isOpen={legal.open}
+        onClose={() => setLegal({ ...legal, open: false })}
+        type={legal.type}
       />
     </footer>
   );
