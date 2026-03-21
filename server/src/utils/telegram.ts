@@ -204,15 +204,13 @@ export const initTelegramBot = () => {
         });
 
         const item = result.rows[0] as any;
-        if (!item) return;
+        if (!item) {
+          console.warn(`[Telegram] Order item not found for im_here: ${id}`);
+          return await ctx.reply('❌ Order not found.');
+        }
 
         if (item.status === 'completed' || item.status === 'cancelled') {
           return await ctx.reply('❌ Transaction closed.');
-        }
-
-        // Limit "I'm here" signals to 3
-        if (item.meetup_signal_count >= 3) {
-          return await ctx.reply('⚠️ Limit reached. You can only signal arrival 3 times per item. Please use the application chat if you need more coordination.');
         }
 
         const userRes = await db.execute({
@@ -220,7 +218,16 @@ export const initTelegramBot = () => {
           args: [chatId]
         });
         const sender = userRes.rows[0] as any;
-        
+        if (!sender) {
+          console.warn(`[Telegram] Sender not found for chatId: ${chatId}`);
+          return await ctx.reply('❌ Your Telegram account is not linked correctly. Please use /start to link it.');
+        }
+
+        // Limit "I'm here" signals to 3
+        if (item.meetup_signal_count >= 3) {
+          return await ctx.reply('⚠️ Limit reached. You can only signal arrival 3 times per item. Please use the application chat if you need more coordination.');
+        }
+
         const isBuyer = sender.id === item.buyer_id;
         const targetChatId = isBuyer ? item.seller_chat : item.buyer_chat;
         const targetUserId = isBuyer ? item.seller_id : item.buyer_id;
