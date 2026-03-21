@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
+import { useSettings } from "../contexts/SettingsContext.js";
 import { apiRequest, API_BASE_URL } from "../utils/api.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -153,6 +154,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   resetToken = "",
   initialEmail = "",
 }) => {
+  const { settings } = useSettings();
+  const fee = settings?.platform_fee_percentage ?? 0;
   const [mode, setMode] = useState<AuthMode>(defaultMode);
 
   const [email, setEmail] = useState(initialEmail);
@@ -386,13 +389,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {isAuthMode && (
               <motion.div key={mode} {...SLIDE} className="px-6 pb-6 space-y-4">
 
-                {/* 0% fee promo — subtle */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
-                  <Sparkles className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
-                    0% platform fees during launch phase 🎉
-                  </p>
-                </div>
+                {/* Launch promo banner — subtle */}
+                {fee === 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                      0% platform fees during launch phase 🎉
+                    </p>
+                  </div>
+                )}
 
                 {/* ── GOOGLE — primary action, always on top ── */}
                 <GoogleButton label={mode === "login" ? "Sign in with Google" : "Sign up with Google"} />

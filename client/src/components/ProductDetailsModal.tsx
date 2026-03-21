@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext.js';
+import { useSettings } from '../contexts/SettingsContext.js';
 import { apiRequest } from '../utils/api.js';
-import { formatSemester } from '../utils/formatters';
+import { formatSemester, getPlatformFeeConfig } from '../utils/formatters.js';
 import type { Note } from '../types';
 
 interface ProductDetailsModalProps {
@@ -48,6 +49,8 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   note, onClose, onAddToCart, onBuyNow, isInCart, cart, onContactSeller,
 }) => {
   const { user } = useAuth();
+  const { settings } = useSettings();
+  const feeInfo = settings?.platform_fee_percentage ?? 0;
   const [deleting, setDeleting] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showLightbox, setShowLightbox] = useState(false);
@@ -301,14 +304,21 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                   <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-wider">Only 1 left!</p>
                 </div>
               )}
-              <div className="px-4 py-2.5 bg-emerald-500/8 border border-emerald-500/20 rounded-xl flex items-center gap-2">
-                <div className="p-1 bg-emerald-500 rounded-lg text-white shrink-0">
-                  <ShieldCheck className="h-3 w-3" />
-                </div>
-                <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-[0.1em]">
-                  Limited Time: ₹0 Platform Fee! 🚀
-                </p>
-              </div>
+              {/* Platform Config Alert */}
+              {(() => {
+                 const config = getPlatformFeeConfig(feeInfo);
+                 if (!config.isPromo) return null;
+                 return (
+                  <div className={`px-4 py-2.5 ${config.bgColor} border ${config.borderColor} rounded-xl flex items-center gap-2`}>
+                    <div className={`p-1 ${config.isPromo ? "bg-emerald-500" : "bg-primary"} rounded-lg text-white shrink-0`}>
+                      <ShieldCheck className="h-3 w-3" />
+                    </div>
+                    <p className={`text-[10px] font-black ${config.color} uppercase tracking-[0.1em]`}>
+                      Limited Time: {config.desc}! 🚀
+                    </p>
+                  </div>
+                 );
+              })()}
             </div>
 
             {/* ── Info grid ────────────────────────────────────────── */}

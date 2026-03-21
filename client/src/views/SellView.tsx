@@ -285,20 +285,25 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
         <p className="text-sm text-text-muted">Three quick steps to go live.</p>
       </div>
 
-      {/* Launch promo banner */}
-      {PLATFORM_FEE_PERCENTAGE === 0 && (
-        <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/40 rounded-2xl flex items-start gap-3">
-          <div className="p-1.5 bg-emerald-600 rounded-lg shrink-0">
-            <Shield className="h-3.5 w-3.5 text-white" />
+      {/* Platform fee info banner */}
+      {(() => {
+        const config = getPlatformFeeConfig(PLATFORM_FEE_PERCENTAGE);
+        return (
+          <div className={`mb-6 p-4 ${config.bgColor} border ${config.borderColor} rounded-2xl flex items-start gap-3`}>
+            <div className={`p-1.5 ${config.isPromo ? "bg-emerald-600" : "bg-black/10 dark:bg-white/10"} rounded-lg shrink-0`}>
+              <Shield className={`h-3.5 w-3.5 ${config.isPromo ? "text-white" : config.color}`} />
+            </div>
+            <div>
+              <p className={`text-xs font-black ${config.color} uppercase tracking-wider mb-1`}>{config.label}</p>
+              <p className="text-xs text-text-muted leading-relaxed">
+                {PLATFORM_FEE_PERCENTAGE === 0 
+                  ? <>During our launch, we've <strong>waived the platform fee</strong>. You keep <strong>100% of your listing price</strong> paid in <strong>cash</strong> at hand-over.</>
+                  : <>A secure <strong>{PLATFORM_FEE_PERCENTAGE}% platform fee</strong> is applied when buyers purchase. You keep the rest paid in <strong>cash</strong> at hand-over.</>}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-1">Launch Promo: 0% Fee</p>
-            <p className="text-xs text-text-muted leading-relaxed">
-              During our launch, we've <strong>waived the platform fee</strong>. You keep <strong>100% of your listing price</strong> paid in <strong>cash</strong> at hand-over.
-            </p>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Step indicator */}
       <div className="flex items-center mb-8">

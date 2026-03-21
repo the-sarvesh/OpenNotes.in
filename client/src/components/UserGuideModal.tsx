@@ -6,6 +6,7 @@ import {
   Coins, MessageCircle, Lock, BookOpen, Compass,
   Search, Bell, ArrowUpRight
 } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface UserGuideModalProps {
   isOpen: boolean;
@@ -34,6 +35,8 @@ const TAB_ORDER: GuideTab[] = ['welcome', 'buying', 'selling', 'safety'];
 
 export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<GuideTab>('welcome');
+  const { settings } = useSettings();
+  const feePercent = settings?.platform_fee_percentage ?? 10;
 
   // Scroll Lock
   React.useEffect(() => {
@@ -191,7 +194,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                   <div className="space-y-3">
                     {[
                       { icon: Search, color: 'blue', title: 'Browse & Add to Cart', desc: 'Search by course code or title. Add what you need — you can buy from multiple sellers in one checkout.' },
-                      { icon: Coins, color: 'amber', title: 'Pay the Platform Fee', desc: 'At checkout you pay a small 10% fee online. This "unlocks" seller contact details and secures your listing slot.' },
+                      { icon: Coins, color: 'amber', title: 'Pay the Platform Fee', desc: `At checkout you pay a small ${feePercent}% fee online. This "unlocks" seller contact details and secures your listing slot.` },
                       { icon: MessageCircle, color: 'emerald', title: 'Coordinate a Meetup', desc: 'Use the built-in chat to arrange a time and place — usually your exam centre or a campus common area.' },
                       { icon: CheckCircle2, color: 'purple', title: 'Inspect & Pay Cash', desc: 'Check the notes in person first. If satisfied, share your 4-digit PIN (from My Orders) with the seller and pay the notes price in cash.' },
                     ].map(({ icon: Icon, color, title, desc }, i) => (
@@ -231,7 +234,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                     {[
                       { icon: PlusCircle, color: 'blue', title: 'Post a Listing', desc: 'Upload clear photos. Be honest about condition — annotated, highlighted, or clean. Set a fair price (~50% of print cost).' },
                       { icon: MapPin, color: 'emerald', title: 'Set Meetup Notes', desc: 'Crucial: specify where you can meet — e.g. "Main Gate, Saturday 5 PM" so buyers can confirm before purchasing.' },
-                      { icon: Bell, color: 'amber', title: 'Wait for a Buyer', desc: "You'll get a notification when someone buys your listing. You keep 100% of the notes price — the platform only takes the buyer's 10% fee." },
+                      { icon: Bell, color: 'amber', title: 'Wait for a Buyer', desc: `You'll get a notification when someone buys your listing. You keep 100% of the notes price — the platform only takes the buyer's ${feePercent}% fee.` },
                       { icon: Lock, color: 'purple', title: 'Verify PIN & Collect', desc: "During handover, ask the buyer for their 4-digit order PIN. Once verified in your dashboard the order is complete — collect your cash." },
                     ].map(({ icon: Icon, color, title, desc }, i) => (
                       <div key={i} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors group">
@@ -281,7 +284,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                     </p>
                     <div className="space-y-3">
                       {[
-                        'The 10% platform fee ensures the buyer is serious about the purchase.',
+                        `The ${feePercent}% platform fee ensures the buyer is serious about the purchase.`,
                         'Cash at exchange means you only pay the full price once you physically hold the notes.',
                         'PIN verification secures the transaction for the seller — no PIN, no handover.',
                       ].map((point, i) => (

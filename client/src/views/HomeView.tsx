@@ -8,6 +8,7 @@ import {
 import { NoteCard } from '../components/NoteCard';
 import { useNavigate } from 'react-router-dom';
 import { mapListing } from '../utils/listings';
+import { useSettings } from '../contexts/SettingsContext';
 import type { Note, CartItem } from '../types/index.ts';
 
 interface HomeViewProps {
@@ -229,6 +230,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart = [], refreshKey, onShowGuide,
 }) => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
+  const feeInfo = settings?.platform_fee_percentage ?? 0;
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -281,7 +284,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
                 className="inline-flex items-center bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5"
               >
-                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Launch Promo: Free for BITSians 🚀</span>
+                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
+                  {feeInfo === 0 ? "Launch Promo: Free for BITSians 🚀" : "Secure Escrow Marketplace 🤝"}
+                </span>
               </motion.div>
             </div>
 
@@ -360,7 +365,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="flex flex-wrap items-center gap-4 pt-6 border-t border-border/60"
             >
               {[
-                { label: '0% Platform Fee', icon: CheckCircle2 },
+                { label: feeInfo === 0 ? '0% Platform Fee' : `${feeInfo}% Platform Fee`, icon: CheckCircle2 },
                 { label: 'Escrow protected', icon: ShieldCheck },
                 { label: 'All locations', icon: MapPin },
               ].map(({ label, icon: Icon }) => (
