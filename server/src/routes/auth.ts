@@ -244,6 +244,7 @@ router.post("/login", authLimiter as any, async (req, res, next) => {
         upi_id: user.upi_id,
         role: user.role || "user",
       },
+      token
     });
   } catch (error) {
     next(error);
@@ -521,6 +522,7 @@ router.get("/google/callback", (req, res, next) => {
         email: user.email,
         name: user.name,
         role: user.role || "user",
+        token: token,
       });
 
       res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);

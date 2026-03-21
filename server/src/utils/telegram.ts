@@ -291,6 +291,18 @@ export const initTelegramBot = () => {
         await ctx.reply('✍️ Type your reply below:');
       }
       else if (action === 'show_pin') {
+        const stateKey = `pin_${chatId}_${id}`;
+        const queryTracker = botState.get(stateKey) || { count: 0, lastAt: 0 };
+        const now = Date.now();
+
+        if (queryTracker.count >= 3) {
+          return await ctx.answerCbQuery('Limit reached (3/3). Please view your PIN securely on the OpenNotes website.', { show_alert: true });
+        }
+
+        if (now - queryTracker.lastAt < 30000) {
+          return await ctx.answerCbQuery('Please wait 30 seconds before requesting again.', { show_alert: true });
+        }
+
         await ctx.answerCbQuery();
         const result = await db.execute({
           sql: 'SELECT meetup_pin, status FROM order_items WHERE id = ?',
@@ -302,7 +314,10 @@ export const initTelegramBot = () => {
         }
 
         if (item?.meetup_pin) {
-          await ctx.reply(`🔑 Your Exchange PIN: <code>${item.meetup_pin}</code>\n\nShare this with the seller at the meetup.`, { parse_mode: 'HTML' });
+          queryTracker.count += 1;
+          queryTracker.lastAt = now;
+          botState.set(stateKey, queryTracker);
+          await ctx.reply(`🔑 Your Exchange PIN: <code>${item.meetup_pin}</code>\n\nShare this with the seller at the meetup.\n\n<i>(Viewed ${queryTracker.count}/3 times)</i>`, { parse_mode: 'HTML' });
         }
       }
       else if (action === 'enter_pin') {

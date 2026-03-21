@@ -262,6 +262,11 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                       📍 {note.preferredMeetupSpot}
                     </p>
                   )}
+                  {note.meetupLocation && (
+                    <p className="text-xs font-bold text-text-main mt-1">
+                      Exact Location: {note.meetupLocation}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -271,6 +276,20 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               <div className="p-4 bg-background border border-border rounded-2xl">
                 <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-2">About this material</p>
                 <p className="text-xs text-text-muted leading-relaxed italic">"{note.description}"</p>
+              </div>
+            )}
+
+            {/* ── Subjects ─────────────────────────────────────────── */}
+            {note.isMultipleSubjects && note.subjects && note.subjects.length > 0 && (
+              <div className="p-4 bg-background border border-border rounded-2xl">
+                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-2">Subjects Included</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {note.subjects.map((sub, i) => (
+                    <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold bg-primary/5 border border-primary/20 text-primary">
+                      {sub}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 

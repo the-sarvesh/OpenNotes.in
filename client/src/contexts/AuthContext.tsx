@@ -16,7 +16,7 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (user: User) => void;
+  login: (user: User, token?: string) => void;
   logout: () => void;
   refreshUser: () => Promise<void>;
   isLoading: boolean;
@@ -63,14 +63,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     checkStatus();
   }, []);
 
-  const login = (newUser: User) => {
+  const login = (newUser: User, token?: string) => {
     setUser(newUser);
     localStorage.setItem('open_notes_user', JSON.stringify(newUser));
+    if (token) {
+      localStorage.setItem('open_notes_token', token);
+    }
   };
 
   const logout = async () => {
     setUser(null);
     localStorage.removeItem('open_notes_user');
+    localStorage.removeItem('open_notes_token');
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' });
     } catch (err) {

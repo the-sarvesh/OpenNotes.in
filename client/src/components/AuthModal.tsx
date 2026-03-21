@@ -234,7 +234,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setOtpType("verify");
         setMode("otp_verify");
       } else {
-        login(data.user);
+        login(data.user, data.token);
         handleClose();
       }
     } catch (err: any) { setError(err.message); }

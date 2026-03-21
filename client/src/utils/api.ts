@@ -34,6 +34,11 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
 
   console.log(`[API Request] Calling: ${options.method || 'GET'} ${fullUrl}`);
 
+  const token = localStorage.getItem('open_notes_token');
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
   const response = await fetch(fullUrl, {
     ...options,
     headers,

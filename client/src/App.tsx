@@ -181,6 +181,7 @@ const App: React.FC = () => {
       const email = params.get("email");
       const name = params.get("name");
       const role = params.get("role");
+      const token = params.get("token");
 
       if (userId && email && name) {
         login({
@@ -188,7 +189,7 @@ const App: React.FC = () => {
           email,
           name,
           role: role || "user",
-        });
+        }, token || undefined);
         toast.success(`Welcome back, ${name.split(" ")[0]}!`);
       } else {
         toast.error("Authentication failed. Please try again.");
