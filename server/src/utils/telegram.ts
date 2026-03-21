@@ -192,69 +192,76 @@ export const initTelegramBot = () => {
         await ctx.reply('✅ Order acknowledged! Coordination details sent to the buyer.');
       }
       else if (action === 'im_here') {
-        await ctx.answerCbQuery('Sending location signal...');
-        const result = await db.execute({
-          sql: `SELECT oi.id, oi.seller_id, oi.status, oi.meetup_signal_count, o.buyer_id, u.telegram_chat_id as buyer_chat, s.telegram_chat_id as seller_chat, u.name as buyer_name, s.name as seller_name
-                FROM order_items oi
-                JOIN orders o ON oi.order_id = o.id
-                JOIN users u ON o.buyer_id = u.id
-                JOIN users s ON oi.seller_id = s.id
-                WHERE oi.id = ?`,
-          args: [id]
-        });
+        try {
+          await ctx.answerCbQuery();
+          
+          const result = await db.execute({
+            sql: `SELECT oi.id, oi.seller_id, oi.status, oi.meetup_signal_count, o.buyer_id, u.telegram_chat_id as buyer_chat, s.telegram_chat_id as seller_chat, u.name as buyer_name, s.name as seller_name
+                  FROM order_items oi
+                  JOIN orders o ON oi.order_id = o.id
+                  JOIN users u ON o.buyer_id = u.id
+                  JOIN users s ON oi.seller_id = s.id
+                  WHERE oi.id = ?`,
+            args: [id]
+          });
 
-        const item = result.rows[0] as any;
-        if (!item) {
-          console.warn(`[Telegram] Order item not found for im_here: ${id}`);
-          return await ctx.reply('❌ Order not found.');
+          const item = result.rows[0] as any;
+          if (!item) {
+            console.error(`[Telegram] Order item not found for im_here ID: ${id}`);
+            return await ctx.reply('❌ Error: Order item not found or invalid session.');
+          }
+
+          if (item.status === 'completed' || item.status === 'cancelled') {
+            return await ctx.reply('❌ This transaction is already closed.');
+          }
+
+          const userRes = await db.execute({
+            sql: 'SELECT id, name FROM users WHERE telegram_chat_id = ?',
+            args: [chatId]
+          });
+          const sender = userRes.rows[0] as any;
+          if (!sender) {
+            console.warn(`[Telegram] Sender not found for chatId: ${chatId}`);
+            return await ctx.reply('❌ Your Telegram account is not correctly linked to your OpenNotes profile. Please use /start to re-link.');
+          }
+
+          // Limit "I'm here" signals to 3
+          if (item.meetup_signal_count >= 3) {
+            return await ctx.reply('⚠️ Signaling Limit Reached: You can only notify the other party 3 times. Please use the application chat for further coordination.');
+          }
+
+          const isBuyer = sender.id === item.buyer_id;
+          const targetChatId = isBuyer ? item.seller_chat : item.buyer_chat;
+          const targetUserId = isBuyer ? item.seller_id : item.buyer_id;
+          const targetName = isBuyer ? item.seller_name : item.buyer_name;
+
+          // Increment signal count
+          await db.execute({
+            sql: 'UPDATE order_items SET meetup_signal_count = meetup_signal_count + 1, last_meetup_signal_at = CURRENT_TIMESTAMP WHERE id = ?',
+            args: [id]
+          });
+
+          // Notify via Telegram if they have it linked
+          let tgOk = false;
+          if (targetChatId) {
+            tgOk = await sendTelegramMessage(targetChatId, `📍 <b>Arrival Alert!</b>\n\n<b>${sender.name}</b> has arrived at the meetup spot.`);
+          }
+
+          // Always notify via Website
+          const { createNotification } = await import('./notifications.js');
+          await createNotification(
+            targetUserId,
+            'meetup_update',
+            'Arrived! 📍',
+            `${sender.name} has signaled they are at the meetup spot.`,
+            '/messages'
+          );
+
+          await ctx.reply(`✅ Signal Sent! ${targetName} has been notified on ${tgOk ? 'Telegram and the Website' : 'the Website'}. (Signal ${item.meetup_signal_count + 1}/3)`);
+        } catch (err) {
+          console.error('[Telegram] im_here handler failure:', err);
+          await ctx.reply('❌ Something went wrong while sending the signal. Please try again or use the website chat.');
         }
-
-        if (item.status === 'completed' || item.status === 'cancelled') {
-          return await ctx.reply('❌ Transaction closed.');
-        }
-
-        const userRes = await db.execute({
-          sql: 'SELECT id, name FROM users WHERE telegram_chat_id = ?',
-          args: [chatId]
-        });
-        const sender = userRes.rows[0] as any;
-        if (!sender) {
-          console.warn(`[Telegram] Sender not found for chatId: ${chatId}`);
-          return await ctx.reply('❌ Your Telegram account is not linked correctly. Please use /start to link it.');
-        }
-
-        // Limit "I'm here" signals to 3
-        if (item.meetup_signal_count >= 3) {
-          return await ctx.reply('⚠️ Limit reached. You can only signal arrival 3 times per item. Please use the application chat if you need more coordination.');
-        }
-
-        const isBuyer = sender.id === item.buyer_id;
-        const targetChatId = isBuyer ? item.seller_chat : item.buyer_chat;
-        const targetUserId = isBuyer ? item.seller_id : item.buyer_id;
-        const targetName = isBuyer ? item.seller_name : item.buyer_name;
-
-        // Increment signal count
-        await db.execute({
-          sql: 'UPDATE order_items SET meetup_signal_count = meetup_signal_count + 1, last_meetup_signal_at = CURRENT_TIMESTAMP WHERE id = ?',
-          args: [id]
-        });
-
-        // Notify via Telegram
-        if (targetChatId) {
-          await sendTelegramMessage(targetChatId, `📍 <b>Arrived!</b>\n\n${sender.name} has arrived at the meetup spot.`);
-        }
-
-        // Notify via Website
-        const { createNotification } = await import('./notifications.js');
-        await createNotification(
-          targetUserId,
-          'meetup_update',
-          'Arrived! 📍',
-          `${sender.name} has signaled they are at the meetup spot.`,
-          '/messages'
-        );
-
-        await ctx.reply(`✅ Notified ${targetName} that you've arrived. (Signal ${item.meetup_signal_count + 1}/3)`);
       }
       else if (action === 'msg_reply') {
         await ctx.answerCbQuery();
