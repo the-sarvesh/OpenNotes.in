@@ -63,3 +63,34 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     return res.status(401).json({ error: 'Unauthorized: Invalid token' });
   }
 };
+export const optionalAuthenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  let token = req.cookies?.auth_token;
+
+  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string };
+    const result = await db.execute({
+      sql: 'SELECT id, email, role, status FROM users WHERE id = ?',
+      args: [decoded.id]
+    });
+
+    const user = result.rows[0];
+    if (user && user.status !== 'blocked') {
+      req.user = {
+        id: user.id as string,
+        email: user.email as string,
+        role: (user.role as string) || 'user'
+      };
+    }
+  } catch (error) {
+    // Ignore invalid token in optional auth
+  }
+  next();
+};
