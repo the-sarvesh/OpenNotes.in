@@ -224,7 +224,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         : { email, password, name, upi_id: upiId };
       const res = await apiRequest(endpoint, { method: "POST", body: JSON.stringify(body) });
       const data = await res.json();
-      
+
       if (!res.ok) {
         if (data.requiresVerification) {
           setError(data.error);
@@ -299,7 +299,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Verification failed");
-      
+
       if (otpType === "verify") {
         setMode("login");
         setSuccess("Account verified! You can now sign in.");
@@ -316,13 +316,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (!token.trim()) { setError("Reset token is missing. Please use the link from your email."); return; }
     setError(""); setSuccess(""); setIsLoading(true);
     try {
-      const res = await apiRequest("/api/auth/reset-password", { 
-        method: "POST", 
-        body: JSON.stringify({ 
-          token: token.trim(), 
+      const res = await apiRequest("/api/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({
+          token: token.trim(),
           new_password: newPassword,
-          email: email.toLowerCase().trim() 
-        }) 
+          email: email.toLowerCase().trim()
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Reset failed");
@@ -415,8 +415,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <p className="text-xs text-text-muted">Use the "Sign in with Google" button above.</p>
                       </div>
                     ) : (
-                      <ErrorBanner 
-                        msg={error} 
+                      <ErrorBanner
+                        msg={error}
                         onAction={error.includes("verify") ? handleResendVerification : undefined}
                         actionLabel={error.includes("verify") ? "Resend verification email →" : undefined}
                       />
@@ -439,10 +439,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       placeholder="John Doe" required />
                   )}
 
-                  <InputField label="BITS Email"
+                  <InputField label="Email"
                     icon={<Mail className="h-4 w-4" />}
                     type="email" value={email} onChange={setEmail}
-                    placeholder="f2023xxxx@pilani.bits-pilani.ac.in" required />
+                    placeholder="[EMAIL_ADDRESS]" required />
 
                   {/* Password row with inline "Forgot?" link */}
                   <div className="space-y-1.5">
@@ -504,14 +504,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {mode === "forgot" && !forgotSent && (
               <motion.form key="forgot" {...SLIDE} onSubmit={handleForgotPassword} className="px-6 pb-6 space-y-4">
                 <p className="text-sm text-text-muted leading-relaxed">
-                  Enter your BITS email and we'll send you a reset link. It expires in 30 minutes.
+                  Enter your Email and we'll send you a reset link. It expires in 30 minutes.
                 </p>
                 {success && <SuccessBanner msg={success} />}
                 {error && <ErrorBanner msg={error} />}
-                <InputField label="BITS Email"
+                <InputField label="Email"
                   icon={<Mail className="h-4 w-4" />}
                   type="email" value={email} onChange={setEmail}
-                  placeholder="f2023xxxx@pilani.bits-pilani.ac.in" required />
+                  placeholder="[EMAIL_ADDRESS]" required />
                 <button type="submit" disabled={isLoading}
                   className="w-full py-3.5 bg-primary hover:bg-primary-hover text-black rounded-2xl font-bold
                              text-sm transition-all shadow-md disabled:opacity-60 flex items-center justify-center gap-2">
@@ -614,7 +614,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <KeyRound className="h-6 w-6 text-primary" />
                   </div>
                   <p className="text-sm text-text-muted leading-relaxed">
-                    Enter the 6-digit code sent to<br/>
+                    Enter the 6-digit code sent to<br />
                     <strong className="text-text-main">{email}</strong>
                   </p>
                 </div>
@@ -638,7 +638,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             newOtp[i] = val.slice(-1);
                             const finalOtp = newOtp.join("");
                             setOtp(finalOtp);
-                            
+
                             // Auto focus next
                             if (val && i < 5) {
                               const next = e.target.parentElement?.nextElementSibling?.querySelector('input');
@@ -667,8 +667,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
 
                 <div className="text-center">
-                  <button type="button" 
-                    onClick={otpType === "reset" ? resendForgotPasswordOtp : handleResendVerification} 
+                  <button type="button"
+                    onClick={otpType === "reset" ? resendForgotPasswordOtp : handleResendVerification}
                     disabled={isLoading}
                     className="text-xs font-bold text-primary hover:underline disabled:opacity-50">
                     Didn't get the code? Resend
@@ -705,7 +705,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div>
                   <h3 className="text-lg font-bold text-text-main mb-1">Verify your email</h3>
                   <p className="text-sm text-text-muted leading-relaxed max-w-xs">
-                    We've sent a verification link to <strong>{email}</strong>. 
+                    We've sent a verification link to <strong>{email}</strong>.
                     Please check your inbox (and spam folder) to activate your account.
                   </p>
                 </div>

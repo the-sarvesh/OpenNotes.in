@@ -29,9 +29,9 @@ export interface Note {
 
 // ── Condition colour map ───────────────────────────────────────────
 const conditionColor: Record<string, string> = {
-  'Like New': 'text-emerald-600 dark:text-emerald-400',
-  'Good': 'text-blue-600    dark:text-blue-400',
-  'Fair': 'text-amber-600   dark:text-amber-400',
+  'Like New':          'text-emerald-600 dark:text-emerald-400',
+  'Good':              'text-blue-600    dark:text-blue-400',
+  'Fair':              'text-amber-600   dark:text-amber-400',
   'Heavily Annotated': 'text-orange-600  dark:text-orange-400',
 };
 
@@ -57,18 +57,13 @@ export const NoteCard = ({
   key?: React.Key;
 }) => {
   const [isFavorite, setIsFavorite] = useState(false);
-  const cartQty = cart.find(i => i.note.id === note.id)?.quantity || 0;
+  const cartQty    = cart.find(i => i.note.id === note.id)?.quantity || 0;
   const maxReached = cartQty >= note.quantity;
   const outOfStock = note.quantity === 0;
-  const mobile = isMobile();
+  const mobile     = isMobile();
 
   return (
-    <motion.div
-      // On mobile: NO whileHover transform — causes jitter/lag
-      whileHover={mobile ? undefined : { y: -3 }}
-      transition={{ duration: 0.18 }}
-      className="bg-surface rounded-2xl border border-border shadow-sm hover:shadow-lg hover:shadow-primary/8 hover:border-primary/20 transition-all duration-200 overflow-hidden group flex flex-col h-full"
-    >
+    <div className="bg-surface rounded-2xl border border-border shadow-sm hover:shadow-lg hover:shadow-primary/8 hover:border-primary/20 hover:-translate-y-0.5 transition-all duration-200 overflow-hidden group flex flex-col h-full">
       {/* ── Image ── */}
       <div
         className="relative overflow-hidden bg-background cursor-pointer shrink-0"
@@ -188,10 +183,11 @@ export const NoteCard = ({
           <button
             onClick={() => onAddToCart(note)}
             disabled={outOfStock || maxReached}
-            className={`flex-1 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors flex items-center justify-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isInCart
+            className={`flex-1 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors flex items-center justify-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+              isInCart
                 ? 'bg-primary/10 text-primary border border-primary/20'
                 : 'bg-primary text-black hover:bg-primary-hover shadow-sm shadow-primary/20'
-              }`}
+            }`}
           >
             <ShoppingCart className="h-3 w-3 shrink-0" />
             {outOfStock ? 'OOS' : maxReached ? 'Max' : isInCart ? 'In Cart' : 'Add'}
@@ -212,6 +208,6 @@ export const NoteCard = ({
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
