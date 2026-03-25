@@ -126,8 +126,8 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all border ${activeTab === tab.id
-                    ? 'bg-[#FFC000] text-black border-[#FFC000] shadow-md shadow-[#FFC000]/20'
-                    : 'bg-white/5 text-slate-400 border-white/8 hover:bg-white/10 hover:text-white'
+                  ? 'bg-[#FFC000] text-black border-[#FFC000] shadow-md shadow-[#FFC000]/20'
+                  : 'bg-white/5 text-slate-400 border-white/8 hover:bg-white/10 hover:text-white'
                   }`}
               >
                 {i < currentIdx && (
@@ -172,7 +172,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                   </div>
                   <p className="text-slate-400 leading-relaxed text-sm">
                     OpenNotes.in is a peer-to-peer marketplace for students. Instead of discarding your
-                    printed notes and annotated PPTs after exams, sell them to juniors and recover your
+                    printed notes and annotated PPTs after exams, sell/donate them to juniors and recover your
                     printing costs.
                   </p>
                   <div className="grid grid-cols-2 gap-2.5">
@@ -342,8 +342,8 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                   key={t}
                   onClick={() => setActiveTab(t)}
                   className={`rounded-full transition-all duration-300 ${i === currentIdx ? 'w-5 h-2 bg-[#FFC000]' :
-                      i < currentIdx ? 'w-2 h-2 bg-emerald-500' :
-                        'w-2 h-2 bg-white/20'
+                    i < currentIdx ? 'w-2 h-2 bg-emerald-500' :
+                      'w-2 h-2 bg-white/20'
                     }`}
                 />
               ))}
