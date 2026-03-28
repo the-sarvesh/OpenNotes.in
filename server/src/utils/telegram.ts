@@ -13,7 +13,14 @@ const botState = new Map<string, any>();
 // Per-conversation Telegram message cooldown (prevents spam on rapid messages)
 // Key: conversationId, Value: last notification timestamp (ms)
 const telegramMsgCooldowns = new Map<string, number>();
-const TELEGRAM_MSG_COOLDOWN_MS = 30_000; // 30 seconds
+const _rawCooldown = parseInt(process.env.TELEGRAM_MSG_COOLDOWN_MS ?? '', 10);
+const TELEGRAM_MSG_COOLDOWN_MS: number =
+  Number.isFinite(_rawCooldown) && _rawCooldown >= 0
+    ? _rawCooldown
+    : 30_000;
+if (process.env.TELEGRAM_MSG_COOLDOWN_MS && !Number.isFinite(_rawCooldown)) {
+  console.warn('[Telegram] Invalid TELEGRAM_MSG_COOLDOWN_MS env value — falling back to 30000ms');
+}
 
 // Helper to generate a consistent conversation ID between two users
 const getConversationId = (userId1: string, userId2: string) => {
@@ -694,9 +701,11 @@ export const telegramTemplates = {
   newMessage: (name: string, senderName: string, content: string, convoId: string, listingTitle?: string) => {
     const MAX = 120;
     const preview = content.length > MAX ? content.slice(0, MAX) + '\u2026' : content;
-    const text = `💬 <b>New Message from ${senderName}</b>` +
-      (listingTitle ? `\n📦 <i>Re: ${listingTitle}</i>` : '') +
-      `\n\n"${preview}"`;
+    const safeSender  = escapeHtml(senderName);
+    const safePreview = escapeHtml(preview);
+    const text = `💬 <b>New Message from ${safeSender}</b>` +
+      (listingTitle ? `\n📦 <i>Re: ${escapeHtml(listingTitle)}</i>` : '') +
+      `\n\n"${safePreview}"`;
     return {
       text,
       reply_markup: {
@@ -711,6 +720,10 @@ export const telegramTemplates = {
   generic: (title: string, message: string, linkUrl?: string) => 
     `<b>${title}</b>\n\n${message}${linkUrl ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : `\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`}`
 };
+
+/** Escape user-supplied strings so they're safe inside Telegram HTML parse_mode. */
+const escapeHtml = (str: string): string =>
+  str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**
  * Send a Telegram message preview notification when a user receives a new in-app message.
@@ -727,15 +740,24 @@ export const sendTelegramPreview = async (
   if (!botToken) return;
 
   try {
-    // ── Cooldown guard ────────────────────────────────────────────────────────
+    // ── Cooldown guard (atomic: reserve slot before any await) ───────────────
     const lastNotified = telegramMsgCooldowns.get(conversationId);
     if (lastNotified && Date.now() - lastNotified < TELEGRAM_MSG_COOLDOWN_MS) return;
+    // Reserve immediately — prevents concurrent calls from racing through
+    telegramMsgCooldowns.set(conversationId, Date.now());
 
     // ── Look up receiver ──────────────────────────────────────────────────────
-    const userRes = await db.execute({
-      sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?',
-      args: [receiverId],
-    });
+    let userRes;
+    try {
+      userRes = await db.execute({
+        sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?',
+        args: [receiverId],
+      });
+    } catch (dbErr) {
+      // Roll back reservation so a transient DB error doesn't permanently suppress notifications
+      telegramMsgCooldowns.delete(conversationId);
+      throw dbErr;
+    }
     const user = userRes.rows[0] as any;
     if (!user?.telegram_chat_id) return; // Telegram not linked — skip silently
 
@@ -759,18 +781,19 @@ export const sendTelegramPreview = async (
       user.telegram_chat_id, template.text, template.reply_markup
     );
 
-    if (sent) {
-      // Update cooldown
-      telegramMsgCooldowns.set(conversationId, Date.now());
+    if (!sent) {
+      // Roll back so the next message can retry
+      telegramMsgCooldowns.delete(conversationId);
+      return;
+    }
 
-      // Prevent memory leak — evict oldest 100 entries when map exceeds 500
-      if (telegramMsgCooldowns.size > 500) {
-        const oldest = [...telegramMsgCooldowns.entries()]
-          .sort((a, b) => a[1] - b[1])
-          .slice(0, 100)
-          .map(([k]) => k);
-        oldest.forEach((k) => telegramMsgCooldowns.delete(k));
-      }
+    // ── Evict oldest 100 entries when map exceeds 500 ─────────────────────────
+    if (telegramMsgCooldowns.size > 500) {
+      const oldest = [...telegramMsgCooldowns.entries()]
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, 100)
+        .map(([k]) => k);
+      oldest.forEach((k) => telegramMsgCooldowns.delete(k));
     }
   } catch (err) {
     // Non-blocking — log but never throw to the caller

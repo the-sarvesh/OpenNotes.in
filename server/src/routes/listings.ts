@@ -286,7 +286,7 @@ router.get("/me", authenticate, async (req: AuthRequest, res, next) => {
         SELECT l.*,
                COALESCE((SELECT AVG(rating) FROM reviews WHERE seller_id = l.seller_id), 0) as seller_rating
         FROM listings l
-        WHERE l.seller_id = ?
+        WHERE l.seller_id = ? AND l.status != 'archived'
         ORDER BY l.created_at DESC`,
       args: [req.user!.id],
     });

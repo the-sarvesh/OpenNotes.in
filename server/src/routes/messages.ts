@@ -74,6 +74,7 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
                END as other_user_id,
                u.name as other_user_name,
                u.profile_image_url as other_user_profile_image,
+               u.last_seen_at as other_user_last_seen,
                (SELECT COUNT(*) FROM messages m2 
                 WHERE m2.conversation_id = m.conversation_id 
                   AND m2.receiver_id = ? 
@@ -100,22 +101,31 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
       args: [userId, userId, userId, userId, userId, limit, offset]
     });
 
-    const results = convos.rows.map(convo => ({
-      conversationId: convo.conversation_id,
-      listingIds: String(convo.listing_ids || "").split(','),
-      listingTitles: String(convo.listing_titles || "").split(','),
-      listingImages: String(convo.listing_images || "").split(','),
-      otherUserId: convo.other_user_id,
-      otherUserName: String(convo.other_user_name || "User"),
-      otherUserProfileImage: convo.other_user_profile_image,
-      unreadCount: Number(convo.unread_count || 0),
-      lastMessage: String(convo.last_message || ""),
-      lastMessageAt: convo.last_message_at,
-      lastMessageIsMe: convo.last_sender_id === userId,
-      hasActiveOrder: Number(convo.active_order_count || 0) > 0
-    }));
+    // Check live socket presence for each conversation's other user
+    const io2 = req.app.get('io');
+    const results = convos.rows.map(convo => {
+      const otherUserId = convo.other_user_id as string;
+      const userRoom = io2?.sockets?.adapter?.rooms?.get(`user:${otherUserId}`);
+      return {
+        conversationId: convo.conversation_id,
+        listingIds: String(convo.listing_ids || "").split(','),
+        listingTitles: String(convo.listing_titles || "").split(','),
+        listingImages: String(convo.listing_images || "").split(','),
+        otherUserId,
+        otherUserName: String(convo.other_user_name || "User"),
+        otherUserProfileImage: convo.other_user_profile_image,
+        otherUserLastSeen: convo.other_user_last_seen || null,
+        otherUserOnline: !!(userRoom && userRoom.size > 0),
+        unreadCount: Number(convo.unread_count || 0),
+        lastMessage: String(convo.last_message || ""),
+        lastMessageAt: convo.last_message_at,
+        lastMessageIsMe: convo.last_sender_id === userId,
+        hasActiveOrder: Number(convo.active_order_count || 0) > 0
+      };
+    });
 
     res.json(results);
+
   } catch (error) {
     next(error);
   }
@@ -268,7 +278,10 @@ router.post('/', async (req: AuthRequest, res, next) => {
     // Skip if receiver is actively viewing this conversation in real time
     const io2 = req.app.get('io');
     const convoRoom = io2?.sockets?.adapter?.rooms?.get(`conv:${conversationId}`);
-    const receiverAlreadyOnline = convoRoom && convoRoom.size > 0;
+    const userRoom  = io2?.sockets?.adapter?.rooms?.get(`user:${receiver_id}`);
+    // True only if the receiver specifically has a socket in the conversation room
+    const receiverAlreadyOnline =
+      userRoom && convoRoom && [...userRoom].some((sid) => convoRoom.has(sid));
 
     if (!receiverAlreadyOnline) {
       // Non-blocking: don't await so it never delays the HTTP response

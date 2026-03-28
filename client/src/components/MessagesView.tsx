@@ -31,6 +31,8 @@ interface Conversation {
   otherUserId: string;
   otherUserName: string;
   otherUserProfileImage?: string;
+  otherUserLastSeen?: string;   // ISO timestamp from DB
+  otherUserOnline?: boolean;    // live presence via socket
   unreadCount: number;
   lastMessage: string;
   lastMessageMe: boolean;
@@ -142,7 +144,10 @@ const MeetupBubble: React.FC<{
   } catch (e) { }
   const { location, proposedTime, proposalId } = metadata;
   const status = metadata.status || "pending";
-  const date = proposedTime ? new Date(proposedTime) : new Date();
+  // Normalize SQLite bare timestamp (no timezone) to proper UTC ISO 8601
+  const normalizeSQLiteDate = (d: string) =>
+    d && !d.endsWith('Z') && !d.includes('+') ? d.replace(' ', 'T') + 'Z' : d;
+  const date = proposedTime ? new Date(normalizeSQLiteDate(proposedTime)) : new Date();
 
   return (
     <div className={`flex flex-col gap-1.5 max-w-[85%] ${isMe ? "items-end" : "items-start"}`}>
@@ -397,7 +402,12 @@ const ConversationList: React.FC<ConversationListProps> = ({
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-0.5">
-                  <p className="text-xs font-bold text-text-main truncate">{convo.otherUserName}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-text-main truncate">{convo.otherUserName}</p>
+                    {convo.otherUserOnline && (
+                      <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />
+                    )}
+                  </div>
                   <span className="text-[9px] text-text-muted shrink-0 ml-2">{timeAgo(convo.lastMessageAt)}</span>
                 </div>
                 <p className="text-[10px] text-primary font-bold truncate mb-0.5">
@@ -558,10 +568,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-bold text-text-main truncate">{activeConvo.otherUserName}</p>
-              {isConnected && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
+              {activeConvo.otherUserOnline && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
             </div>
-            <p className="text-[10px] text-primary font-bold uppercase tracking-widest truncate max-w-[160px]">
-              {activeConvo.listingTitles[0]}
+            <p className="text-[10px] font-medium truncate max-w-[200px]">
+              {activeConvo.otherUserOnline ? (
+                <span className="text-emerald-500 font-bold">Online now</span>
+              ) : activeConvo.otherUserLastSeen ? (
+                <span className="text-text-muted">Last seen {timeAgo(activeConvo.otherUserLastSeen)} ago</span>
+              ) : null}
+              {(activeConvo.otherUserOnline || activeConvo.otherUserLastSeen) && (
+                <span className="text-text-muted"> · </span>
+              )}
+              <span className="text-primary font-bold uppercase tracking-widest">{activeConvo.listingTitles[0]}</span>
             </p>
           </div>
         </button>
@@ -866,6 +884,24 @@ export const MessagesView: React.FC<{
       toast.success("The other user has arrived at the meetup spot!", { icon: "📍", duration: 6000 });
     };
 
+    const onUserCameOnline = ({ userId: id }: { userId: string }) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.otherUserId === id ? { ...c, otherUserOnline: true } : c
+        )
+      );
+    };
+
+    const onUserWentOffline = ({ userId: id, lastSeenAt }: { userId: string; lastSeenAt: string }) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.otherUserId === id
+            ? { ...c, otherUserOnline: false, otherUserLastSeen: lastSeenAt }
+            : c
+        )
+      );
+    };
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
@@ -876,6 +912,8 @@ export const MessagesView: React.FC<{
     socket.on("messages_read", onMessagesRead);
     socket.on("meetup_status_changed", onMeetupStatusChanged);
     socket.on("other_user_arrived", onOtherUserArrived);
+    socket.on("user_came_online", onUserCameOnline);
+    socket.on("user_went_offline", onUserWentOffline);
     setIsConnected(socket.connected);
 
     return () => {
@@ -889,6 +927,8 @@ export const MessagesView: React.FC<{
       socket.off("messages_read", onMessagesRead);
       socket.off("meetup_status_changed", onMeetupStatusChanged);
       socket.off("other_user_arrived", onOtherUserArrived);
+      socket.off("user_came_online", onUserCameOnline);
+      socket.off("user_went_offline", onUserWentOffline);
     };
   }, [user?.id, fetchConversations]);
 
@@ -963,8 +1003,19 @@ export const MessagesView: React.FC<{
   };
 
   // ── Time helper ───────────────────────────────────────────────────
+  // SQLite stores timestamps without timezone info, e.g. "2026-03-28 14:35:22".
+  // new Date() interprets this inconsistently across browsers (Chrome vs Firefox)
+  // and the diff vs Date.now() (UTC ms) is wrong on non-UTC systems like IST.
+  // Fix: normalize to ISO 8601 UTC by replacing the space separator with T and
+  // appending Z so every browser treats it as UTC. Add NaN guard for safety.
   const timeAgo = useCallback((dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
+    if (!dateStr) return "";
+    const normalized =
+      !dateStr.endsWith('Z') && !dateStr.includes('+')
+        ? dateStr.replace(' ', 'T') + 'Z'
+        : dateStr;
+    const diff = Date.now() - new Date(normalized).getTime();
+    if (isNaN(diff) || diff < 0) return "just now";
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "now";
     if (mins < 60) return `${mins}m`;
