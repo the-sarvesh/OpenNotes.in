@@ -51,10 +51,32 @@ export const initSocket = (httpServer: HttpServer) => {
     }
   });
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     const userId = (socket as any).userId as string;
 
     socket.join(`user:${userId}`);
+
+    // ── Presence: mark online + notify conversation partners ─────────
+    try {
+      const now = new Date().toISOString();
+      await db.execute({
+        sql: "UPDATE users SET last_seen_at = ? WHERE id = ?",
+        args: [now, userId],
+      });
+      // Notify other users in active conversations that this user is online
+      const convRes = await db.execute({
+        sql: `SELECT DISTINCT
+               CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as partner_id
+               FROM messages WHERE sender_id = ? OR receiver_id = ?`,
+        args: [userId, userId, userId],
+      });
+      for (const row of convRes.rows as any[]) {
+        const partnerId = row.partner_id as string;
+        io.to(`user:${partnerId}`).emit("user_came_online", { userId });
+      }
+    } catch (err) {
+      console.error("[Socket] Presence connect update failed:", err);
+    }
 
     socket.on("join_conversation", async ({ conversationId }: { conversationId: string }) => {
       if (!conversationId) return;
@@ -413,9 +435,32 @@ export const initSocket = (httpServer: HttpServer) => {
       }
     });
 
-    socket.on("disconnect", (reason) => {
-      // disconnected
+    socket.on("disconnect", async (reason) => {
+      try {
+        const now = new Date().toISOString();
+        await db.execute({
+          sql: "UPDATE users SET last_seen_at = ? WHERE id = ?",
+          args: [now, userId],
+        });
+        // Notify conversation partners that this user went offline
+        const convRes = await db.execute({
+          sql: `SELECT DISTINCT
+                 CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as partner_id
+                 FROM messages WHERE sender_id = ? OR receiver_id = ?`,
+          args: [userId, userId, userId],
+        });
+        for (const row of convRes.rows as any[]) {
+          const partnerId = row.partner_id as string;
+          io.to(`user:${partnerId}`).emit("user_went_offline", {
+            userId,
+            lastSeenAt: now,
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] Presence disconnect update failed:", err);
+      }
     });
+
   });
 
   return io;

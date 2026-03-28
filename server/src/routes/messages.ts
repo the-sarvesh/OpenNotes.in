@@ -74,6 +74,7 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
                END as other_user_id,
                u.name as other_user_name,
                u.profile_image_url as other_user_profile_image,
+               u.last_seen_at as other_user_last_seen,
                (SELECT COUNT(*) FROM messages m2 
                 WHERE m2.conversation_id = m.conversation_id 
                   AND m2.receiver_id = ? 
@@ -108,6 +109,7 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
       otherUserId: convo.other_user_id,
       otherUserName: String(convo.other_user_name || "User"),
       otherUserProfileImage: convo.other_user_profile_image,
+      otherUserLastSeen: convo.other_user_last_seen || null,
       unreadCount: Number(convo.unread_count || 0),
       lastMessage: String(convo.last_message || ""),
       lastMessageAt: convo.last_message_at,

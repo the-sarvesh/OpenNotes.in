@@ -19,6 +19,7 @@ const initDb = async () => {
         is_verified INTEGER NOT NULL DEFAULT 0,
         verification_token TEXT,
         verification_token_expires_at DATETIME,
+        last_seen_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -395,12 +396,13 @@ const initDb = async () => {
             monthly_upload_limit INTEGER DEFAULT 10,
             telegram_chat_id TEXT,
             telegram_link_token TEXT,
+            last_seen_at DATETIME,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );
-          INSERT INTO users_new (id, email, name, password_hash, upi_id, google_id, role, status, is_verified, verification_token, verification_token_expires_at, rating_avg, rating_count, monthly_upload_limit, telegram_chat_id, telegram_link_token, created_at)
+          INSERT INTO users_new (id, email, name, password_hash, upi_id, google_id, role, status, is_verified, verification_token, verification_token_expires_at, rating_avg, rating_count, monthly_upload_limit, telegram_chat_id, telegram_link_token, last_seen_at, created_at)
           SELECT id, email, name, password_hash, upi_id, google_id, role, status, is_verified, verification_token, verification_token_expires_at,
                  COALESCE(rating_avg, 0), COALESCE(rating_count, 0), COALESCE(monthly_upload_limit, 10),
-                 telegram_chat_id, telegram_link_token, created_at FROM users;
+                 telegram_chat_id, telegram_link_token, NULL, created_at FROM users;
           DROP TABLE users;
           ALTER TABLE users_new RENAME TO users;
           CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;
