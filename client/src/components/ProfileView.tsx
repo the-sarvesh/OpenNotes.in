@@ -7,6 +7,7 @@ import {
   AlertCircle, Users, Check, X,
   ChevronRight, ShieldAlert, LayoutDashboard,
   PlusCircle, ShoppingBag, CheckCircle2, Info,
+  Pencil, Trash2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
@@ -16,6 +17,7 @@ import { TelegramConnect } from '../components/TelegramConnect';
 import { statusColors, formatStatus } from '../utils/status';
 import { formatSemester } from '../utils/formatters';
 import { View, Listing, Order, OrderItem } from '../types';
+import { EditListingModal } from './EditListingModal';
 
 type ProfileTab = 'overview' | 'listings' | 'earnings' | 'settings';
 
@@ -169,6 +171,9 @@ export const ProfileView = ({
 
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
+  const [editModalListing, setEditModalListing] = useState<Listing | null>(null);
+  const [deletingListingId, setDeletingListingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -238,6 +243,24 @@ export const ProfileView = ({
       } else toast.error(data.error || 'Change failed');
     } catch { toast.error('Network error'); }
     finally { setSubmittingPassword(false); }
+  };
+
+  // ── Delete listing handler ────────────────────────────────────────────────
+  const handleDeleteListing = async (listingId: string) => {
+    setDeletingListingId(listingId);
+    try {
+      const res = await apiRequest(`/api/listings/${listingId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Failed to remove listing'); return; }
+      toast.success('Listing removed');
+      setListings((prev) => prev.filter((l) => l.id !== listingId));
+      setSelectedListing(null);
+      setConfirmDeleteId(null);
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setDeletingListingId(null);
+    }
   };
 
   const handleVerifyPin = async (itemId: string) => {
@@ -843,9 +866,54 @@ export const ProfileView = ({
                 )}
               </div>
 
-              <div className="p-4 sm:p-5 border-t border-border shrink-0">
+              <div className="p-4 sm:p-5 border-t border-border shrink-0 space-y-3">
+                {/* Edit / Delete actions (only for seller's own listings) */}
+                {selectedListing && (
+                  <>
+                    {confirmDeleteId === selectedListing.id ? (
+                      <div className="p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/40 rounded-2xl space-y-3">
+                        <p className="text-xs font-bold text-red-700 dark:text-red-400 text-center">
+                          Remove this listing? This cannot be undone.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="flex-1 py-2.5 bg-background border border-border text-text-main rounded-xl font-black text-xs uppercase tracking-wider transition-all hover:bg-surface"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleDeleteListing(selectedListing.id)}
+                            disabled={deletingListingId === selectedListing.id}
+                            className="flex-[2] py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                          >
+                            {deletingListingId === selectedListing.id
+                              ? <span className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                              : <Trash2 className="h-3.5 w-3.5" />}
+                            Yes, Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setConfirmDeleteId(selectedListing.id)}
+                          className="flex items-center justify-center gap-2 py-3 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 rounded-2xl font-black text-xs uppercase tracking-wider transition-all"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
+                        </button>
+                        <button
+                          onClick={() => { setEditModalListing(selectedListing); setSelectedListing(null); }}
+                          className="flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-hover text-black rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-sm shadow-primary/20"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Edit
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
                 <button
-                  onClick={() => { setSelectedListing(null); setSelectedSale(null); }}
+                  onClick={() => { setSelectedListing(null); setSelectedSale(null); setConfirmDeleteId(null); }}
                   className="w-full py-3.5 bg-background hover:bg-surface border border-border text-text-main rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
                 >
                   Close
@@ -853,6 +921,29 @@ export const ProfileView = ({
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Edit Listing Modal ── */}
+      <AnimatePresence>
+        {editModalListing && (
+          <EditListingModal
+            listing={editModalListing}
+            hasActiveOrders={
+              !!(salesData?.sales.some(
+                (s: any) =>
+                  s.listing_id === editModalListing.id &&
+                  (s.status === 'pending_meetup' || s.status === 'acknowledged'),
+              ))
+            }
+            onClose={() => setEditModalListing(null)}
+            onSuccess={(updated) => {
+              setListings((prev) =>
+                prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)),
+              );
+              setEditModalListing(null);
+            }}
+          />
         )}
       </AnimatePresence>
     </motion.div>
