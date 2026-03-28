@@ -270,7 +270,10 @@ router.post('/', async (req: AuthRequest, res, next) => {
     // Skip if receiver is actively viewing this conversation in real time
     const io2 = req.app.get('io');
     const convoRoom = io2?.sockets?.adapter?.rooms?.get(`conv:${conversationId}`);
-    const receiverAlreadyOnline = convoRoom && convoRoom.size > 0;
+    const userRoom  = io2?.sockets?.adapter?.rooms?.get(`user:${receiver_id}`);
+    // True only if the receiver specifically has a socket in the conversation room
+    const receiverAlreadyOnline =
+      userRoom && convoRoom && [...userRoom].some((sid) => convoRoom.has(sid));
 
     if (!receiverAlreadyOnline) {
       // Non-blocking: don't await so it never delays the HTTP response
