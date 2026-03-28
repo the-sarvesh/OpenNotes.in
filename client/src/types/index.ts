@@ -9,7 +9,12 @@ export interface Listing extends Note {
   seller_name?: string;
   images?: string[];
   status: 'active' | 'sold' | 'archived';
+  description?: string;
+  meetup_location?: string;
+  preferred_meetup_spot?: string;
+  delivery_method?: string;
 }
+
 
 export interface CartItem {
   note: Note;

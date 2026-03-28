@@ -382,4 +382,183 @@ router.post("/validate-cart", authenticate, async (req: AuthRequest, res, next) 
   }
 });
 
+// ─── PUT /api/listings/:id — Edit a listing (seller only) ────────────────────
+router.put("/:id", authenticate as any, async (req: AuthRequest, res, next) => {
+  try {
+    const sellerId = req.user!.id;
+    const { id } = req.params;
+
+    // Verify listing exists and is owned by this seller
+    const listingRes = await db.execute({
+      sql: "SELECT * FROM listings WHERE id = ?",
+      args: [id],
+    });
+    const listing = listingRes.rows[0] as any;
+    if (!listing) return res.status(404).json({ error: "Listing not found" });
+    if (listing.seller_id !== sellerId) return res.status(403).json({ error: "You do not own this listing" });
+
+    // Check for active pending orders
+    const activeOrdersRes = await db.execute({
+      sql: "SELECT id FROM order_items WHERE listing_id = ? AND status IN ('pending_meetup', 'acknowledged')",
+      args: [id],
+    });
+    const hasActiveOrders = activeOrdersRes.rows.length > 0;
+
+    const {
+      title,
+      description,
+      price,
+      quantity,
+      condition,
+      location,
+      preferred_meetup_spot,
+      meetup_location,
+      imageUrls: rawImageUrls,
+      subjects: rawSubjects,
+    } = req.body;
+
+    // Validate editable fields
+    if (title !== undefined && !title.trim()) {
+      return res.status(400).json({ error: "Title cannot be empty" });
+    }
+
+    let parsedPrice = listing.price;
+    if (price !== undefined) {
+      if (hasActiveOrders) return res.status(400).json({ error: "Cannot change price while a buyer order is pending" });
+      parsedPrice = parseInt(price);
+      if (isNaN(parsedPrice) || parsedPrice < 0) return res.status(400).json({ error: "Price must be 0 or a positive number" });
+    }
+
+    let parsedQuantity = listing.quantity;
+    if (quantity !== undefined) {
+      if (hasActiveOrders) return res.status(400).json({ error: "Cannot change quantity while a buyer order is pending" });
+      parsedQuantity = parseInt(quantity);
+      if (isNaN(parsedQuantity) || parsedQuantity <= 0) return res.status(400).json({ error: "Quantity must be a positive number" });
+    }
+
+    // Build dynamic update
+    const setClauses: string[] = [];
+    const args: any[] = [];
+
+    if (title !== undefined)               { setClauses.push("title = ?");                    args.push(title.trim()); }
+    if (description !== undefined)         { setClauses.push("description = ?");               args.push(description || null); }
+    if (price !== undefined)               { setClauses.push("price = ?");                     args.push(parsedPrice); }
+    if (quantity !== undefined)            { setClauses.push("quantity = ?");                  args.push(parsedQuantity); }
+    if (condition !== undefined)           { setClauses.push("condition = ?");                 args.push(condition); }
+    if (location !== undefined)            { setClauses.push("location = ?");                  args.push(location); }
+    if (preferred_meetup_spot !== undefined) { setClauses.push("preferred_meetup_spot = ?");  args.push(preferred_meetup_spot || null); }
+    if (meetup_location !== undefined)     { setClauses.push("meetup_location = ?");           args.push(meetup_location || null); }
+
+    // Re-activate if sold-out listing gets restocked
+    if (quantity !== undefined && parsedQuantity > 0 && listing.status === 'archived') {
+      setClauses.push("status = 'active'");
+    }
+
+    if (setClauses.length > 0) {
+      args.push(id);
+      await db.execute({
+        sql: `UPDATE listings SET ${setClauses.join(", ")} WHERE id = ?`,
+        args,
+      });
+    }
+
+    // Update images (only if no active orders)
+    if (rawImageUrls !== undefined) {
+      if (hasActiveOrders) return res.status(400).json({ error: "Cannot change images while a buyer order is pending" });
+      let imageUrls: string[] = [];
+      try {
+        imageUrls = typeof rawImageUrls === "string" ? JSON.parse(rawImageUrls) : rawImageUrls;
+      } catch { /* ignore */ }
+      if (!Array.isArray(imageUrls)) imageUrls = typeof imageUrls === "string" ? [imageUrls] : [];
+
+      if (imageUrls.length > 0) {
+        await db.execute({ sql: "DELETE FROM listing_images WHERE listing_id = ?", args: [id] });
+        for (let i = 0; i < imageUrls.length; i++) {
+          await db.execute({
+            sql: "INSERT INTO listing_images (id, listing_id, url, is_main) VALUES (?, ?, ?, ?)",
+            args: [uuidv4(), id, imageUrls[i], i === 0 ? 1 : 0],
+          });
+        }
+        await db.execute({ sql: "UPDATE listings SET image_url = ? WHERE id = ?", args: [imageUrls[0], id] });
+      }
+    }
+
+    // Update subjects for multi-subject listings
+    if (rawSubjects !== undefined && listing.is_multiple_subjects) {
+      try {
+        const subjectList = typeof rawSubjects === "string" ? JSON.parse(rawSubjects) : rawSubjects;
+        if (Array.isArray(subjectList) && subjectList.length > 0) {
+          await db.execute({ sql: "DELETE FROM listing_subjects WHERE listing_id = ?", args: [id] });
+          for (const subject of subjectList) {
+            await db.execute({
+              sql: "INSERT INTO listing_subjects (listing_id, subject_name) VALUES (?, ?)",
+              args: [id, subject],
+            });
+          }
+        }
+      } catch { /* ignore malformed subjects */ }
+    }
+
+    // Return the updated listing
+    const updatedRes = await db.execute({
+      sql: `SELECT l.*, u.name as seller_name FROM listings l JOIN users u ON l.seller_id = u.id WHERE l.id = ?`,
+      args: [id],
+    });
+
+    // Attach images
+    const imagesRes = await db.execute({
+      sql: "SELECT url FROM listing_images WHERE listing_id = ? ORDER BY is_main DESC, created_at ASC",
+      args: [id],
+    });
+    const updatedListing = updatedRes.rows[0] as any;
+    if (updatedListing) {
+      updatedListing.images = imagesRes.rows.map((r: any) => r.url);
+      updatedListing.image = updatedListing.images[0] || updatedListing.image_url;
+    }
+
+    res.json({ message: "Listing updated successfully", listing: updatedListing });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── DELETE /api/listings/:id — Soft-delete a listing (seller only) ──────────
+router.delete("/:id", authenticate as any, async (req: AuthRequest, res, next) => {
+  try {
+    const sellerId = req.user!.id;
+    const { id } = req.params;
+
+    // Verify listing exists and is owned by this seller
+    const listingRes = await db.execute({
+      sql: "SELECT id, seller_id, status FROM listings WHERE id = ?",
+      args: [id],
+    });
+    const listing = listingRes.rows[0] as any;
+    if (!listing) return res.status(404).json({ error: "Listing not found" });
+    if (listing.seller_id !== sellerId) return res.status(403).json({ error: "You do not own this listing" });
+
+    // Block if there are active in-progress orders
+    const activeOrdersRes = await db.execute({
+      sql: "SELECT id FROM order_items WHERE listing_id = ? AND status IN ('pending_meetup', 'acknowledged')",
+      args: [id],
+    });
+    if (activeOrdersRes.rows.length > 0) {
+      return res.status(409).json({
+        error: "Cannot delete this listing — a buyer has an active order for it. Please complete or cancel the transaction first.",
+      });
+    }
+
+    // Soft-delete: set status to archived
+    await db.execute({
+      sql: "UPDATE listings SET status = 'archived' WHERE id = ?",
+      args: [id],
+    });
+
+    res.json({ message: "Listing removed successfully" });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
+
