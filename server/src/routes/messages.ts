@@ -101,23 +101,31 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
       args: [userId, userId, userId, userId, userId, limit, offset]
     });
 
-    const results = convos.rows.map(convo => ({
-      conversationId: convo.conversation_id,
-      listingIds: String(convo.listing_ids || "").split(','),
-      listingTitles: String(convo.listing_titles || "").split(','),
-      listingImages: String(convo.listing_images || "").split(','),
-      otherUserId: convo.other_user_id,
-      otherUserName: String(convo.other_user_name || "User"),
-      otherUserProfileImage: convo.other_user_profile_image,
-      otherUserLastSeen: convo.other_user_last_seen || null,
-      unreadCount: Number(convo.unread_count || 0),
-      lastMessage: String(convo.last_message || ""),
-      lastMessageAt: convo.last_message_at,
-      lastMessageIsMe: convo.last_sender_id === userId,
-      hasActiveOrder: Number(convo.active_order_count || 0) > 0
-    }));
+    // Check live socket presence for each conversation's other user
+    const io2 = req.app.get('io');
+    const results = convos.rows.map(convo => {
+      const otherUserId = convo.other_user_id as string;
+      const userRoom = io2?.sockets?.adapter?.rooms?.get(`user:${otherUserId}`);
+      return {
+        conversationId: convo.conversation_id,
+        listingIds: String(convo.listing_ids || "").split(','),
+        listingTitles: String(convo.listing_titles || "").split(','),
+        listingImages: String(convo.listing_images || "").split(','),
+        otherUserId,
+        otherUserName: String(convo.other_user_name || "User"),
+        otherUserProfileImage: convo.other_user_profile_image,
+        otherUserLastSeen: convo.other_user_last_seen || null,
+        otherUserOnline: !!(userRoom && userRoom.size > 0),
+        unreadCount: Number(convo.unread_count || 0),
+        lastMessage: String(convo.last_message || ""),
+        lastMessageAt: convo.last_message_at,
+        lastMessageIsMe: convo.last_sender_id === userId,
+        hasActiveOrder: Number(convo.active_order_count || 0) > 0
+      };
+    });
 
     res.json(results);
+
   } catch (error) {
     next(error);
   }

@@ -385,6 +385,9 @@ const initDb = async () => {
             name TEXT NOT NULL,
             password_hash TEXT,
             upi_id TEXT,
+            mobile_number TEXT,
+            location TEXT,
+            profile_image_url TEXT,
             google_id TEXT,
             role TEXT NOT NULL DEFAULT 'user',
             status TEXT NOT NULL DEFAULT 'active',
@@ -399,8 +402,10 @@ const initDb = async () => {
             last_seen_at DATETIME,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );
-          INSERT INTO users_new (id, email, name, password_hash, upi_id, google_id, role, status, is_verified, verification_token, verification_token_expires_at, rating_avg, rating_count, monthly_upload_limit, telegram_chat_id, telegram_link_token, last_seen_at, created_at)
-          SELECT id, email, name, password_hash, upi_id, google_id, role, status, is_verified, verification_token, verification_token_expires_at,
+          INSERT INTO users_new (id, email, name, password_hash, upi_id, mobile_number, location, profile_image_url, google_id, role, status, is_verified, verification_token, verification_token_expires_at, rating_avg, rating_count, monthly_upload_limit, telegram_chat_id, telegram_link_token, last_seen_at, created_at)
+          SELECT id, email, name, password_hash, upi_id,
+                 COALESCE(mobile_number, NULL), COALESCE(location, NULL), COALESCE(profile_image_url, NULL),
+                 google_id, role, status, is_verified, verification_token, verification_token_expires_at,
                  COALESCE(rating_avg, 0), COALESCE(rating_count, 0), COALESCE(monthly_upload_limit, 10),
                  telegram_chat_id, telegram_link_token, NULL, created_at FROM users;
           DROP TABLE users;
@@ -408,6 +413,7 @@ const initDb = async () => {
           CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;
           CREATE INDEX IF NOT EXISTS idx_users_telegram_token ON users(telegram_link_token) WHERE telegram_link_token IS NOT NULL;
         `);
+
         await db.execute("PRAGMA foreign_keys = ON");
         console.log("Users table migration completed successfully.");
       }

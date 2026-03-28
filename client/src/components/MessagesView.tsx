@@ -568,7 +568,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-bold text-text-main truncate">{activeConvo.otherUserName}</p>
-              {isConnected && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
+              {activeConvo.otherUserOnline && <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />}
             </div>
             <p className="text-[10px] font-medium truncate max-w-[200px]">
               {activeConvo.otherUserOnline ? (

@@ -5,6 +5,9 @@ import db from "./db/database.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod";
 
+// Per-user active socket connection counter (prevents presence flicker with multiple tabs)
+const userConnectionCount = new Map<string, number>();
+
 export let io: SocketIOServer;
 
 export const initSocket = (httpServer: HttpServer) => {
@@ -56,26 +59,30 @@ export const initSocket = (httpServer: HttpServer) => {
 
     socket.join(`user:${userId}`);
 
-    // ── Presence: mark online + notify conversation partners ─────────
-    try {
-      const now = new Date().toISOString();
-      await db.execute({
-        sql: "UPDATE users SET last_seen_at = ? WHERE id = ?",
-        args: [now, userId],
-      });
-      // Notify other users in active conversations that this user is online
-      const convRes = await db.execute({
-        sql: `SELECT DISTINCT
-               CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as partner_id
-               FROM messages WHERE sender_id = ? OR receiver_id = ?`,
-        args: [userId, userId, userId],
-      });
-      for (const row of convRes.rows as any[]) {
-        const partnerId = row.partner_id as string;
-        io.to(`user:${partnerId}`).emit("user_came_online", { userId });
+    // ── Presence: track connection count, emit only on first connect ─────
+    const prevCount = userConnectionCount.get(userId) || 0;
+    userConnectionCount.set(userId, prevCount + 1);
+
+    if (prevCount === 0) {
+      // First connection — mark online and notify partners
+      try {
+        const now = new Date().toISOString();
+        await db.execute({
+          sql: "UPDATE users SET last_seen_at = ? WHERE id = ?",
+          args: [now, userId],
+        });
+        const convRes = await db.execute({
+          sql: `SELECT DISTINCT
+                 CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as partner_id
+                 FROM messages WHERE sender_id = ? OR receiver_id = ?`,
+          args: [userId, userId, userId],
+        });
+        for (const row of convRes.rows as any[]) {
+          io.to(`user:${row.partner_id}`).emit("user_came_online", { userId });
+        }
+      } catch (err) {
+        console.error("[Socket] Presence connect update failed:", err);
       }
-    } catch (err) {
-      console.error("[Socket] Presence connect update failed:", err);
     }
 
     socket.on("join_conversation", async ({ conversationId }: { conversationId: string }) => {
@@ -436,30 +443,37 @@ export const initSocket = (httpServer: HttpServer) => {
     });
 
     socket.on("disconnect", async (reason) => {
-      try {
-        const now = new Date().toISOString();
-        await db.execute({
-          sql: "UPDATE users SET last_seen_at = ? WHERE id = ?",
-          args: [now, userId],
-        });
-        // Notify conversation partners that this user went offline
-        const convRes = await db.execute({
-          sql: `SELECT DISTINCT
-                 CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as partner_id
-                 FROM messages WHERE sender_id = ? OR receiver_id = ?`,
-          args: [userId, userId, userId],
-        });
-        for (const row of convRes.rows as any[]) {
-          const partnerId = row.partner_id as string;
-          io.to(`user:${partnerId}`).emit("user_went_offline", {
-            userId,
-            lastSeenAt: now,
+      const currentCount = userConnectionCount.get(userId) || 1;
+      const newCount = Math.max(0, currentCount - 1);
+      userConnectionCount.set(userId, newCount);
+
+      if (newCount === 0) {
+        // Last connection closed — mark offline and notify partners
+        userConnectionCount.delete(userId); // clean up
+        try {
+          const now = new Date().toISOString();
+          await db.execute({
+            sql: "UPDATE users SET last_seen_at = ? WHERE id = ?",
+            args: [now, userId],
           });
+          const convRes = await db.execute({
+            sql: `SELECT DISTINCT
+                   CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as partner_id
+                   FROM messages WHERE sender_id = ? OR receiver_id = ?`,
+            args: [userId, userId, userId],
+          });
+          for (const row of convRes.rows as any[]) {
+            io.to(`user:${row.partner_id}`).emit("user_went_offline", {
+              userId,
+              lastSeenAt: now,
+            });
+          }
+        } catch (err) {
+          console.error("[Socket] Presence disconnect update failed:", err);
         }
-      } catch (err) {
-        console.error("[Socket] Presence disconnect update failed:", err);
       }
     });
+
 
   });
 
