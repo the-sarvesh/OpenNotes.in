@@ -367,6 +367,12 @@ const initDb = async () => {
       console.warn("Ratings backfill skipped/failed:", err.message);
     }
 
+    // Safe column additions — run every boot, SQLite throws if column already exists (ignored)
+    try {
+      await db.execute("ALTER TABLE users ADD COLUMN last_seen_at DATETIME");
+      console.log("[Migration] Added last_seen_at column to users.");
+    } catch { /* column already exists — safe to ignore */ }
+
     // Special migration: Convert password_hash to nullable (requires table recreation in SQLite)
     try {
       const usersTableInfo = await db.execute("PRAGMA table_info(users)");
