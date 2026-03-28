@@ -10,6 +10,11 @@ let bot: Telegraf | null = null;
 // Key: chatId, Value: { type: 'awaiting_pin', itemId: string }
 const botState = new Map<string, any>();
 
+// Per-conversation Telegram message cooldown (prevents spam on rapid messages)
+// Key: conversationId, Value: last notification timestamp (ms)
+const telegramMsgCooldowns = new Map<string, number>();
+const TELEGRAM_MSG_COOLDOWN_MS = 30_000; // 30 seconds
+
 // Helper to generate a consistent conversation ID between two users
 const getConversationId = (userId1: string, userId2: string) => {
   const sorted = [userId1, userId2].sort();
@@ -686,16 +691,89 @@ export const telegramTemplates = {
   orderCompleted: (name: string, item: string, price: number, qty: number, role: 'Buyer' | 'Seller', otherParty: string, total: number, platformFee: number) =>
     `🎉 <b>Exchange Completed!</b>\n\nHi <b>${name}</b>, the exchange was successful.\n\n${formatOrderDetails(item, price, qty, otherParty, role === 'Seller' ? 'Seller' : 'Buyer', total, platformFee)}\n\n${role === 'Seller' ? '✅ Earnings added to your balance.' : '✅ Purchase confirmed.'}\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`,
 
-  newMessage: (name: string, senderName: string, content: string, convoId: string) => ({
-    text: `💬 <b>New Message from ${senderName}</b>\n\n"${content}"`,
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: '✍️ Quick Reply', callback_data: `msg_reply:${convoId}` }],
-        [{ text: '💬 Chat on Application', url: `${process.env.FRONTEND_URL || 'https://opennotes.in'}/messages` }]
-      ]
-    }
-  }),
+  newMessage: (name: string, senderName: string, content: string, convoId: string, listingTitle?: string) => {
+    const MAX = 120;
+    const preview = content.length > MAX ? content.slice(0, MAX) + '\u2026' : content;
+    const text = `💬 <b>New Message from ${senderName}</b>` +
+      (listingTitle ? `\n📦 <i>Re: ${listingTitle}</i>` : '') +
+      `\n\n"${preview}"`;
+    return {
+      text,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '✍️ Quick Reply', callback_data: `msg_reply:${convoId}` }],
+          [{ text: '💬 Open App', url: `${process.env.FRONTEND_URL || 'https://opennotes.in'}/messages` }]
+        ]
+      }
+    };
+  },
 
   generic: (title: string, message: string, linkUrl?: string) => 
     `<b>${title}</b>\n\n${message}${linkUrl ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : `\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`}`
+};
+
+/**
+ * Send a Telegram message preview notification when a user receives a new in-app message.
+ * Respects a 30-second per-conversation cooldown and skips if the bot token is not configured.
+ * Safe to call fire-and-forget — all errors are caught internally.
+ */
+export const sendTelegramPreview = async (
+  receiverId: string,
+  senderName: string,
+  content: string,
+  conversationId: string,
+  listingId?: string
+): Promise<void> => {
+  if (!botToken) return;
+
+  try {
+    // ── Cooldown guard ────────────────────────────────────────────────────────
+    const lastNotified = telegramMsgCooldowns.get(conversationId);
+    if (lastNotified && Date.now() - lastNotified < TELEGRAM_MSG_COOLDOWN_MS) return;
+
+    // ── Look up receiver ──────────────────────────────────────────────────────
+    const userRes = await db.execute({
+      sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?',
+      args: [receiverId],
+    });
+    const user = userRes.rows[0] as any;
+    if (!user?.telegram_chat_id) return; // Telegram not linked — skip silently
+
+    // ── Optionally fetch listing title for context ─────────────────────────────
+    let listingTitle: string | undefined;
+    if (listingId) {
+      try {
+        const listingRes = await db.execute({
+          sql: 'SELECT title FROM listings WHERE id = ?',
+          args: [listingId],
+        });
+        listingTitle = listingRes.rows[0]?.title as string | undefined;
+      } catch { /* non-critical, proceed without title */ }
+    }
+
+    // ── Send ──────────────────────────────────────────────────────────────────
+    const template = telegramTemplates.newMessage(
+      user.name, senderName, content, conversationId, listingTitle
+    );
+    const sent = await sendTelegramMessage(
+      user.telegram_chat_id, template.text, template.reply_markup
+    );
+
+    if (sent) {
+      // Update cooldown
+      telegramMsgCooldowns.set(conversationId, Date.now());
+
+      // Prevent memory leak — evict oldest 100 entries when map exceeds 500
+      if (telegramMsgCooldowns.size > 500) {
+        const oldest = [...telegramMsgCooldowns.entries()]
+          .sort((a, b) => a[1] - b[1])
+          .slice(0, 100)
+          .map(([k]) => k);
+        oldest.forEach((k) => telegramMsgCooldowns.delete(k));
+      }
+    }
+  } catch (err) {
+    // Non-blocking — log but never throw to the caller
+    console.error('[Telegram] sendTelegramPreview failed:', err);
+  }
 };

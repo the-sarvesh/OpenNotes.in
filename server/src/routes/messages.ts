@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import db from '../db/database.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { createNotification } from '../utils/notifications.js';
+import { sendTelegramPreview } from '../utils/telegram.js';
 
 
 const router = express.Router();
@@ -231,6 +232,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
     });
     const senderName = senderRes.rows[0]?.name || 'Someone';
 
+    // ── In-app notification ──────────────────────────────────────────────────────
     await createNotification(
       receiver_id,
       'message',
@@ -241,7 +243,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
       { conversationId, senderName, content: content.trim() }
     );
 
-    // Emit socket events if io is available
+    // ── Socket.IO real-time broadcast ────────────────────────────────────────
     const io = req.app.get('io');
     if (io) {
       const messagePayload = {
@@ -262,10 +264,27 @@ router.post('/', async (req: AuthRequest, res, next) => {
       io.to(`user:${receiver_id}`).emit('unread_count_changed');
     }
 
-    res.status(201).json({ 
-      id: messageId, 
+    // ── Telegram preview — fire-and-forget ─────────────────────────────────
+    // Skip if receiver is actively viewing this conversation in real time
+    const io2 = req.app.get('io');
+    const convoRoom = io2?.sockets?.adapter?.rooms?.get(`conv:${conversationId}`);
+    const receiverAlreadyOnline = convoRoom && convoRoom.size > 0;
+
+    if (!receiverAlreadyOnline) {
+      // Non-blocking: don't await so it never delays the HTTP response
+      sendTelegramPreview(
+        receiver_id as string,
+        senderName as string,
+        content.trim(),
+        conversationId,
+        listing_id ? String(listing_id) : undefined
+      ).catch((err) => console.error('[Telegram] Preview fire-and-forget error:', err));
+    }
+
+    res.status(201).json({
+      id: messageId,
       conversationId,
-      message: 'Message sent' 
+      message: 'Message sent'
     });
   } catch (error) {
     next(error);
