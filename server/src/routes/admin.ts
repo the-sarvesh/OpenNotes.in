@@ -108,6 +108,7 @@ router.patch("/listings/:id", async (req, res, next) => {
       meetup_location,
       imageUrls: rawImageUrls,
       subjects: rawSubjects,
+      is_multiple_subjects
     } = req.body;
 
     // Verify listing exists
@@ -119,7 +120,7 @@ router.patch("/listings/:id", async (req, res, next) => {
     if (!listing) return res.status(404).json({ error: "Listing not found" });
 
     // Validation
-    const VALID_CONDITIONS = ["new", "like_new", "good", "fair", "poor"];
+    const VALID_CONDITIONS = ["new", "like_new", "good", "fair", "poor", "Like New", "Good", "Fair", "Heavily Annotated"];
     const VALID_SEMESTERS = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8"];
     const VALID_MATERIALS = ["handwritten", "printed", "digital", "book", "ppt", "other"];
 
@@ -166,6 +167,10 @@ router.patch("/listings/:id", async (req, res, next) => {
     if (material_type !== undefined)         { setClauses.push("material_type = ?");          args.push(material_type); }
     if (preferred_meetup_spot !== undefined) { setClauses.push("preferred_meetup_spot = ?");  args.push(preferred_meetup_spot || null); }
     if (meetup_location !== undefined)       { setClauses.push("meetup_location = ?");        args.push(meetup_location || null); }
+    if (is_multiple_subjects !== undefined) {
+      setClauses.push("is_multiple_subjects = ?");
+      args.push(is_multiple_subjects === true || is_multiple_subjects === "true" || is_multiple_subjects === 1 ? 1 : 0);
+    }
 
     if (setClauses.length > 0) {
       args.push(id);
@@ -211,7 +216,11 @@ router.patch("/listings/:id", async (req, res, next) => {
     }
 
     // Update subjects if provided
-    if (rawSubjects !== undefined && listing.is_multiple_subjects) {
+    const isNowMultiple = is_multiple_subjects !== undefined 
+      ? (is_multiple_subjects === true || is_multiple_subjects === "true" || is_multiple_subjects === 1)
+      : !!listing.is_multiple_subjects;
+
+    if (rawSubjects !== undefined && isNowMultiple) {
       let subjectList: string[] = [];
       try {
         subjectList = typeof rawSubjects === "string" ? JSON.parse(rawSubjects) : rawSubjects;

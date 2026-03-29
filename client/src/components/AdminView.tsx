@@ -409,6 +409,7 @@ export const AdminView: React.FC = () => {
                                   meetup_location: selectedListing.meetup_location || '',
                                   imageUrls: '',
                                   subjects: '',
+                                  is_multiple_subjects: !!selectedListing.is_multiple_subjects,
                                 });
                                 setEditingListing(true);
                               }}
@@ -615,15 +616,28 @@ export const AdminView: React.FC = () => {
                               />
                             </div>
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 flex items-center gap-1.5">
-                                Subjects (JSON Array) <span className="text-[9px] lowercase opacity-60 font-normal">Optional</span>
-                              </p>
+                              <div className="flex items-center gap-3 mb-1.5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5 flex-1 m-0">
+                                  Subjects (JSON Array) <span className="text-[9px] lowercase opacity-60 font-normal">Optional</span>
+                                </p>
+                                <label className="flex items-center gap-2 text-[10px] text-slate-300 font-bold uppercase tracking-wider cursor-pointer">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={editForm.is_multiple_subjects}
+                                    onChange={e => setEditForm((f: any) => ({...f, is_multiple_subjects: e.target.checked}))}
+                                    className="accent-[#FFC000]"
+                                  />
+                                  Multiple?
+                                </label>
+                              </div>
                               <input
                                 type="text"
                                 value={editForm.subjects}
                                 onChange={e => setEditForm((f: any) => ({ ...f, subjects: e.target.value }))}
                                 placeholder='e.g. ["Physics", "Math"]'
                                 className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all text-xs"
+                                disabled={!editForm.is_multiple_subjects}
+                                title={!editForm.is_multiple_subjects ? "Check 'Multiple?' to edit subjects array natively" : ""}
                               />
                             </div>
                           </div>
