@@ -16,24 +16,32 @@ async function processBroadcastJob() {
   isProcessingBroadcast = true;
 
   try {
-    // 1. Find next pending job
-    const jobRes = await db.execute({
-      sql: "SELECT * FROM broadcast_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1",
+    // 1. Claim the next pending job atomically
+    // This ensures that in a multi-process environment, only one worker gets a specific job.
+    const claimRes = await db.execute({
+      sql: `
+        UPDATE broadcast_jobs 
+        SET status = 'processing', updated_at = CURRENT_TIMESTAMP 
+        WHERE id = (
+          SELECT id FROM broadcast_jobs 
+          WHERE status = 'pending' 
+          ORDER BY created_at ASC 
+          LIMIT 1
+        )
+        RETURNING *
+      `,
       args: []
     });
-    const job = jobRes.rows[0] as any;
+
+    const job = claimRes.rows[0] as any;
     if (!job) {
       isProcessingBroadcast = false;
       return;
     }
 
-    console.info(`[Admin Broadcast] Starting job ${job.id}`);
+    console.info(`[Admin Broadcast] PID ${process.pid} claimed job ${job.id}`);
 
-    // 2. Mark job as processing
-    await db.execute({
-      sql: "UPDATE broadcast_jobs SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      args: [job.id]
-    });
+    // [DELETED duplicate update here as it's now handled by the atomic UPDATE above]
 
     // 3. Get all users with Telegram linked
     const usersRes = await db.execute({
@@ -998,13 +1006,23 @@ router.post("/broadcast", async (req, res, next) => {
       return res.status(400).json({ error: "message is required" });
     }
 
-    // 1. Check if a job is already processing to prevent spam/concurrency
-    const activeJob = await db.execute({
-      sql: "SELECT id FROM broadcast_jobs WHERE status IN ('pending', 'processing') LIMIT 1",
-      args: []
+    // 1. Deduplication: Check if an identical job was created in the last 60 seconds
+    const duplicateJob = await db.execute({
+      sql: `
+        SELECT id FROM broadcast_jobs 
+        WHERE message = ? 
+        AND title = ? 
+        AND link_url = ?
+        AND created_at > datetime('now', '-1 minute')
+        LIMIT 1
+      `,
+      args: [message, title || null, link_url || null]
     });
-    if (activeJob.rows.length > 0) {
-      return res.status(409).json({ error: "A broadcast job is already in progress. Please wait for it to complete." });
+
+    if (duplicateJob.rows.length > 0) {
+      return res.status(409).json({ 
+        error: "An identical broadcast was recently scheduled. Please wait a minute before retrying." 
+      });
     }
 
     // 2. Queue the job in DB for persistence
