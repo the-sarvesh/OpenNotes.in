@@ -336,10 +336,27 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                );
             })()}
 
-            {/* Price line */}
             <div className="flex items-baseline justify-between mb-1">
               <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Total Price</span>
-              <span className="text-3xl font-black text-text-main tracking-tight">₹{note.price}</span>
+              {note.originalPrice && note.originalPrice > note.price ? (
+                <div className="flex flex-col items-end">
+                  <div className="flex items-center gap-2 mb-[-2px]">
+                    <span className="text-[10px] font-black text-emerald-600 bg-emerald-500/10 px-1.5 py-[2px] rounded uppercase tracking-widest">
+                      {Math.round(((note.originalPrice - note.price) / note.originalPrice) * 100)}% OFF
+                    </span>
+                    <span className="text-xs font-bold text-text-muted line-through">
+                      ₹{Math.round(note.originalPrice)}
+                    </span>
+                  </div>
+                  <span className="text-3xl font-black text-text-main tracking-tight">
+                    {note.price === 0 ? 'FREE' : `₹${Math.round(note.price)}`}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-3xl font-black text-text-main tracking-tight">
+                  {note.price === 0 ? 'FREE' : `₹${Math.round(note.price)}`}
+                </span>
+              )}
             </div>
             
 

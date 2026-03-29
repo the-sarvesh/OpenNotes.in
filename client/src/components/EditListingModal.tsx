@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  X, Camera, Check, Trash2, AlertCircle, Lock, Save, Info,
+  X, Camera, Check, Trash2, AlertCircle, Lock, Save, Info, Sparkles,
 } from 'lucide-react';
 import { apiRequest } from '../utils/api';
 import toast from 'react-hot-toast';
 import { Listing } from '../types';
 import { LOCATIONS, STANDARD_SPOTS } from '../utils/constants';
+import { useSettings } from '../contexts/SettingsContext';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface EditImageItem {
@@ -20,6 +21,7 @@ interface EditForm {
   title: string;
   description: string;
   price: string;
+  originalPrice: string;
   quantity: string;
   condition: string;
   location: string;
@@ -86,6 +88,7 @@ const compressImage = async (file: File): Promise<File> =>
 export const EditListingModal: React.FC<EditListingModalProps> = ({
   listing, hasActiveOrders, onClose, onSuccess,
 }) => {
+  const { settings } = useSettings();
   const listingLocation = listing.location ?? '';
   const isKnownLocation = LOCATIONS.some((l) => l !== 'Other (Manual)' && l === listingLocation);
 
@@ -93,6 +96,7 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
     title:               listing.title ?? '',
     description:         (listing as any).description ?? '',
     price:               hasActiveOrders ? String(listing.price ?? '') : String(listing.price ?? ''),
+    originalPrice:       String((listing as any).originalPrice ?? ''),
     quantity:            String(listing.quantity ?? 1),
     condition:           (listing as any).condition ?? 'Good',
     location:            isKnownLocation ? listingLocation : 'Other (Manual)',
@@ -209,6 +213,7 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
         location: finalLocation,
         preferred_meetup_spot: form.preferredMeetupSpot,
         meetup_location: form.meetupLocation.trim() || null,
+        original_price: form.originalPrice ? Number(form.originalPrice) : null,
       };
 
       // Only include price/quantity/images if not locked by active orders
@@ -390,6 +395,42 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
                       {form.isDonation ? '✓ Donation (FREE)' : 'Mark as Donation'}
                     </button>
                   </div>
+
+                  {/* ── Original cost + recommendation ── */}
+                  {!form.isDonation && (
+                    <div className="mb-3 bg-primary/5 border border-primary/20 rounded-xl p-3">
+                      <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-2">
+                        {(listing as any).material_type === 'Book' ? 'Original MRP / Buying Cost (₹)' : 'Original Printing Cost (₹)'}
+                        <span className="normal-case font-medium ml-1 opacity-70">(optional)</span>
+                      </p>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-semibold text-sm pointer-events-none">₹</span>
+                        <input
+                          type="number"
+                          value={form.originalPrice}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            set('originalPrice', val);
+                            const discount = settings?.recommended_discount_percentage || 40;
+                            const recommended = Math.max(0, Math.round(Number(val) * (1 - discount / 100)));
+                            if (val && !isNaN(recommended)) {
+                              set('price', recommended.toString());
+                            }
+                          }}
+                          placeholder="e.g. 500"
+                          className={`${inputClass} pl-8 border-primary/40 focus:ring-primary/60`}
+                        />
+                      </div>
+                      {form.originalPrice && Number(form.originalPrice) > 0 && (
+                        <p className="text-[10px] text-emerald-600 font-bold mt-2 flex items-center gap-1.5 leading-snug">
+                          <Sparkles className="h-3 w-3 shrink-0" />
+                          Recommended Price: ₹{Math.round(Number(form.originalPrice) * (1 - (settings?.recommended_discount_percentage || 40) / 100))}{' '}
+                          ({settings?.recommended_discount_percentage || 40}% off helps items sell 3x faster!)
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-semibold text-sm pointer-events-none">₹</span>
                     <input
@@ -402,6 +443,9 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
                       placeholder="250"
                     />
                   </div>
+                  {form.originalPrice && form.price && Number(form.originalPrice) > Number(form.price) && (
+                    <p className="text-[9px] text-text-muted mt-1.5 italic">Tip: Notes sell fastest at 40-50% off print cost.</p>
+                  )}
                 </div>
                 <div>
                   <Label>Quantity</Label>

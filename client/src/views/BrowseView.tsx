@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, X, SlidersHorizontal, BookOpen, BookMarked, FileText, Layers, ChevronDown } from 'lucide-react';
+import { Search, X, SlidersHorizontal, BookOpen, BookMarked, FileText, Layers, ChevronDown, MapPin } from 'lucide-react';
 import { formatSemester } from '../utils/formatters';
 import { NoteCard } from '../components/NoteCard';
 import { mapListing } from '../utils/listings';
 import { apiRequest } from '../utils/api.js';
+import { LOCATIONS } from '../utils/constants';
 import type { Note, View } from '../types/index.ts';
 
 interface BrowseViewProps {
@@ -37,6 +38,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
+  const [selectedLocation, setSelectedLocation] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
   const observer = useRef<IntersectionObserver | null>(null);
 
@@ -56,7 +58,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
 
   useEffect(() => {
     setNotes([]); setPage(1); setHasMore(true); setLoading(true);
-  }, [debouncedSearch, selectedSemester, selectedType, refreshKey]);
+  }, [debouncedSearch, selectedSemester, selectedType, selectedLocation, refreshKey]);
 
   const fetchNotes = useCallback((pageNum: number) => {
     const params = new URLSearchParams();
@@ -66,6 +68,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
       const typeMap: Record<string, string> = { 'PPT': 'ppt', 'Book': 'book', 'Handwritten Notes': 'handwritten' };
       params.set('material_type', typeMap[selectedType] || selectedType.toLowerCase());
     }
+    if (selectedLocation !== 'All') params.set('location', selectedLocation);
     params.set('page', pageNum.toString());
     params.set('limit', '20');
 
@@ -86,12 +89,12 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
       })
       .catch(console.error)
       .finally(() => { setLoading(false); setLoadingMore(false); });
-  }, [debouncedSearch, selectedSemester, selectedType, refreshKey]);
+  }, [debouncedSearch, selectedSemester, selectedType, selectedLocation, refreshKey]);
 
-  useEffect(() => { fetchNotes(page); }, [page, debouncedSearch, selectedSemester, selectedType, refreshKey, fetchNotes]);
+  useEffect(() => { fetchNotes(page); }, [page, debouncedSearch, selectedSemester, selectedType, selectedLocation, refreshKey, fetchNotes]);
 
-  const activeFiltersCount = [selectedSemester !== 'All', selectedType !== 'All'].filter(Boolean).length;
-  const clearFilters = () => { setSelectedSemester('All'); setSelectedType('All'); };
+  const activeFiltersCount = [selectedSemester !== 'All', selectedType !== 'All', selectedLocation !== 'All'].filter(Boolean).length;
+  const clearFilters = () => { setSelectedSemester('All'); setSelectedType('All'); setSelectedLocation('All'); };
 
   return (
     <motion.div
@@ -194,6 +197,38 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                   </button>
                 ))}
               </div>
+
+              {/* Location filter */}
+              <div className="pt-2 border-t border-border">
+                <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-2 flex items-center gap-1">
+                  <MapPin className="h-3 w-3" /> Location
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setSelectedLocation('All')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                      selectedLocation === 'All'
+                        ? 'bg-primary text-black border-primary shadow-sm shadow-primary/20'
+                        : 'bg-background border-border text-text-muted hover:border-primary/30 hover:text-text-main'
+                    }`}
+                  >
+                    All Locations
+                  </button>
+                  {LOCATIONS.filter(l => l !== 'Other (Manual)').map(loc => (
+                    <button
+                      key={loc}
+                      onClick={() => setSelectedLocation(loc)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                        selectedLocation === loc
+                          ? 'bg-primary text-black border-primary shadow-sm shadow-primary/20'
+                          : 'bg-background border-border text-text-muted hover:border-primary/30 hover:text-text-main'
+                      }`}
+                    >
+                      {loc}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -236,6 +271,14 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary rounded-xl text-[10px] font-black uppercase tracking-wider">
                 {selectedType}
                 <button onClick={() => setSelectedType('All')} className="hover:opacity-70 transition-opacity">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {selectedLocation !== 'All' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary rounded-xl text-[10px] font-black uppercase tracking-wider">
+                <MapPin className="h-3 w-3" />{selectedLocation}
+                <button onClick={() => setSelectedLocation('All')} className="hover:opacity-70 transition-opacity">
                   <X className="h-3 w-3" />
                 </button>
               </span>

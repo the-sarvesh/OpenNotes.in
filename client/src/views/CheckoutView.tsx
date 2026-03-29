@@ -171,6 +171,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
   const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
   const total = activeCart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
+  const originalTotal = activeCart.reduce((acc, item) => acc + (item.note.originalPrice || item.note.price) * item.quantity, 0);
+  const totalSavings = originalTotal - total;
   const rawPlatformFee = Math.round(total * (PLATFORM_FEE_PERCENTAGE / 100));
   const platformFee = couponResult?.valid ? couponResult.finalFee : rawPlatformFee;
 
@@ -448,7 +450,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                       <p className="text-[9px] font-black text-primary uppercase tracking-wider mb-0.5">{item.note.courseCode}</p>
                       <p className="text-xs font-bold text-text-main leading-snug line-clamp-2 mb-1.5">{item.note.title}</p>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-black text-text-main">{item.note.price === 0 ? "FREE" : `₹${Math.round(item.note.price * item.quantity)}`}</span>
+                        <div className="flex flex-col items-end leading-none">
+                          {item.note.originalPrice && item.note.originalPrice > item.note.price && (
+                            <span className="text-[9px] font-bold text-text-muted line-through mb-[1px]">
+                              {formatRupee(item.note.originalPrice * item.quantity)}
+                            </span>
+                          )}
+                          <span className="text-sm font-black text-text-main">{item.note.price === 0 ? "FREE" : `₹${Math.round(item.note.price * item.quantity)}`}</span>
+                        </div>
                         <div className="flex gap-1">
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.semester}</span>
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.condition}</span>
@@ -514,6 +523,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
               )}
 
               <div className="h-px bg-border/50" />
+
+              {/* Total Savings indicator */}
+              {totalSavings > 0 && (
+                <div className="flex justify-between items-center bg-emerald-500/10 border border-emerald-500/20 px-3 py-2.5 rounded-xl">
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Pricing Savings</span>
+                  <span className="text-sm font-black text-emerald-600">- {formatRupee(totalSavings)}</span>
+                </div>
+              )}
 
               {/* Pay now / cash split */}
               <div className="grid grid-cols-2 gap-2">

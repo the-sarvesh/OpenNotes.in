@@ -31,6 +31,7 @@ const initDb = async () => {
         semester TEXT NOT NULL,
         condition TEXT NOT NULL,
         price INTEGER NOT NULL,
+        original_price INTEGER,
         location TEXT NOT NULL,
         image_url TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
@@ -161,8 +162,8 @@ const initDb = async () => {
         value TEXT NOT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
-
       INSERT OR IGNORE INTO settings (key, value) VALUES ('platform_fee_percentage', '0');
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('recommended_discount_percentage', '40');
 
       CREATE TABLE IF NOT EXISTS password_reset_tokens (
         id TEXT PRIMARY KEY,
@@ -231,6 +232,7 @@ const initDb = async () => {
     // Run migrations for existing databases
     console.log("Starting migrations...");
     const migrations = [
+      "ALTER TABLE listings ADD COLUMN original_price INTEGER",
       "ALTER TABLE listings ADD COLUMN delivery_method TEXT NOT NULL DEFAULT 'in_person'",
       "ALTER TABLE listings ADD COLUMN meetup_location TEXT",
       "ALTER TABLE listings ADD COLUMN preferred_meetup_spot TEXT",

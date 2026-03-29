@@ -120,31 +120,31 @@ router.patch("/listings/:id", async (req, res, next) => {
     if (!listing) return res.status(404).json({ error: "Listing not found" });
 
     // Validation
-    const VALID_CONDITIONS = ["new", "like_new", "good", "fair", "poor", "Like New", "Good", "Fair", "Heavily Annotated"];
-    const VALID_SEMESTERS = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8"];
-    const VALID_MATERIALS = ["handwritten", "printed", "digital", "book", "ppt", "other"];
+    const VALID_CONDITIONS = ["new", "like_new", "good", "fair", "poor", "Like New", "Good", "Fair", "Heavily Annotated", ""];
+    const VALID_SEMESTERS = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8", ""];
+    const VALID_MATERIALS = ["handwritten", "printed", "digital", "book", "ppt", "other", ""];
 
     if (condition !== undefined && !VALID_CONDITIONS.includes(condition)) {
-      return res.status(400).json({ error: "Invalid condition value" });
+      return res.status(400).json({ error: `Invalid condition value: ${condition}` });
     }
     if (semester !== undefined && !VALID_SEMESTERS.includes(semester)) {
-      return res.status(400).json({ error: "Invalid semester value" });
+      return res.status(400).json({ error: `Invalid semester value: ${semester}` });
     }
     if (material_type !== undefined && !VALID_MATERIALS.includes(material_type)) {
-      return res.status(400).json({ error: "Invalid material type value" });
+      return res.status(400).json({ error: `Invalid material type value: ${material_type}` });
     }
 
     const setClauses: string[] = [];
     const args: any[] = [];
 
     if (title !== undefined && title.trim()) { setClauses.push("title = ?"); args.push(title.trim()); }
-    if (description !== undefined)           { setClauses.push("description = ?"); args.push(description || null); }
+    if (description !== undefined) { setClauses.push("description = ?"); args.push(description || null); }
     if (price !== undefined) {
       const p = parseInt(price);
       if (isNaN(p) || p < 0) {
         return res.status(400).json({ error: "Invalid price value" });
       }
-      setClauses.push("price = ?"); 
+      setClauses.push("price = ?");
       args.push(p);
     }
     if (quantity !== undefined) {
@@ -159,14 +159,18 @@ router.patch("/listings/:id", async (req, res, next) => {
         setClauses.push("status = 'active'");
       }
     }
-    
-    if (condition !== undefined)             { setClauses.push("condition = ?");              args.push(condition); }
-    if (location !== undefined)              { setClauses.push("location = ?");               args.push(location); }
-    if (semester !== undefined)              { setClauses.push("semester = ?");               args.push(semester); }
-    if (course_code !== undefined)           { setClauses.push("course_code = ?");            args.push(course_code); }
-    if (material_type !== undefined)         { setClauses.push("material_type = ?");          args.push(material_type); }
-    if (preferred_meetup_spot !== undefined) { setClauses.push("preferred_meetup_spot = ?");  args.push(preferred_meetup_spot || null); }
-    if (meetup_location !== undefined)       { setClauses.push("meetup_location = ?");        args.push(meetup_location || null); }
+
+    if (condition !== undefined) { setClauses.push("condition = ?"); args.push(condition); }
+    if (req.body.original_price !== undefined) {
+      setClauses.push("original_price = ?");
+      args.push(req.body.original_price === "" || req.body.original_price === null ? null : parseInt(req.body.original_price));
+    }
+    if (location !== undefined) { setClauses.push("location = ?"); args.push(location); }
+    if (semester !== undefined) { setClauses.push("semester = ?"); args.push(semester); }
+    if (course_code !== undefined) { setClauses.push("course_code = ?"); args.push(course_code); }
+    if (material_type !== undefined) { setClauses.push("material_type = ?"); args.push(material_type); }
+    if (preferred_meetup_spot !== undefined) { setClauses.push("preferred_meetup_spot = ?"); args.push(preferred_meetup_spot || null); }
+    if (meetup_location !== undefined) { setClauses.push("meetup_location = ?"); args.push(meetup_location || null); }
     if (is_multiple_subjects !== undefined) {
       setClauses.push("is_multiple_subjects = ?");
       args.push(is_multiple_subjects === true || is_multiple_subjects === "true" || is_multiple_subjects === 1 ? 1 : 0);
@@ -188,11 +192,11 @@ router.patch("/listings/:id", async (req, res, next) => {
       } catch (err) {
         return res.status(400).json({ error: "Invalid imageUrls format. Must be a JSON array." });
       }
-      
+
       if (!Array.isArray(imageUrls)) {
         return res.status(400).json({ error: "imageUrls must be an array." });
       }
-      
+
       const { v4: uuidv4 } = await import("uuid");
       const tx = await db.transaction("write");
       try {
@@ -216,7 +220,7 @@ router.patch("/listings/:id", async (req, res, next) => {
     }
 
     // Update subjects if provided
-    const isNowMultiple = is_multiple_subjects !== undefined 
+    const isNowMultiple = is_multiple_subjects !== undefined
       ? (is_multiple_subjects === true || is_multiple_subjects === "true" || is_multiple_subjects === 1)
       : !!listing.is_multiple_subjects;
 
@@ -425,7 +429,7 @@ router.get("/resources", async (req, res, next) => {
 router.patch("/resources/:id", async (req, res, next) => {
   try {
     const { title, description, semester, category, subject_name, course_code, status } = req.body;
-    
+
     const updates: string[] = [];
     const args: any[] = [];
 
@@ -868,4 +872,58 @@ router.post("/subject-links", async (req, res, next) => {
   }
 });
 
+// ── POST /api/admin/broadcast — send Telegram notification to all linked users ──
+router.post("/broadcast", async (req, res, next) => {
+  try {
+    const { title, message, link_url } = req.body;
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "message is required" });
+    }
+
+    // Dynamically import to avoid circular deps
+    const { sendTelegramMessage, telegramTemplates } = await import("../utils/telegram.js");
+
+    // Get all users with Telegram linked
+    const usersRes = await db.execute({
+      sql: "SELECT id, name, telegram_chat_id FROM users WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id != ''",
+      args: [],
+    });
+
+    const users = usersRes.rows as any[];
+    if (users.length === 0) {
+      return res.json({ sent: 0, failed: 0, total: 0, message: "No users have Telegram connected." });
+    }
+
+    const broadcastTitle = title || "📢 Update from OpenNotes.in";
+    const text = telegramTemplates.generic(broadcastTitle, message, link_url);
+
+    let sent = 0;
+    let failed = 0;
+
+    // Send in batches of 20 with a small delay to respect Telegram rate limits (30 msgs/sec)
+    const BATCH_SIZE = 20;
+    const BATCH_DELAY_MS = 1000;
+
+    for (let i = 0; i < users.length; i += BATCH_SIZE) {
+      const batch = users.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((u: any) => sendTelegramMessage(u.telegram_chat_id, text))
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) sent++;
+        else failed++;
+      }
+      if (i + BATCH_SIZE < users.length) {
+        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+
+    console.info(`[Admin Broadcast] Sent: ${sent}, Failed: ${failed}, Total: ${users.length}`);
+    res.json({ sent, failed, total: users.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
+

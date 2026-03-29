@@ -17,7 +17,7 @@ import { upload, getFileUrl } from "../utils/cloudinary.js";
 // Get all listings (with filtering)
 router.get("/", async (req, res, next) => {
   try {
-    const { semester, search, material_type } = req.query;
+    const { semester, search, material_type, location } = req.query;
     let query = `
       SELECT l.*, u.name as seller_name, COALESCE(AVG(r.rating), 0) as seller_rating
       FROM listings l
@@ -34,6 +34,7 @@ router.get("/", async (req, res, next) => {
 
     const searchStr = typeof search === 'string' ? search : '';
     const materialTypeStr = typeof material_type === 'string' ? material_type : '';
+    const locationStr = typeof location === 'string' ? location : '';
 
     if (searchStr) {
       query += " AND (l.course_code LIKE ? OR l.title LIKE ?)";
@@ -43,6 +44,11 @@ router.get("/", async (req, res, next) => {
     if (materialTypeStr) {
       query += " AND l.material_type = ?";
       args.push(materialTypeStr);
+    }
+
+    if (locationStr) {
+      query += " AND l.location = ?";
+      args.push(locationStr);
     }
 
     const page = parseInt(req.query.page as string) || 1;
@@ -195,6 +201,7 @@ router.post(
       // Input Validation
       const parsedPrice = parseInt(price);
       const parsedQuantity = quantity !== undefined ? parseInt(quantity) : 1;
+      const parsedOriginalPrice = req.body.original_price ? parseInt(req.body.original_price) : null;
 
       if (isNaN(parsedPrice) || parsedPrice < 0) {
         return res.status(400).json({ error: "Price must be 0 or a positive number" });
@@ -219,8 +226,8 @@ router.post(
       const deliveryMethod = delivery_method || "in_person";
       const meetupLoc = meetup_location || null;
 await db.execute({
-  sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+  sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, original_price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
   args: [
     listingId,
     sellerId,
@@ -230,6 +237,7 @@ await db.execute({
     semester,
     condition,
     parsedPrice,
+    parsedOriginalPrice,
     location,
     mainImageUrl,
     parsedQuantity,

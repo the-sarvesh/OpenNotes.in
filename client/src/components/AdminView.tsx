@@ -8,7 +8,7 @@ import {
   TrendingUp, ChevronRight, ChevronLeft, MapPin,
   Hash, Calendar, Tag, Star, User as UserIcon,
   BookOpen, Layers, Clock, CheckCircle2, XCircle,
-  PackageOpen, Truck, Settings as SettingsIcon, Edit2
+  PackageOpen, Truck, Settings as SettingsIcon, Edit2, Send as SendIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
@@ -87,6 +87,7 @@ export const AdminView: React.FC = () => {
   const [subjectLinks, setSubjectLinks] = useState<any[]>([]);
   const [dbSettings, setDbSettings] = useState<any>(null);
   const [localFee, setLocalFee] = useState<string>('0');
+  const [localDiscount, setLocalDiscount] = useState<string>('40');
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
 
@@ -114,6 +115,13 @@ export const AdminView: React.FC = () => {
   // Purge modal
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [purgeConfirm, setPurgeConfirm] = useState('');
+
+  // Telegram broadcast
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastMsg, setBroadcastMsg] = useState('');
+  const [broadcastLink, setBroadcastLink] = useState('');
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
 
   // No manual headers with apiRequest
 
@@ -147,6 +155,7 @@ export const AdminView: React.FC = () => {
           const data = await res.json();
           setDbSettings(data);
           setLocalFee(String(data.platform_fee_percentage));
+          setLocalDiscount(String(data.recommended_discount_percentage || 40));
         }
       }
     } catch (err) {
@@ -398,6 +407,7 @@ export const AdminView: React.FC = () => {
                                 setEditForm({
                                   title: selectedListing.title || '',
                                   description: selectedListing.description || '',
+                                  original_price: selectedListing.original_price === null ? '' : String(selectedListing.original_price),
                                   price: String(selectedListing.price ?? ''),
                                   quantity: String(selectedListing.quantity ?? ''),
                                   condition: selectedListing.condition || 'Good',
@@ -480,8 +490,19 @@ export const AdminView: React.FC = () => {
                             />
                           </div>
 
-                          {/* Price & Quantity */}
-                          <div className="grid grid-cols-2 gap-4">
+                          {/* Pricing & Quantity */}
+                          <div className="grid grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Orig Price (₹)</p>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editForm.original_price}
+                                onChange={e => setEditForm((f: any) => ({ ...f, original_price: e.target.value }))}
+                                placeholder="Auto/Empty"
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              />
+                            </div>
                             <div>
                               <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Price (₹)</p>
                               <input
@@ -1397,6 +1418,54 @@ export const AdminView: React.FC = () => {
                           This fee is charged to the seller on every transaction. Setting this to 0 will enable Launch Promo mode (0% fees).
                         </p>
                       </div>
+
+                      <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-2">
+                          Recommended Discount (%)
+                        </label>
+                        <div className="flex gap-3">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={localDiscount}
+                            onChange={(e) => setLocalDiscount(e.target.value)}
+                            onBlur={async () => {
+                              const val = Number(localDiscount);
+                              if (!isNaN(val) && val >= 0 && val <= 100) {
+                                try {
+                                  const res = await apiRequest('/api/settings', { 
+                                    method: 'PATCH', 
+                                    body: JSON.stringify({ recommended_discount_percentage: val }) 
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    setActionMsg(data.message || 'Updated discount');
+                                    fetchData();
+                                  } else {
+                                    const data = await res.json();
+                                    setActionMsg(data.error || 'Update failed');
+                                    setLocalDiscount(String(dbSettings.recommended_discount_percentage || 40));
+                                  }
+                                } catch {
+                                  setActionMsg('Network error');
+                                  setLocalDiscount(String(dbSettings.recommended_discount_percentage || 40));
+                                }
+                                setTimeout(() => setActionMsg(''), 3000);
+                              } else {
+                                setLocalDiscount(String(dbSettings.recommended_discount_percentage || 40));
+                              }
+                            }}
+                            className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/50 flex-1"
+                          />
+                          <div className="flex items-center justify-center bg-white/5 border border-white/10 rounded-xl px-4 font-black text-slate-400">
+                            %
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                          Global discount percentage recommended to users when setting final prices based on original cost.
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -1407,6 +1476,91 @@ export const AdminView: React.FC = () => {
                     <p className="text-[11px] text-slate-400 leading-relaxed">
                       Settings are cached for 30 seconds to optimize performance. Changes may take up to half a minute to reflect across all users globally.
                     </p>
+                  </div>
+
+                  {/* ── Telegram Broadcast ── */}
+                  <div className="p-6 bg-violet-500/5 border border-violet-500/20 rounded-2xl space-y-4">
+                    <h4 className="text-xs font-black text-violet-400 uppercase tracking-widest flex items-center gap-2">
+                      <SendIcon className="h-3.5 w-3.5" /> Telegram Broadcast
+                    </h4>
+                    <p className="text-[11px] text-slate-400 leading-relaxed -mt-2">
+                      Send an announcement to all users who have connected their Telegram account.
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Title (optional)</label>
+                        <input
+                          type="text"
+                          value={broadcastTitle}
+                          onChange={e => setBroadcastTitle(e.target.value)}
+                          placeholder="e.g. 🚀 New Feature Released!"
+                          className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Message <span className="text-red-400">*</span></label>
+                        <textarea
+                          value={broadcastMsg}
+                          onChange={e => setBroadcastMsg(e.target.value)}
+                          placeholder="Write your announcement here…"
+                          rows={3}
+                          className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Link URL (optional)</label>
+                        <input
+                          type="url"
+                          value={broadcastLink}
+                          onChange={e => setBroadcastLink(e.target.value)}
+                          placeholder="https://opennotes.in/..."
+                          className="w-full px-4 py-2.5 bg-slate-800 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                        />
+                      </div>
+                      {broadcastResult && (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[11px] text-emerald-400">
+                          ✅ Sent to <strong>{broadcastResult.sent}</strong> users ({broadcastResult.failed} failed, {broadcastResult.total} total).
+                        </div>
+                      )}
+                      <button
+                        disabled={!broadcastMsg.trim() || broadcastSending}
+                        onClick={async () => {
+                          if (!broadcastMsg.trim()) return;
+                          setBroadcastSending(true);
+                          setBroadcastResult(null);
+                          try {
+                            const res = await apiRequest('/api/admin/broadcast', {
+                              method: 'POST',
+                              body: JSON.stringify({
+                                title: broadcastTitle.trim() || undefined,
+                                message: broadcastMsg.trim(),
+                                link_url: broadcastLink.trim() || undefined,
+                              }),
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              setBroadcastResult(data);
+                              setBroadcastMsg('');
+                              setBroadcastTitle('');
+                              setBroadcastLink('');
+                            } else {
+                              setActionMsg(data.error || 'Broadcast failed');
+                            }
+                          } catch {
+                            setActionMsg('Network error during broadcast');
+                          } finally {
+                            setBroadcastSending(false);
+                          }
+                        }}
+                        className="flex items-center gap-2 px-5 py-3 bg-violet-500/20 hover:bg-violet-500/30 disabled:opacity-40 disabled:cursor-not-allowed border border-violet-500/30 text-violet-300 rounded-xl font-black text-xs uppercase tracking-widest transition-all"
+                      >
+                        {broadcastSending ? (
+                          <><span className="h-3.5 w-3.5 border-2 border-violet-400 border-t-transparent animate-spin rounded-full" /> Sending…</>
+                        ) : (
+                          <><SendIcon className="h-3.5 w-3.5" /> Send Broadcast</>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               )}

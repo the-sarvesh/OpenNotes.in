@@ -30,6 +30,7 @@ interface FormData {
   subjects: string[];
   title: string;
   description: string;
+  originalPrice: string;
   price: string;
   quantity: string;
   condition: string;
@@ -50,6 +51,7 @@ const INITIAL_FORM: FormData = {
   subjects: [],
   title: '',
   description: '',
+  originalPrice: '',
   price: '',
   quantity: '1',
   condition: 'Good',
@@ -213,6 +215,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
           course_code: form.isMultipleSubjects ? 'Multiple' : form.courseCode,
           semester: form.semester,
           condition: form.condition,
+          original_price: form.originalPrice,
           price: form.price,
           location: form.location === 'Other (Manual)' ? form.customLocation : form.location,
           quantity: form.quantity,
@@ -558,15 +561,52 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                 />
               </div>
 
+              {/* Custom Original Price vs Final Price */}
+              {['PPT', 'Book'].includes(form.materialType) && !form.isDonation && (
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+                  <div className="mb-4">
+                    <Label>{form.materialType === 'Book' ? 'Original MRP / Buying Cost (₹)' : 'Total Printing Cost (₹)'}</Label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-semibold text-sm pointer-events-none">₹</span>
+                      <input 
+                        type="number" 
+                        value={form.originalPrice} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          set('originalPrice', val);
+                          // Auto recommended math
+                          const discount = settings?.recommended_discount_percentage || 40;
+                          const recommended = Math.max(0, Math.round(Number(val) * (1 - discount / 100)));
+                          if (val && !isNaN(recommended)) {
+                             // Only auto-update final price if it is completely empty or it matched the previous auto setting
+                             set('price', recommended.toString());
+                          }
+                        }} 
+                        placeholder={form.materialType === 'Book' ? '500' : '200'}
+                        className={`${inputClass} pl-8 border-primary/40 focus:ring-primary/60`} 
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Price + quantity */}
               <div className={`grid grid-cols-2 gap-4 transition-opacity ${form.isDonation ? 'opacity-40 pointer-events-none' : ''}`}>
                 <div>
-                  <Label>Price (₹)</Label>
+                  <Label>Final Selling Price (₹)</Label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-semibold text-sm pointer-events-none">₹</span>
-                    <input type="number" value={form.price} onChange={e => set('price', e.target.value)} placeholder="250" disabled={form.isDonation} className={`${inputClass} pl-8`} />
+                    <input type="number" value={form.price} onChange={e => set('price', e.target.value)} placeholder="0" disabled={form.isDonation} className={`${inputClass} pl-8`} />
                   </div>
-                  <p className="text-[9px] text-text-muted mt-1.5 italic">Tip: Notes sell fastest at 40-50% of print cost.</p>
+                  {form.originalPrice && form.price && Number(form.originalPrice) > Number(form.price) && (
+                    <p className="text-[10px] text-green-500 font-bold mt-1.5 flex items-center gap-1.5 leading-snug">
+                      ✨ Recommended Price: ₹{Math.round(Number(form.originalPrice) * (1 - (settings?.recommended_discount_percentage || 40) / 100))} 
+                      ({settings?.recommended_discount_percentage || 40}% off helps items sell 3x faster!)
+                    </p>
+                  )}
+                  {(!form.originalPrice || Number(form.originalPrice) <= Number(form.price)) && (
+                    <p className="text-[9px] text-text-muted mt-1.5 italic">Tip: Notes sell fastest at 40-50% off print cost.</p>
+                  )}
                 </div>
                 <div>
                   <Label>Quantity</Label>
