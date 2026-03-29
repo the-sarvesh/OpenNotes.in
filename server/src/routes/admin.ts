@@ -90,6 +90,175 @@ router.patch("/listings/:id/activate", async (req, res, next) => {
   }
 });
 
+// PATCH /api/admin/listings/:id — admin edit any listing's details
+router.patch("/listings/:id", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      description,
+      price,
+      quantity,
+      condition,
+      location,
+      semester,
+      course_code,
+      material_type,
+      preferred_meetup_spot,
+      meetup_location,
+      imageUrls: rawImageUrls,
+      subjects: rawSubjects,
+    } = req.body;
+
+    // Verify listing exists
+    const listingRes = await db.execute({
+      sql: "SELECT * FROM listings WHERE id = ?",
+      args: [id],
+    });
+    const listing = listingRes.rows[0] as any;
+    if (!listing) return res.status(404).json({ error: "Listing not found" });
+
+    // Validation
+    const VALID_CONDITIONS = ["new", "like_new", "good", "fair", "poor"];
+    const VALID_SEMESTERS = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8"];
+    const VALID_MATERIALS = ["handwritten", "printed", "digital", "book", "ppt", "other"];
+
+    if (condition !== undefined && !VALID_CONDITIONS.includes(condition)) {
+      return res.status(400).json({ error: "Invalid condition value" });
+    }
+    if (semester !== undefined && !VALID_SEMESTERS.includes(semester)) {
+      return res.status(400).json({ error: "Invalid semester value" });
+    }
+    if (material_type !== undefined && !VALID_MATERIALS.includes(material_type)) {
+      return res.status(400).json({ error: "Invalid material type value" });
+    }
+
+    const setClauses: string[] = [];
+    const args: any[] = [];
+
+    if (title !== undefined && title.trim()) { setClauses.push("title = ?"); args.push(title.trim()); }
+    if (description !== undefined)           { setClauses.push("description = ?"); args.push(description || null); }
+    if (price !== undefined) {
+      const p = parseInt(price);
+      if (isNaN(p) || p < 0) {
+        return res.status(400).json({ error: "Invalid price value" });
+      }
+      setClauses.push("price = ?"); 
+      args.push(p);
+    }
+    if (quantity !== undefined) {
+      const q = parseInt(quantity);
+      if (isNaN(q) || q < 0) {
+        return res.status(400).json({ error: "Invalid quantity value" });
+      }
+      setClauses.push("quantity = ?");
+      args.push(q);
+      // Re-activate if archived and quantity restored
+      if (q > 0 && listing.status === "archived") {
+        setClauses.push("status = 'active'");
+      }
+    }
+    
+    if (condition !== undefined)             { setClauses.push("condition = ?");              args.push(condition); }
+    if (location !== undefined)              { setClauses.push("location = ?");               args.push(location); }
+    if (semester !== undefined)              { setClauses.push("semester = ?");               args.push(semester); }
+    if (course_code !== undefined)           { setClauses.push("course_code = ?");            args.push(course_code); }
+    if (material_type !== undefined)         { setClauses.push("material_type = ?");          args.push(material_type); }
+    if (preferred_meetup_spot !== undefined) { setClauses.push("preferred_meetup_spot = ?");  args.push(preferred_meetup_spot || null); }
+    if (meetup_location !== undefined)       { setClauses.push("meetup_location = ?");        args.push(meetup_location || null); }
+
+    if (setClauses.length > 0) {
+      args.push(id);
+      await db.execute({
+        sql: `UPDATE listings SET ${setClauses.join(", ")} WHERE id = ?`,
+        args,
+      });
+    }
+
+    // Update images if provided
+    if (rawImageUrls !== undefined) {
+      let imageUrls: string[] = [];
+      try {
+        imageUrls = typeof rawImageUrls === "string" ? JSON.parse(rawImageUrls) : rawImageUrls;
+      } catch (err) {
+        return res.status(400).json({ error: "Invalid imageUrls format. Must be a JSON array." });
+      }
+      
+      if (!Array.isArray(imageUrls)) {
+        return res.status(400).json({ error: "imageUrls must be an array." });
+      }
+      
+      const { v4: uuidv4 } = await import("uuid");
+      const tx = await db.transaction("write");
+      try {
+        await tx.execute({ sql: "DELETE FROM listing_images WHERE listing_id = ?", args: [id] });
+        for (let i = 0; i < imageUrls.length; i++) {
+          await tx.execute({
+            sql: "INSERT INTO listing_images (id, listing_id, url, is_main) VALUES (?, ?, ?, ?)",
+            args: [uuidv4(), id, imageUrls[i], i === 0 ? 1 : 0],
+          });
+        }
+        if (imageUrls.length > 0) {
+          await tx.execute({ sql: "UPDATE listings SET image_url = ? WHERE id = ?", args: [imageUrls[0], id] });
+        } else {
+          await tx.execute({ sql: "UPDATE listings SET image_url = '' WHERE id = ?", args: [id] });
+        }
+        await tx.commit();
+      } catch (err) {
+        await tx.rollback();
+        throw err;
+      }
+    }
+
+    // Update subjects if provided
+    if (rawSubjects !== undefined && listing.is_multiple_subjects) {
+      let subjectList: string[] = [];
+      try {
+        subjectList = typeof rawSubjects === "string" ? JSON.parse(rawSubjects) : rawSubjects;
+      } catch (err) {
+        return res.status(400).json({ error: "Invalid subjects format. Must be a JSON array." });
+      }
+
+      if (!Array.isArray(subjectList)) {
+        return res.status(400).json({ error: "subjects must be an array." });
+      }
+
+      const tx = await db.transaction("write");
+      try {
+        await tx.execute({ sql: "DELETE FROM listing_subjects WHERE listing_id = ?", args: [id] });
+        for (const subject of subjectList) {
+          await tx.execute({
+            sql: "INSERT INTO listing_subjects (listing_id, subject_name) VALUES (?, ?)",
+            args: [id, subject],
+          });
+        }
+        await tx.commit();
+      } catch (err) {
+        await tx.rollback();
+        throw err;
+      }
+    }
+
+    // Notify the seller that their listing was administratively updated
+    try {
+      const { createNotification } = await import("../utils/notifications.js");
+      await createNotification(
+        listing.seller_id,
+        "listing_updated",
+        "Listing Updated Administratively",
+        `An administrator has modified the details of your listing: "${listing.title}".`,
+        `/listings/${listing.id}`
+      );
+    } catch (err) {
+      console.error("[Admin] Failed to notify seller of listing update:", err);
+    }
+
+    res.json({ message: "Listing updated successfully" });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // DELETE /api/admin/listings/:id — permanently delete a listing
 router.delete("/listings/:id", async (req, res, next) => {
   try {
@@ -164,6 +333,9 @@ router.get("/users/:id/activity", async (req, res, next) => {
 // PATCH /api/admin/users/:id/role — change user role
 router.patch("/users/:id/role", async (req, res, next) => {
   try {
+    if (req.user?.id === req.params.id) {
+      return res.status(403).json({ error: "Cannot modify your own role" });
+    }
     const { role } = req.body;
     if (!["user", "admin"].includes(role)) {
       return res.status(400).json({ error: "Invalid role" });
@@ -181,8 +353,11 @@ router.patch("/users/:id/role", async (req, res, next) => {
 // PATCH /api/admin/users/:id/status — block/unblock user
 router.patch("/users/:id/status", async (req, res, next) => {
   try {
+    if (req.user?.id === req.params.id) {
+      return res.status(403).json({ error: "Cannot modify your own status" });
+    }
     const { status } = req.body;
-    if (!["active", "blocked"].includes(status)) {
+    if (!["active", "blocked", "deleted"].includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
     await db.execute({

@@ -8,11 +8,11 @@ import {
   TrendingUp, ChevronRight, ChevronLeft, MapPin,
   Hash, Calendar, Tag, Star, User as UserIcon,
   BookOpen, Layers, Clock, CheckCircle2, XCircle,
-  PackageOpen, Truck, Settings as SettingsIcon
+  PackageOpen, Truck, Settings as SettingsIcon, Edit2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
-import { SUBJECTS_BY_SEM, SEMESTERS } from '../utils/constants.js';
+import { SUBJECTS_BY_SEM, SEMESTERS, LOCATIONS, STANDARD_SPOTS } from '../utils/constants.js';
 import { ExternalLink, Link as LinkIcon, Save } from 'lucide-react';
 import { statusColors, formatStatus } from '../utils/status';
 
@@ -98,6 +98,11 @@ export const AdminView: React.FC = () => {
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
+  // Admin listing edit
+  const [editingListing, setEditingListing] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [isSavingListing, setIsSavingListing] = useState(false);
+
   // Chat transcript
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<any[]>([]);
@@ -152,7 +157,7 @@ export const AdminView: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [tab, listingFilter]);
   // Reset detail views on tab change
-  useEffect(() => { setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); }, [tab]);
+  useEffect(() => { setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); setEditingListing(false); }, [tab]);
 
   // Sync selected details when main lists update (to keep views reactive after doAction)
   useEffect(() => {
@@ -356,59 +361,328 @@ export const AdminView: React.FC = () => {
                       key="listing-detail"
                       title={selectedListing.title}
                       subtitle={`Listed by ${selectedListing.seller_name}`}
-                      onBack={() => setSelectedListing(null)}
+                      onBack={() => { setSelectedListing(null); setEditingListing(false); }}
                     >
-                      <div className="grid md:grid-cols-2 gap-5">
-                        {/* Image */}
-                        <div className="rounded-2xl overflow-hidden border border-white/10 aspect-[4/3] relative">
-                          <img src={selectedListing.image_url} alt="" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                          <span className={`absolute bottom-3 left-3 px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${statusColors[selectedListing.status] || 'bg-white/10 text-white'}`}>
-                            {fmt(selectedListing.status)}
-                          </span>
-                        </div>
+                      {!editingListing ? (
+                        <>
+                          <div className="grid md:grid-cols-2 gap-5">
+                            {/* Image */}
+                            <div className="rounded-2xl overflow-hidden border border-white/10 aspect-[4/3] relative">
+                              <img src={selectedListing.image_url} alt="" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                              <span className={`absolute bottom-3 left-3 px-2.5 py-1 rounded-full text-[9px] font-black uppercase ${statusColors[selectedListing.status] || 'bg-white/10 text-white'}`}>
+                                {fmt(selectedListing.status)}
+                              </span>
+                            </div>
 
-                        {/* Details */}
-                        <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
-                          <InfoRow icon={<Hash className="h-3.5 w-3.5" />} label="ID" value={<span className="font-mono text-xs">{selectedListing.id}</span>} />
-                          <InfoRow icon={<Tag className="h-3.5 w-3.5" />} label="Course Code" value={selectedListing.course_code} />
-                          <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Price" value={`₹${selectedListing.price}`} />
-                          <InfoRow icon={<Layers className="h-3.5 w-3.5" />} label="Quantity" value={selectedListing.quantity} />
-                          <InfoRow icon={<BookOpen className="h-3.5 w-3.5" />} label="Material Type" value={selectedListing.material_type || '—'} />
-                          <InfoRow icon={<Star className="h-3.5 w-3.5" />} label="Condition" value={selectedListing.condition || '—'} />
-                          <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Location" value={selectedListing.location || '—'} />
-                          <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Seller" value={`${selectedListing.seller_name} (${selectedListing.seller_email || '—'})`} />
-                          {selectedListing.meetup_location && (
-                            <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Meetup Notes" value={<em className="text-slate-300">"{selectedListing.meetup_location}"</em>} />
-                          )}
-                        </div>
-                      </div>
+                            {/* Details */}
+                            <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
+                              <InfoRow icon={<Hash className="h-3.5 w-3.5" />} label="ID" value={<span className="font-mono text-xs">{selectedListing.id}</span>} />
+                              <InfoRow icon={<Tag className="h-3.5 w-3.5" />} label="Course Code" value={selectedListing.course_code} />
+                              <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Price" value={`₹${selectedListing.price}`} />
+                              <InfoRow icon={<Layers className="h-3.5 w-3.5" />} label="Quantity" value={selectedListing.quantity} />
+                              <InfoRow icon={<BookOpen className="h-3.5 w-3.5" />} label="Material Type" value={selectedListing.material_type || '—'} />
+                              <InfoRow icon={<Star className="h-3.5 w-3.5" />} label="Condition" value={selectedListing.condition || '—'} />
+                              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Location" value={selectedListing.location || '—'} />
+                              <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Seller" value={`${selectedListing.seller_name} (${selectedListing.seller_email || '—'})`} />
+                              {selectedListing.meetup_location && (
+                                <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Meetup Notes" value={<em className="text-slate-300">"{selectedListing.meetup_location}"</em>} />
+                              )}
+                            </div>
+                          </div>
 
-                      {/* Actions */}
-                      <div className="flex flex-wrap gap-2 mt-5">
-                        {selectedListing.status === 'active' && (
-                          <button
-                            onClick={() => { doAction(`/api/admin/listings/${selectedListing.id}/archive`, 'PATCH'); setSelectedListing(null); }}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-xl text-xs font-bold transition-colors"
-                          >
-                            <Archive className="h-4 w-4" /> Archive
-                          </button>
-                        )}
-                        {selectedListing.status === 'archived' && (
-                          <button
-                            onClick={() => { doAction(`/api/admin/listings/${selectedListing.id}/activate`, 'PATCH'); setSelectedListing(null); }}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-bold transition-colors"
-                          >
-                            <RotateCcw className="h-4 w-4" /> Re-activate
-                          </button>
-                        )}
-                        <button
-                          onClick={() => { if (confirm('Permanently delete this listing?')) { doAction(`/api/admin/listings/${selectedListing.id}`, 'DELETE'); setSelectedListing(null); } }}
-                          className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-xl text-xs font-bold transition-colors"
+                          {/* Actions */}
+                          <div className="flex flex-wrap gap-2 mt-5">
+                            <button
+                              onClick={() => {
+                                setEditForm({
+                                  title: selectedListing.title || '',
+                                  description: selectedListing.description || '',
+                                  price: String(selectedListing.price ?? ''),
+                                  quantity: String(selectedListing.quantity ?? ''),
+                                  condition: selectedListing.condition || 'Good',
+                                  location: selectedListing.location || '',
+                                  semester: selectedListing.semester || '',
+                                  course_code: selectedListing.course_code || '',
+                                  material_type: selectedListing.material_type || 'ppt',
+                                  preferred_meetup_spot: selectedListing.preferred_meetup_spot || '',
+                                  meetup_location: selectedListing.meetup_location || '',
+                                  imageUrls: '',
+                                  subjects: '',
+                                });
+                                setEditingListing(true);
+                              }}
+                              className="flex items-center gap-2 px-4 py-2.5 bg-[#FFC000]/10 hover:bg-[#FFC000]/20 border border-[#FFC000]/20 text-[#FFC000] rounded-xl text-xs font-bold transition-colors"
+                            >
+                              <Edit2 className="h-4 w-4" /> Edit Details
+                            </button>
+                            {selectedListing.status === 'active' && (
+                              <button
+                                onClick={() => { doAction(`/api/admin/listings/${selectedListing.id}/archive`, 'PATCH'); setSelectedListing(null); }}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-xl text-xs font-bold transition-colors"
+                              >
+                                <Archive className="h-4 w-4" /> Archive
+                              </button>
+                            )}
+                            {selectedListing.status === 'archived' && (
+                              <button
+                                onClick={() => { doAction(`/api/admin/listings/${selectedListing.id}/activate`, 'PATCH'); setSelectedListing(null); }}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-bold transition-colors"
+                              >
+                                <RotateCcw className="h-4 w-4" /> Re-activate
+                              </button>
+                            )}
+                            <button
+                              onClick={() => { if (confirm('Permanently delete this listing?')) { doAction(`/api/admin/listings/${selectedListing.id}`, 'DELETE'); setSelectedListing(null); } }}
+                              className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-xl text-xs font-bold transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" /> Delete Listing
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        /* ── Inline Edit Form ── */
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="space-y-5"
                         >
-                          <Trash2 className="h-4 w-4" /> Delete Listing
-                        </button>
-                      </div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[#FFC000]">Editing Listing</p>
+                            <button
+                              onClick={() => setEditingListing(false)}
+                              className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" /> Cancel
+                            </button>
+                          </div>
+
+                          {/* Title */}
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Title</p>
+                            <input
+                              type="text"
+                              value={editForm.title}
+                              onChange={e => setEditForm((f: any) => ({ ...f, title: e.target.value }))}
+                              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                            />
+                          </div>
+
+                          {/* Description */}
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Description</p>
+                            <textarea
+                              value={editForm.description}
+                              onChange={e => setEditForm((f: any) => ({ ...f, description: e.target.value }))}
+                              rows={3}
+                              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all resize-none"
+                            />
+                          </div>
+
+                          {/* Price & Quantity */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Price (₹)</p>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editForm.price}
+                                onChange={e => setEditForm((f: any) => ({ ...f, price: e.target.value }))}
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              />
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Quantity</p>
+                              <input
+                                type="number"
+                                min="1"
+                                value={editForm.quantity}
+                                onChange={e => setEditForm((f: any) => ({ ...f, quantity: e.target.value }))}
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Semester & Course */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Semester</p>
+                              <select
+                                value={editForm.semester}
+                                onChange={e => setEditForm((f: any) => ({ ...f, semester: e.target.value, course_code: '' }))}
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              >
+                                <option value="">Select…</option>
+                                {Object.keys(SUBJECTS_BY_SEM).map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Course Code</p>
+                              {editForm.semester ? (
+                                <select
+                                  value={editForm.course_code}
+                                  onChange={e => setEditForm((f: any) => ({ ...f, course_code: e.target.value }))}
+                                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                                >
+                                  <option value="">Select…</option>
+                                  {(SUBJECTS_BY_SEM[editForm.semester] || []).map((s: string) => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={editForm.course_code}
+                                  onChange={e => setEditForm((f: any) => ({ ...f, course_code: e.target.value }))}
+                                  placeholder="e.g. CS F111"
+                                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Material Type & Condition */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Material Type</p>
+                              <select
+                                value={editForm.material_type}
+                                onChange={e => setEditForm((f: any) => ({ ...f, material_type: e.target.value }))}
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              >
+                                {['ppt', 'handwritten', 'book', 'other'].map(t => <option key={t} value={t}>{fmt(t)}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Condition</p>
+                              <select
+                                value={editForm.condition}
+                                onChange={e => setEditForm((f: any) => ({ ...f, condition: e.target.value }))}
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              >
+                                {['Like New', 'Good', 'Fair', 'Heavily Annotated'].map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Location */}
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Location</p>
+                            <select
+                              value={editForm.location}
+                              onChange={e => setEditForm((f: any) => ({ ...f, location: e.target.value }))}
+                              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                            >
+                              {LOCATIONS.map((l: string) => <option key={l} value={l}>{l}</option>)}
+                            </select>
+                          </div>
+
+                          {/* Meetup spot */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Preferred Meetup Spot</p>
+                              <select
+                                value={editForm.preferred_meetup_spot}
+                                onChange={e => setEditForm((f: any) => ({ ...f, preferred_meetup_spot: e.target.value }))}
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              >
+                                <option value="">—</option>
+                                {STANDARD_SPOTS.map((s: string) => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Meetup Instructions</p>
+                              <input
+                                type="text"
+                                value={editForm.meetup_location}
+                                onChange={e => setEditForm((f: any) => ({ ...f, meetup_location: e.target.value }))}
+                                placeholder="e.g. Cafe 2, evenings"
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Raw Image URLs & Subjects (for advanced edits) */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                Image URLs (JSON Array) <span className="text-[9px] lowercase opacity-60 font-normal">Optional</span>
+                              </p>
+                              <input
+                                type="text"
+                                value={editForm.imageUrls}
+                                onChange={e => setEditForm((f: any) => ({ ...f, imageUrls: e.target.value }))}
+                                placeholder='e.g. ["https://img1...", "https://img2..."]'
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all text-xs"
+                              />
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                Subjects (JSON Array) <span className="text-[9px] lowercase opacity-60 font-normal">Optional</span>
+                              </p>
+                              <input
+                                type="text"
+                                value={editForm.subjects}
+                                onChange={e => setEditForm((f: any) => ({ ...f, subjects: e.target.value }))}
+                                placeholder='e.g. ["Physics", "Math"]'
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Save / Cancel */}
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              disabled={isSavingListing}
+                              onClick={async () => {
+                                // Basic client-side validation for numbers
+                                const p = parseInt(editForm.price);
+                                const q = parseInt(editForm.quantity);
+                                if (isNaN(p) || p < 0) return setActionMsg('Price must be a valid number ≥ 0');
+                                if (isNaN(q) || q < 0) return setActionMsg('Quantity must be a valid number ≥ 0');
+
+                                // Prep payload
+                                const payload = { ...editForm, price: p, quantity: q };
+                                if (!payload.imageUrls.trim()) delete payload.imageUrls;
+                                if (!payload.subjects.trim()) delete payload.subjects;
+
+                                setIsSavingListing(true);
+                                try {
+                                  const res = await apiRequest(`/api/admin/listings/${selectedListing.id}`, {
+                                    method: 'PATCH',
+                                    body: JSON.stringify(payload),
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok) {
+                                    setActionMsg('Listing updated successfully');
+                                    setEditingListing(false);
+                                    fetchData();
+                                    setTimeout(() => setActionMsg(''), 3000);
+                                  } else {
+                                    setActionMsg(data.error || 'Update failed');
+                                  }
+                                } catch {
+                                  setActionMsg('Update failed');
+                                } finally {
+                                  setIsSavingListing(false);
+                                }
+                              }}
+                              className="flex items-center gap-2 px-5 py-2.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 rounded-xl text-sm font-black transition-all disabled:opacity-60 shadow-lg shadow-[#FFC000]/20"
+                            >
+                              {isSavingListing ? (
+                                <span className="h-4 w-4 border-2 border-slate-900/30 border-t-slate-900 animate-spin rounded-full" />
+                              ) : (
+                                <Save className="h-4 w-4" />
+                              )}
+                              Save Changes
+                            </button>
+                            <button
+                              onClick={() => setEditingListing(false)}
+                              className="px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-xl text-sm font-bold transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
                     </DetailPanel>
                   ) : (
                     <motion.div key="listing-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
