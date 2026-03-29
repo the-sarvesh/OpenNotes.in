@@ -752,7 +752,11 @@ router.post("/resend-verification", async (req, res, next) => {
 
 // ── POST /api/auth/logout ────────────────────────────────────────────────────
 router.post("/logout", (req, res) => {
-  res.clearCookie("auth_token");
+  res.clearCookie("auth_token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  });
   res.json({ message: "Logged out successfully" });
 });
 

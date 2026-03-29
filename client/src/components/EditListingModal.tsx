@@ -411,7 +411,7 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
                           onChange={(e) => {
                             const val = e.target.value;
                             set('originalPrice', val);
-                            const discount = settings?.recommended_discount_percentage || 40;
+                            const discount = settings?.recommended_discount_percentage ?? 40;
                             const recommended = Math.max(0, Math.round(Number(val) * (1 - discount / 100)));
                             if (val && !isNaN(recommended)) {
                               set('price', recommended.toString());
@@ -424,8 +424,8 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
                       {form.originalPrice && Number(form.originalPrice) > 0 && (
                         <p className="text-[10px] text-emerald-600 font-bold mt-2 flex items-center gap-1.5 leading-snug">
                           <Sparkles className="h-3 w-3 shrink-0" />
-                          Recommended Price: ₹{Math.round(Number(form.originalPrice) * (1 - (settings?.recommended_discount_percentage || 40) / 100))}{' '}
-                          ({settings?.recommended_discount_percentage || 40}% off helps items sell 3x faster!)
+                          Recommended Price: ₹{Math.round(Number(form.originalPrice) * (1 - (settings?.recommended_discount_percentage ?? 40) / 100))}{' '}
+                          ({settings?.recommended_discount_percentage ?? 40}% off helps items sell 3x faster!)
                         </p>
                       )}
                     </div>

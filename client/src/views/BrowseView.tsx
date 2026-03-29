@@ -39,6 +39,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   const [selectedSemester, setSelectedSemester] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
   const [selectedLocation, setSelectedLocation] = useState('All');
+  const [availableLocations, setAvailableLocations] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const observer = useRef<IntersectionObserver | null>(null);
 
@@ -59,6 +60,14 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   useEffect(() => {
     setNotes([]); setPage(1); setHasMore(true); setLoading(true);
   }, [debouncedSearch, selectedSemester, selectedType, selectedLocation, refreshKey]);
+
+  useEffect(() => {
+    // Fetch unique locations currently used in listings for "Normalized" filtering
+    apiRequest('/api/listings/locations')
+      .then(r => r.json())
+      .then(setAvailableLocations)
+      .catch(console.error);
+  }, []);
 
   const fetchNotes = useCallback((pageNum: number) => {
     const params = new URLSearchParams();
@@ -214,19 +223,22 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                   >
                     All Locations
                   </button>
-                  {LOCATIONS.filter(l => l !== 'Other (Manual)').map(loc => (
-                    <button
-                      key={loc}
-                      onClick={() => setSelectedLocation(loc)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
-                        selectedLocation === loc
-                          ? 'bg-primary text-black border-primary shadow-sm shadow-primary/20'
-                          : 'bg-background border-border text-text-muted hover:border-primary/30 hover:text-text-main'
-                      }`}
-                    >
-                      {loc}
-                    </button>
-                  ))}
+                  {/* Merge standard locations with dynamic ones while avoiding duplicates */}
+                  {[...new Set([...LOCATIONS.filter(l => l !== 'Other (Manual)'), ...availableLocations])]
+                    .sort((a, b) => a.localeCompare(b))
+                    .map(loc => (
+                      <button
+                        key={loc}
+                        onClick={() => setSelectedLocation(loc)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                          selectedLocation === loc
+                            ? 'bg-primary text-black border-primary shadow-sm shadow-primary/20'
+                            : 'bg-background border-border text-text-muted hover:border-primary/30 hover:text-text-main'
+                        }`}
+                      >
+                        {loc}
+                      </button>
+                    ))}
                 </div>
               </div>
             </div>

@@ -3,6 +3,111 @@ import db from "../db/database.js";
 import { authenticate, AuthRequest } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/admin.js";
 import { createNotification } from "../utils/notifications.js";
+import { v4 as uuidv4 } from "uuid";
+
+let isProcessingBroadcast = false;
+
+/**
+ * Background worker to process pending Telegram broadcast jobs.
+ * This runs out-of-band using setImmediate to avoid blocking the request cycle.
+ */
+async function processBroadcastJob() {
+  if (isProcessingBroadcast) return;
+  isProcessingBroadcast = true;
+
+  try {
+    // 1. Find next pending job
+    const jobRes = await db.execute({
+      sql: "SELECT * FROM broadcast_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1",
+      args: []
+    });
+    const job = jobRes.rows[0] as any;
+    if (!job) {
+      isProcessingBroadcast = false;
+      return;
+    }
+
+    console.info(`[Admin Broadcast] Starting job ${job.id}`);
+
+    // 2. Mark job as processing
+    await db.execute({
+      sql: "UPDATE broadcast_jobs SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      args: [job.id]
+    });
+
+    // 3. Get all users with Telegram linked
+    const usersRes = await db.execute({
+      sql: "SELECT id, name, telegram_chat_id FROM users WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id != ''",
+      args: [],
+    });
+    const users = usersRes.rows as any[];
+    
+    await db.execute({
+      sql: "UPDATE broadcast_jobs SET total_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      args: [users.length, job.id]
+    });
+
+    if (users.length === 0) {
+      await db.execute({
+        sql: "UPDATE broadcast_jobs SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        args: [job.id]
+      });
+      isProcessingBroadcast = false;
+      return;
+    }
+
+    // 4. Batch Delivery
+    const { sendTelegramMessage, telegramTemplates } = await import("../utils/telegram.js");
+    const broadcastTitle = job.title || "📢 Update from OpenNotes.in";
+    const text = telegramTemplates.generic(broadcastTitle, job.message, job.link_url);
+
+    let sent = 0;
+    let failed = 0;
+    const BATCH_SIZE = 20;
+    const BATCH_DELAY_MS = 1000;
+
+    for (let i = 0; i < users.length; i += BATCH_SIZE) {
+      const batch = users.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((u: any) => sendTelegramMessage(u.telegram_chat_id, text))
+      );
+
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) sent++;
+        else failed++;
+      }
+
+      // Update incremental progress
+      await db.execute({
+        sql: "UPDATE broadcast_jobs SET processed_count = ?, error_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        args: [sent, failed, job.id]
+      });
+
+      // Simple rate limit compliance for Telegram (30 msg/sec)
+      if (i + BATCH_SIZE < users.length) {
+        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+
+    // 5. Finalize Job
+    await db.execute({
+      sql: "UPDATE broadcast_jobs SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      args: [job.id]
+    });
+    console.info(`[Admin Broadcast] Job ${job.id} completed. Sent: ${sent}, Failed: ${failed}`);
+
+  } catch (error: any) {
+    console.error("[Admin Broadcast Worker] Fatal Error:", error);
+    await db.execute({
+      sql: "UPDATE broadcast_jobs SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE status = 'processing'",
+      args: [error.message || "Unknown worker error"]
+    });
+  } finally {
+    isProcessingBroadcast = false;
+    // Check if another job was queued while we were working
+    setImmediate(processBroadcastJob);
+  }
+}
 
 
 const router = express.Router();
@@ -872,6 +977,19 @@ router.post("/subject-links", async (req, res, next) => {
   }
 });
 
+// GET /api/admin/broadcast/status — get most recent broadcast job status for dashboard polling
+router.get("/broadcast/status", async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: "SELECT * FROM broadcast_jobs ORDER BY created_at DESC LIMIT 1",
+      args: []
+    });
+    res.json(result.rows[0] || null);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── POST /api/admin/broadcast — send Telegram notification to all linked users ──
 router.post("/broadcast", async (req, res, next) => {
   try {
@@ -880,46 +998,30 @@ router.post("/broadcast", async (req, res, next) => {
       return res.status(400).json({ error: "message is required" });
     }
 
-    // Dynamically import to avoid circular deps
-    const { sendTelegramMessage, telegramTemplates } = await import("../utils/telegram.js");
+    // 1. Check if a job is already processing to prevent spam/concurrency
+    const activeJob = await db.execute({
+      sql: "SELECT id FROM broadcast_jobs WHERE status IN ('pending', 'processing') LIMIT 1",
+      args: []
+    });
+    if (activeJob.rows.length > 0) {
+      return res.status(409).json({ error: "A broadcast job is already in progress. Please wait for it to complete." });
+    }
 
-    // Get all users with Telegram linked
-    const usersRes = await db.execute({
-      sql: "SELECT id, name, telegram_chat_id FROM users WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id != ''",
-      args: [],
+    // 2. Queue the job in DB for persistence
+    const jobId = uuidv4();
+    await db.execute({
+      sql: "INSERT INTO broadcast_jobs (id, title, message, link_url, status) VALUES (?, ?, ?, ?, 'pending')",
+      args: [jobId, title || null, message, link_url || null]
     });
 
-    const users = usersRes.rows as any[];
-    if (users.length === 0) {
-      return res.json({ sent: 0, failed: 0, total: 0, message: "No users have Telegram connected." });
-    }
+    // 3. Trigger worker on next event loop tick (deferral pattern)
+    setImmediate(processBroadcastJob);
 
-    const broadcastTitle = title || "📢 Update from OpenNotes.in";
-    const text = telegramTemplates.generic(broadcastTitle, message, link_url);
-
-    let sent = 0;
-    let failed = 0;
-
-    // Send in batches of 20 with a small delay to respect Telegram rate limits (30 msgs/sec)
-    const BATCH_SIZE = 20;
-    const BATCH_DELAY_MS = 1000;
-
-    for (let i = 0; i < users.length; i += BATCH_SIZE) {
-      const batch = users.slice(i, i + BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map((u: any) => sendTelegramMessage(u.telegram_chat_id, text))
-      );
-      for (const r of results) {
-        if (r.status === "fulfilled" && r.value) sent++;
-        else failed++;
-      }
-      if (i + BATCH_SIZE < users.length) {
-        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
-      }
-    }
-
-    console.info(`[Admin Broadcast] Sent: ${sent}, Failed: ${failed}, Total: ${users.length}`);
-    res.json({ sent, failed, total: users.length });
+    console.info(`[Admin Broadcast] New job queued: ${jobId}`);
+    res.json({ 
+      message: "Broadcast scheduled! Notifications are being sent in the background.", 
+      jobId 
+    });
   } catch (error) {
     next(error);
   }

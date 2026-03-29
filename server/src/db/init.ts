@@ -31,7 +31,7 @@ const initDb = async () => {
         semester TEXT NOT NULL,
         condition TEXT NOT NULL,
         price INTEGER NOT NULL,
-        original_price INTEGER,
+        original_price INTEGER CHECK (original_price >= 0 OR original_price IS NULL),
         location TEXT NOT NULL,
         image_url TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
@@ -218,12 +218,18 @@ const initDb = async () => {
         FOREIGN KEY (uploader_id) REFERENCES users(id)
       );
 
-      CREATE TABLE IF NOT EXISTS subject_drive_links (
-        semester TEXT NOT NULL,
-        subject_name TEXT NOT NULL,
-        drive_link TEXT NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (semester, subject_name)
+      CREATE TABLE IF NOT EXISTS broadcast_jobs (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'pending',
+        title TEXT,
+        message TEXT NOT NULL,
+        link_url TEXT,
+        total_count INTEGER DEFAULT 0,
+        processed_count INTEGER DEFAULT 0,
+        error_count INTEGER DEFAULT 0,
+        error_message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
@@ -309,6 +315,8 @@ const initDb = async () => {
       "UPDATE orders SET total_amount = COALESCE((SELECT SUM(price_at_purchase * quantity) FROM order_items WHERE order_items.order_id = orders.id), 0)",
       "UPDATE orders SET platform_fee = COALESCE((SELECT SUM(platform_fee) FROM order_items WHERE order_items.order_id = orders.id), 0)",
       "CREATE TABLE IF NOT EXISTS subject_drive_links (semester TEXT NOT NULL, subject_name TEXT NOT NULL, drive_link TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (semester, subject_name))",
+      "CREATE INDEX IF NOT EXISTS idx_listings_location ON listings(location)",
+      "CREATE TABLE IF NOT EXISTS broadcast_jobs (id TEXT PRIMARY KEY, admin_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', title TEXT NOT NULL, message TEXT NOT NULL, link_url TEXT, total_users INTEGER NOT NULL DEFAULT 0, sent_count INTEGER NOT NULL DEFAULT 0, failed_count INTEGER NOT NULL DEFAULT 0, error_message TEXT, started_at DATETIME, finished_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (admin_id) REFERENCES users(id))",
     ];
 
     for (const migration of migrations) {

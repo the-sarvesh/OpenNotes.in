@@ -131,6 +131,13 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
   const set = (key: keyof FormData, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
+  // Clear stale data when switching material types or donation status
+  useEffect(() => {
+    if (form.isDonation || !['PPT', 'Book'].includes(form.materialType)) {
+      set('originalPrice', '');
+    }
+  }, [form.isDonation, form.materialType]);
+
   const uploadFile = async (index: number, file: File) => {
     try {
       const fd = new FormData();
@@ -215,8 +222,8 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
           course_code: form.isMultipleSubjects ? 'Multiple' : form.courseCode,
           semester: form.semester,
           condition: form.condition,
-          original_price: form.originalPrice,
-          price: form.price,
+          original_price: ['PPT', 'Book'].includes(form.materialType) && !form.isDonation ? form.originalPrice : undefined,
+          price: form.isDonation ? 0 : form.price,
           location: form.location === 'Other (Manual)' ? form.customLocation : form.location,
           quantity: form.quantity,
           material_type: typeMap[form.materialType] || 'other',
@@ -575,7 +582,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                           const val = e.target.value;
                           set('originalPrice', val);
                           // Auto recommended math
-                          const discount = settings?.recommended_discount_percentage || 40;
+                          const discount = settings?.recommended_discount_percentage ?? 40;
                           const recommended = Math.max(0, Math.round(Number(val) * (1 - discount / 100)));
                           if (val && !isNaN(recommended)) {
                              // Only auto-update final price if it is completely empty or it matched the previous auto setting
@@ -600,8 +607,8 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                   </div>
                   {form.originalPrice && form.price && Number(form.originalPrice) > Number(form.price) && (
                     <p className="text-[10px] text-green-500 font-bold mt-1.5 flex items-center gap-1.5 leading-snug">
-                      ✨ Recommended Price: ₹{Math.round(Number(form.originalPrice) * (1 - (settings?.recommended_discount_percentage || 40) / 100))} 
-                      ({settings?.recommended_discount_percentage || 40}% off helps items sell 3x faster!)
+                      ✨ Recommended Price: ₹{Math.round(Number(form.originalPrice) * (1 - (settings?.recommended_discount_percentage ?? 40) / 100))} 
+                      ({settings?.recommended_discount_percentage ?? 40}% off helps items sell 3x faster!)
                     </p>
                   )}
                   {(!form.originalPrice || Number(form.originalPrice) <= Number(form.price)) && (

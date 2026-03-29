@@ -155,7 +155,7 @@ export const AdminView: React.FC = () => {
           const data = await res.json();
           setDbSettings(data);
           setLocalFee(String(data.platform_fee_percentage));
-          setLocalDiscount(String(data.recommended_discount_percentage || 40));
+          setLocalDiscount(String(data.recommended_discount_percentage ?? 40));
         }
       }
     } catch (err) {
@@ -1445,15 +1445,15 @@ export const AdminView: React.FC = () => {
                                   } else {
                                     const data = await res.json();
                                     setActionMsg(data.error || 'Update failed');
-                                    setLocalDiscount(String(dbSettings.recommended_discount_percentage || 40));
+                                    setLocalDiscount(String(dbSettings.recommended_discount_percentage ?? 40));
                                   }
                                 } catch {
                                   setActionMsg('Network error');
-                                  setLocalDiscount(String(dbSettings.recommended_discount_percentage || 40));
+                                  setLocalDiscount(String(dbSettings.recommended_discount_percentage ?? 40));
                                 }
                                 setTimeout(() => setActionMsg(''), 3000);
                               } else {
-                                setLocalDiscount(String(dbSettings.recommended_discount_percentage || 40));
+                                setLocalDiscount(String(dbSettings.recommended_discount_percentage ?? 40));
                               }
                             }}
                             className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/50 flex-1"
