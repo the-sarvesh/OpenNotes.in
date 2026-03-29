@@ -270,6 +270,9 @@ router.get("/users/:id/activity", async (req, res, next) => {
 // PATCH /api/admin/users/:id/role — change user role
 router.patch("/users/:id/role", async (req, res, next) => {
   try {
+    if (req.user?.id === req.params.id) {
+      return res.status(403).json({ error: "Cannot modify your own role" });
+    }
     const { role } = req.body;
     if (!["user", "admin"].includes(role)) {
       return res.status(400).json({ error: "Invalid role" });
@@ -287,8 +290,11 @@ router.patch("/users/:id/role", async (req, res, next) => {
 // PATCH /api/admin/users/:id/status — block/unblock user
 router.patch("/users/:id/status", async (req, res, next) => {
   try {
+    if (req.user?.id === req.params.id) {
+      return res.status(403).json({ error: "Cannot modify your own status" });
+    }
     const { status } = req.body;
-    if (!["active", "blocked"].includes(status)) {
+    if (!["active", "blocked", "deleted"].includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
     await db.execute({
