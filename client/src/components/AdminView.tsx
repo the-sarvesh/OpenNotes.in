@@ -407,6 +407,8 @@ export const AdminView: React.FC = () => {
                                   material_type: selectedListing.material_type || 'ppt',
                                   preferred_meetup_spot: selectedListing.preferred_meetup_spot || '',
                                   meetup_location: selectedListing.meetup_location || '',
+                                  imageUrls: '',
+                                  subjects: '',
                                 });
                                 setEditingListing(true);
                               }}
@@ -598,16 +600,55 @@ export const AdminView: React.FC = () => {
                             </div>
                           </div>
 
+                          {/* Raw Image URLs & Subjects (for advanced edits) */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                Image URLs (JSON Array) <span className="text-[9px] lowercase opacity-60 font-normal">Optional</span>
+                              </p>
+                              <input
+                                type="text"
+                                value={editForm.imageUrls}
+                                onChange={e => setEditForm((f: any) => ({ ...f, imageUrls: e.target.value }))}
+                                placeholder='e.g. ["https://img1...", "https://img2..."]'
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all text-xs"
+                              />
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 flex items-center gap-1.5">
+                                Subjects (JSON Array) <span className="text-[9px] lowercase opacity-60 font-normal">Optional</span>
+                              </p>
+                              <input
+                                type="text"
+                                value={editForm.subjects}
+                                onChange={e => setEditForm((f: any) => ({ ...f, subjects: e.target.value }))}
+                                placeholder='e.g. ["Physics", "Math"]'
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all text-xs"
+                              />
+                            </div>
+                          </div>
+
                           {/* Save / Cancel */}
                           <div className="flex gap-3 pt-2">
                             <button
                               disabled={isSavingListing}
                               onClick={async () => {
+                                // Basic client-side validation for numbers
+                                const p = parseInt(editForm.price);
+                                const q = parseInt(editForm.quantity);
+                                if (isNaN(p) || p < 0) return setActionMsg('Price must be a valid number ≥ 0');
+                                if (isNaN(q) || q < 0) return setActionMsg('Quantity must be a valid number ≥ 0');
+
+                                // Prep payload
+                                const payload = { ...editForm, price: p, quantity: q };
+                                if (!payload.imageUrls.trim()) delete payload.imageUrls;
+                                if (!payload.subjects.trim()) delete payload.subjects;
+
                                 setIsSavingListing(true);
                                 try {
                                   const res = await apiRequest(`/api/admin/listings/${selectedListing.id}`, {
                                     method: 'PATCH',
-                                    body: JSON.stringify(editForm),
+                                    body: JSON.stringify(payload),
                                   });
                                   const data = await res.json();
                                   if (res.ok) {
