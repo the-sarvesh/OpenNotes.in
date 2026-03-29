@@ -26,5 +26,8 @@ export function mapListing(item: any): Note {
     views: Number(item.views || 0),
     isMultipleSubjects: Boolean(item.is_multiple_subjects),
     subjects: Array.isArray(item.subjects) ? item.subjects : [],
+    originalPrice: (item.original_price === null || item.original_price === undefined || item.original_price === '')
+      ? undefined
+      : (Number.isFinite(Number(item.original_price)) ? Number(item.original_price) : undefined),
   };
 }

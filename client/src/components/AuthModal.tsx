@@ -235,6 +235,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (mode === "register") {
         setOtpType("verify");
+        if (data.message) setSuccess(data.message);
         setMode("otp_verify");
       } else {
         login(data.user, data.token);
@@ -282,6 +283,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
       setOtpType("reset");
+      if (data.message) setSuccess(data.message);
       setMode("otp_verify");
     } catch (err: any) { setError(err.message); }
     finally { setIsLoading(false); }

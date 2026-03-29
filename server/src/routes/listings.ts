@@ -14,10 +14,26 @@ const router = express.Router();
 
 import { upload, getFileUrl } from "../utils/cloudinary.js";
 
+// GET /api/listings/locations — get all unique locations from active listings
+router.get("/locations", async (req, res, next) => {
+  try {
+    const result = await db.execute(`
+      SELECT DISTINCT location 
+      FROM listings 
+      WHERE status = 'active' AND location IS NOT NULL AND location != ''
+      ORDER BY location ASC
+    `);
+    const locations = result.rows.map((row: any) => row.location);
+    res.json(locations);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get all listings (with filtering)
 router.get("/", async (req, res, next) => {
   try {
-    const { semester, search, material_type } = req.query;
+    const { semester, search, material_type, location } = req.query;
     let query = `
       SELECT l.*, u.name as seller_name, COALESCE(AVG(r.rating), 0) as seller_rating
       FROM listings l
@@ -34,6 +50,7 @@ router.get("/", async (req, res, next) => {
 
     const searchStr = typeof search === 'string' ? search : '';
     const materialTypeStr = typeof material_type === 'string' ? material_type : '';
+    const locationStr = typeof location === 'string' ? location : '';
 
     if (searchStr) {
       query += " AND (l.course_code LIKE ? OR l.title LIKE ?)";
@@ -43,6 +60,11 @@ router.get("/", async (req, res, next) => {
     if (materialTypeStr) {
       query += " AND l.material_type = ?";
       args.push(materialTypeStr);
+    }
+
+    if (locationStr) {
+      query += " AND LOWER(l.location) = LOWER(?)";
+      args.push(locationStr);
     }
 
     const page = parseInt(req.query.page as string) || 1;
@@ -195,6 +217,14 @@ router.post(
       // Input Validation
       const parsedPrice = parseInt(price);
       const parsedQuantity = quantity !== undefined ? parseInt(quantity) : 1;
+      
+      let parsedOriginalPrice = null;
+      if (req.body.original_price !== undefined && req.body.original_price !== null && req.body.original_price !== '') {
+        parsedOriginalPrice = Number(req.body.original_price);
+        if (isNaN(parsedOriginalPrice) || parsedOriginalPrice < 0) {
+          return res.status(400).json({ error: "Original price must be 0 or a positive number" });
+        }
+      }
 
       if (isNaN(parsedPrice) || parsedPrice < 0) {
         return res.status(400).json({ error: "Price must be 0 or a positive number" });
@@ -219,8 +249,8 @@ router.post(
       const deliveryMethod = delivery_method || "in_person";
       const meetupLoc = meetup_location || null;
 await db.execute({
-  sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+  sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, original_price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
   args: [
     listingId,
     sellerId,
@@ -230,6 +260,7 @@ await db.execute({
     semester,
     condition,
     parsedPrice,
+    parsedOriginalPrice,
     location,
     mainImageUrl,
     parsedQuantity,
@@ -415,6 +446,7 @@ router.put("/:id", authenticate as any, async (req: AuthRequest, res, next) => {
       meetup_location,
       imageUrls: rawImageUrls,
       subjects: rawSubjects,
+      original_price,
     } = req.body;
 
     // Validate editable fields
@@ -436,12 +468,25 @@ router.put("/:id", authenticate as any, async (req: AuthRequest, res, next) => {
       if (isNaN(parsedQuantity) || parsedQuantity <= 0) return res.status(400).json({ error: "Quantity must be a positive number" });
     }
 
+    let parsedOriginalPrice = listing.original_price;
+    if (original_price !== undefined) {
+      if (original_price === null || original_price === '') {
+        parsedOriginalPrice = null;
+      } else {
+        parsedOriginalPrice = Number(original_price);
+        if (isNaN(parsedOriginalPrice) || parsedOriginalPrice < 0) {
+          return res.status(400).json({ error: "Original price must be 0 or a positive number" });
+        }
+      }
+    }
+
     // Build dynamic update
     const setClauses: string[] = [];
     const args: any[] = [];
 
     if (title !== undefined)               { setClauses.push("title = ?");                    args.push(title.trim()); }
     if (description !== undefined)         { setClauses.push("description = ?");               args.push(description || null); }
+    if (original_price !== undefined)      { setClauses.push("original_price = ?");            args.push(parsedOriginalPrice); }
     if (price !== undefined)               { setClauses.push("price = ?");                     args.push(parsedPrice); }
     if (quantity !== undefined)            { setClauses.push("quantity = ?");                  args.push(parsedQuantity); }
     if (condition !== undefined)           { setClauses.push("condition = ?");                 args.push(condition); }

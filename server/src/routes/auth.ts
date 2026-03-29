@@ -33,8 +33,8 @@ const TESTING_EMAILS: string[] = [
 
 const isAllowedEmail = (email: string): boolean => {
   // ── Development Mode Toggle ────────────────────────────────────────────────
-  // Allow all email domains in development
-  if (process.env.NODE_ENV === "development") return true;
+  // Allow all email domains in non-production environments
+  if (process.env.NODE_ENV !== "production") return true;
 
   const lower = email.toLowerCase().trim();
   if (TESTING_EMAILS.includes(lower)) return true;
@@ -317,7 +317,10 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
     });
 
     res.status(201).json({
-      message: "Registration successful! Please check your email for the 6-digit verification code.",
+      message: process.env.NODE_ENV !== "production" 
+        ? `Registration successful! (Local Dev OTP: ${otp})` 
+        : "Registration successful! Please check your email for the 6-digit verification code.",
+      devOtp: process.env.NODE_ENV !== "production" ? otp : undefined,
       requiresVerification: true,
       user: {
         id: userId,
@@ -591,7 +594,12 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
       console.error("[Forgot Password Email Error]:", err);
     });
 
-    return res.json(GENERIC_OK);
+    return res.json({
+      message: process.env.NODE_ENV !== "production"
+        ? `If an account with that email exists, a reset link has been sent. (Local Dev OTP: ${otp})`
+        : GENERIC_OK.message,
+      devOtp: process.env.NODE_ENV !== "production" ? otp : undefined,
+    });
   } catch (error) {
     next(error);
   }
@@ -744,7 +752,11 @@ router.post("/resend-verification", async (req, res, next) => {
 
 // ── POST /api/auth/logout ────────────────────────────────────────────────────
 router.post("/logout", (req, res) => {
-  res.clearCookie("auth_token");
+  res.clearCookie("auth_token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  });
   res.json({ message: "Logged out successfully" });
 });
 

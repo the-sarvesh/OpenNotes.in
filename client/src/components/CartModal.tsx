@@ -24,6 +24,8 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
 
   const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
   const total = cart.reduce((sum, item) => sum + item.note.price * item.quantity, 0);
+  const originalTotal = cart.reduce((sum, item) => sum + (item.note.originalPrice || item.note.price) * item.quantity, 0);
+  const totalSavings = originalTotal - total;
   const fee = Math.round(total * (PLATFORM_FEE_PERCENTAGE / 100));
   const cashAtMeetup = total - fee;
 
@@ -127,7 +129,14 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
                             className="w-7 h-7 flex items-center justify-center text-text-muted hover:text-primary disabled:opacity-30 transition-colors text-sm font-bold"
                           >+</button>
                         </div>
-                        <span className="text-sm font-black text-primary">{formatRupee(item.note.price * item.quantity)}</span>
+                        <div className="flex flex-col items-end leading-none">
+                          {item.note.originalPrice && item.note.originalPrice > item.note.price && (
+                            <span className="text-[9px] font-bold text-text-muted line-through mb-[1px]">
+                              {formatRupee(item.note.originalPrice * item.quantity)}
+                            </span>
+                          )}
+                          <span className="text-sm font-black text-primary">{formatRupee(item.note.price * item.quantity)}</span>
+                        </div>
                       </div>
                     </div>
                   </motion.div>
@@ -201,7 +210,14 @@ export const CartModal: React.FC<CartModalProps> = ({ isOpen, onClose, onCheckou
               {/* Total row */}
               <div className="flex items-baseline justify-between px-1">
                 <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Order Total</span>
-                <span className="text-2xl font-black text-text-main">{formatRupee(total)}</span>
+                <div className="flex flex-col items-end leading-none">
+                  {totalSavings > 0 && (
+                    <span className="text-[10px] font-bold text-emerald-500 mb-1">
+                      You save {formatRupee(totalSavings)}
+                    </span>
+                  )}
+                  <span className="text-2xl font-black text-text-main">{formatRupee(total)}</span>
+                </div>
               </div>
 
               {/* Checkout button */}

@@ -25,6 +25,7 @@ export interface Note {
   preferredMeetupSpot?: string;
   meetupLocation?: string;
   views?: number;
+  originalPrice?: number;
 }
 
 // ── Condition colour map ───────────────────────────────────────────
@@ -165,9 +166,25 @@ export const NoteCard = ({
           </div>
           <div className="text-right">
             <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5">Price</p>
-            <p className="text-base sm:text-lg font-black text-text-main tracking-tight">
-              {note.price === 0 ? 'FREE' : `₹${Math.round(note.price)}`}
-            </p>
+            {note.originalPrice && note.originalPrice > note.price ? (
+              <div className="flex flex-col items-end">
+                <div className="flex items-center gap-1.5 mb-[-2px]">
+                  <span className="text-[9px] font-black text-emerald-600 bg-emerald-500/10 px-1 py-[1px] rounded tracking-widest">
+                    {Math.round(((note.originalPrice - note.price) / note.originalPrice) * 100)}% OFF
+                  </span>
+                  <span className="text-[10px] font-bold text-text-muted line-through">
+                    ₹{Math.round(note.originalPrice)}
+                  </span>
+                </div>
+                <p className="text-base sm:text-lg font-black text-text-main tracking-tight">
+                  {note.price === 0 ? 'FREE' : `₹${Math.round(note.price)}`}
+                </p>
+              </div>
+            ) : (
+              <p className="text-base sm:text-lg font-black text-text-main tracking-tight">
+                {note.price === 0 ? 'FREE' : `₹${Math.round(note.price)}`}
+              </p>
+            )}
           </div>
         </div>
 

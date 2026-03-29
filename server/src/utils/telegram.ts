@@ -718,11 +718,11 @@ export const telegramTemplates = {
   },
 
   generic: (title: string, message: string, linkUrl?: string) => 
-    `<b>${title}</b>\n\n${message}${linkUrl ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : `\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`}`
+    `<b>${escapeHtml(title)}</b>\n\n${escapeHtml(message)}${linkUrl ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : `\n\n<a href="${process.env.FRONTEND_URL || 'https://opennotes.in'}/">Open OpenNotes.in →</a>`}`
 };
 
 /** Escape user-supplied strings so they're safe inside Telegram HTML parse_mode. */
-const escapeHtml = (str: string): string =>
+export const escapeHtml = (str: string): string =>
   str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**

@@ -3,6 +3,111 @@ import db from "../db/database.js";
 import { authenticate, AuthRequest } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/admin.js";
 import { createNotification } from "../utils/notifications.js";
+import { v4 as uuidv4 } from "uuid";
+
+let isProcessingBroadcast = false;
+
+/**
+ * Background worker to process pending Telegram broadcast jobs.
+ * This runs out-of-band using setImmediate to avoid blocking the request cycle.
+ */
+async function processBroadcastJob() {
+  if (isProcessingBroadcast) return;
+  isProcessingBroadcast = true;
+
+  try {
+    // 1. Find next pending job
+    const jobRes = await db.execute({
+      sql: "SELECT * FROM broadcast_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1",
+      args: []
+    });
+    const job = jobRes.rows[0] as any;
+    if (!job) {
+      isProcessingBroadcast = false;
+      return;
+    }
+
+    console.info(`[Admin Broadcast] Starting job ${job.id}`);
+
+    // 2. Mark job as processing
+    await db.execute({
+      sql: "UPDATE broadcast_jobs SET status = 'processing', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      args: [job.id]
+    });
+
+    // 3. Get all users with Telegram linked
+    const usersRes = await db.execute({
+      sql: "SELECT id, name, telegram_chat_id FROM users WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id != ''",
+      args: [],
+    });
+    const users = usersRes.rows as any[];
+    
+    await db.execute({
+      sql: "UPDATE broadcast_jobs SET total_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      args: [users.length, job.id]
+    });
+
+    if (users.length === 0) {
+      await db.execute({
+        sql: "UPDATE broadcast_jobs SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        args: [job.id]
+      });
+      isProcessingBroadcast = false;
+      return;
+    }
+
+    // 4. Batch Delivery
+    const { sendTelegramMessage, telegramTemplates } = await import("../utils/telegram.js");
+    const broadcastTitle = job.title || "📢 Update from OpenNotes.in";
+    const text = telegramTemplates.generic(broadcastTitle, job.message, job.link_url);
+
+    let sent = 0;
+    let failed = 0;
+    const BATCH_SIZE = 20;
+    const BATCH_DELAY_MS = 1000;
+
+    for (let i = 0; i < users.length; i += BATCH_SIZE) {
+      const batch = users.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((u: any) => sendTelegramMessage(u.telegram_chat_id, text))
+      );
+
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) sent++;
+        else failed++;
+      }
+
+      // Update incremental progress
+      await db.execute({
+        sql: "UPDATE broadcast_jobs SET processed_count = ?, error_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        args: [sent, failed, job.id]
+      });
+
+      // Simple rate limit compliance for Telegram (30 msg/sec)
+      if (i + BATCH_SIZE < users.length) {
+        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+
+    // 5. Finalize Job
+    await db.execute({
+      sql: "UPDATE broadcast_jobs SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      args: [job.id]
+    });
+    console.info(`[Admin Broadcast] Job ${job.id} completed. Sent: ${sent}, Failed: ${failed}`);
+
+  } catch (error: any) {
+    console.error("[Admin Broadcast Worker] Fatal Error:", error);
+    await db.execute({
+      sql: "UPDATE broadcast_jobs SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE status = 'processing'",
+      args: [error.message || "Unknown worker error"]
+    });
+  } finally {
+    isProcessingBroadcast = false;
+    // Check if another job was queued while we were working
+    setImmediate(processBroadcastJob);
+  }
+}
 
 
 const router = express.Router();
@@ -120,31 +225,31 @@ router.patch("/listings/:id", async (req, res, next) => {
     if (!listing) return res.status(404).json({ error: "Listing not found" });
 
     // Validation
-    const VALID_CONDITIONS = ["new", "like_new", "good", "fair", "poor", "Like New", "Good", "Fair", "Heavily Annotated"];
-    const VALID_SEMESTERS = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8"];
-    const VALID_MATERIALS = ["handwritten", "printed", "digital", "book", "ppt", "other"];
+    const VALID_CONDITIONS = ["new", "like_new", "good", "fair", "poor", "Like New", "Good", "Fair", "Heavily Annotated", ""];
+    const VALID_SEMESTERS = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8", ""];
+    const VALID_MATERIALS = ["handwritten", "printed", "digital", "book", "ppt", "other", ""];
 
     if (condition !== undefined && !VALID_CONDITIONS.includes(condition)) {
-      return res.status(400).json({ error: "Invalid condition value" });
+      return res.status(400).json({ error: `Invalid condition value: ${condition}` });
     }
     if (semester !== undefined && !VALID_SEMESTERS.includes(semester)) {
-      return res.status(400).json({ error: "Invalid semester value" });
+      return res.status(400).json({ error: `Invalid semester value: ${semester}` });
     }
     if (material_type !== undefined && !VALID_MATERIALS.includes(material_type)) {
-      return res.status(400).json({ error: "Invalid material type value" });
+      return res.status(400).json({ error: `Invalid material type value: ${material_type}` });
     }
 
     const setClauses: string[] = [];
     const args: any[] = [];
 
     if (title !== undefined && title.trim()) { setClauses.push("title = ?"); args.push(title.trim()); }
-    if (description !== undefined)           { setClauses.push("description = ?"); args.push(description || null); }
+    if (description !== undefined) { setClauses.push("description = ?"); args.push(description || null); }
     if (price !== undefined) {
       const p = parseInt(price);
       if (isNaN(p) || p < 0) {
         return res.status(400).json({ error: "Invalid price value" });
       }
-      setClauses.push("price = ?"); 
+      setClauses.push("price = ?");
       args.push(p);
     }
     if (quantity !== undefined) {
@@ -159,14 +264,18 @@ router.patch("/listings/:id", async (req, res, next) => {
         setClauses.push("status = 'active'");
       }
     }
-    
-    if (condition !== undefined)             { setClauses.push("condition = ?");              args.push(condition); }
-    if (location !== undefined)              { setClauses.push("location = ?");               args.push(location); }
-    if (semester !== undefined)              { setClauses.push("semester = ?");               args.push(semester); }
-    if (course_code !== undefined)           { setClauses.push("course_code = ?");            args.push(course_code); }
-    if (material_type !== undefined)         { setClauses.push("material_type = ?");          args.push(material_type); }
-    if (preferred_meetup_spot !== undefined) { setClauses.push("preferred_meetup_spot = ?");  args.push(preferred_meetup_spot || null); }
-    if (meetup_location !== undefined)       { setClauses.push("meetup_location = ?");        args.push(meetup_location || null); }
+
+    if (condition !== undefined) { setClauses.push("condition = ?"); args.push(condition); }
+    if (req.body.original_price !== undefined) {
+      setClauses.push("original_price = ?");
+      args.push(req.body.original_price === "" || req.body.original_price === null ? null : parseInt(req.body.original_price));
+    }
+    if (location !== undefined) { setClauses.push("location = ?"); args.push(location); }
+    if (semester !== undefined) { setClauses.push("semester = ?"); args.push(semester); }
+    if (course_code !== undefined) { setClauses.push("course_code = ?"); args.push(course_code); }
+    if (material_type !== undefined) { setClauses.push("material_type = ?"); args.push(material_type); }
+    if (preferred_meetup_spot !== undefined) { setClauses.push("preferred_meetup_spot = ?"); args.push(preferred_meetup_spot || null); }
+    if (meetup_location !== undefined) { setClauses.push("meetup_location = ?"); args.push(meetup_location || null); }
     if (is_multiple_subjects !== undefined) {
       setClauses.push("is_multiple_subjects = ?");
       args.push(is_multiple_subjects === true || is_multiple_subjects === "true" || is_multiple_subjects === 1 ? 1 : 0);
@@ -188,11 +297,11 @@ router.patch("/listings/:id", async (req, res, next) => {
       } catch (err) {
         return res.status(400).json({ error: "Invalid imageUrls format. Must be a JSON array." });
       }
-      
+
       if (!Array.isArray(imageUrls)) {
         return res.status(400).json({ error: "imageUrls must be an array." });
       }
-      
+
       const { v4: uuidv4 } = await import("uuid");
       const tx = await db.transaction("write");
       try {
@@ -216,7 +325,7 @@ router.patch("/listings/:id", async (req, res, next) => {
     }
 
     // Update subjects if provided
-    const isNowMultiple = is_multiple_subjects !== undefined 
+    const isNowMultiple = is_multiple_subjects !== undefined
       ? (is_multiple_subjects === true || is_multiple_subjects === "true" || is_multiple_subjects === 1)
       : !!listing.is_multiple_subjects;
 
@@ -425,7 +534,7 @@ router.get("/resources", async (req, res, next) => {
 router.patch("/resources/:id", async (req, res, next) => {
   try {
     const { title, description, semester, category, subject_name, course_code, status } = req.body;
-    
+
     const updates: string[] = [];
     const args: any[] = [];
 
@@ -868,4 +977,55 @@ router.post("/subject-links", async (req, res, next) => {
   }
 });
 
+// GET /api/admin/broadcast/status — get most recent broadcast job status for dashboard polling
+router.get("/broadcast/status", async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: "SELECT * FROM broadcast_jobs ORDER BY created_at DESC LIMIT 1",
+      args: []
+    });
+    res.json(result.rows[0] || null);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /api/admin/broadcast — send Telegram notification to all linked users ──
+router.post("/broadcast", async (req, res, next) => {
+  try {
+    const { title, message, link_url } = req.body;
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "message is required" });
+    }
+
+    // 1. Check if a job is already processing to prevent spam/concurrency
+    const activeJob = await db.execute({
+      sql: "SELECT id FROM broadcast_jobs WHERE status IN ('pending', 'processing') LIMIT 1",
+      args: []
+    });
+    if (activeJob.rows.length > 0) {
+      return res.status(409).json({ error: "A broadcast job is already in progress. Please wait for it to complete." });
+    }
+
+    // 2. Queue the job in DB for persistence
+    const jobId = uuidv4();
+    await db.execute({
+      sql: "INSERT INTO broadcast_jobs (id, title, message, link_url, status) VALUES (?, ?, ?, ?, 'pending')",
+      args: [jobId, title || null, message, link_url || null]
+    });
+
+    // 3. Trigger worker on next event loop tick (deferral pattern)
+    setImmediate(processBroadcastJob);
+
+    console.info(`[Admin Broadcast] New job queued: ${jobId}`);
+    res.json({ 
+      message: "Broadcast scheduled! Notifications are being sent in the background.", 
+      jobId 
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
+
