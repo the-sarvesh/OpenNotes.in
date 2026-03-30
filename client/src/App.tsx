@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { AnimatePresence } from "motion/react";
 import { Toaster, toast } from "react-hot-toast";
 import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 // ── Layout ──────────────────────────────────────────────────────────
 import { Navbar } from "./components/Navbar";
@@ -659,6 +660,7 @@ const App: React.FC = () => {
           },
         }}
       />
+      <SpeedInsights />
     </div>
   );
 };
