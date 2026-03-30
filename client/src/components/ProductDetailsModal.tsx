@@ -82,10 +82,8 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
       hasTrackedView.current = true;
     }
     document.body.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none';
     return () => {
       document.body.style.overflow = '';
-      document.body.style.touchAction = '';
     };
   }, [note.id]);
 
@@ -111,12 +109,13 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             'In-person or Courier';
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/75 p-0 sm:p-4">
       <motion.div
-        initial={{ opacity: 0, y: 48, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 32, scale: 0.97 }}
-        transition={{ type: 'spring', damping: 32, stiffness: 480, mass: 0.7 }}
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 16 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        style={{ willChange: 'transform' }}
         className="bg-surface w-full max-w-3xl sm:rounded-[2rem] shadow-2xl flex flex-col sm:flex-row max-h-[92vh] sm:max-h-[86vh] overflow-hidden border border-border"
       >
         {/* ── Mobile close pill ──────────────────────────────────── */}
@@ -209,7 +208,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
         <div className="flex-1 flex flex-col min-w-0 bg-surface overflow-hidden">
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-5 sm:pt-6 pb-4 scrollbar-hide space-y-4">
+          <div className="flex-1 overflow-y-auto px-5 sm:px-7 pt-5 sm:pt-6 pb-4 scrollbar-hide space-y-4" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
 
             {/* Desktop close */}
             <div className="hidden sm:flex justify-end -mt-1 -mr-1">

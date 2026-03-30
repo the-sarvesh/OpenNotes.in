@@ -64,7 +64,7 @@ export const NoteCard = ({
   const mobile     = isMobile();
 
   return (
-    <div className="bg-surface rounded-2xl border border-border shadow-sm hover:shadow-lg hover:shadow-primary/8 hover:border-primary/20 hover:-translate-y-0.5 transition-all duration-200 overflow-hidden group flex flex-col h-full">
+    <div className="bg-surface rounded-2xl border border-border shadow-sm hover:shadow-lg hover:shadow-primary/8 hover:border-primary/20 hover:-translate-y-0.5 transition-[transform,box-shadow,border-color] duration-200 overflow-hidden group flex flex-col h-full" style={{ willChange: 'transform' }}>
       {/* ── Image ── */}
       <div
         className="relative overflow-hidden bg-background cursor-pointer shrink-0"
