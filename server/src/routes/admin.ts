@@ -402,12 +402,29 @@ router.delete("/listings/:id", async (req, res, next) => {
   }
 });
 
-// GET /api/admin/users — all users with aggregated stats
+// GET /api/admin/users — all users with aggregated stats + search/pagination
 router.get("/users", async (req, res, next) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
+    const search = req.query.search as string || "";
     const offset = (page - 1) * limit;
+
+    let whereClause = "";
+    const args: any[] = [];
+
+    if (search) {
+      whereClause = "WHERE (u.name LIKE ? OR u.email LIKE ? OR u.upi_id LIKE ?)";
+      const pattern = `%${search}%`;
+      args.push(pattern, pattern, pattern);
+    }
+
+    // Always fetch total count for pagination UI
+    const countRes = await db.execute({
+      sql: `SELECT COUNT(*) as total FROM users u ${whereClause}`,
+      args
+    });
+    const totalCount = Number(countRes.rows[0]?.total || 0);
 
     const users = await db.execute({
       sql: `
@@ -417,12 +434,19 @@ router.get("/users", async (req, res, next) => {
           (SELECT COUNT(*) FROM orders WHERE buyer_id = u.id) as buy_count,
           (SELECT COALESCE(SUM(price_at_purchase * quantity), 0) FROM order_items WHERE seller_id = u.id) as total_earnings
         FROM users u
+        ${whereClause}
         ORDER BY u.created_at DESC
         LIMIT ? OFFSET ?
       `,
-      args: [limit, offset]
+      args: [...args, limit, offset]
     });
-    res.json(users.rows);
+
+    res.json({
+      users: users.rows,
+      totalCount,
+      page,
+      limit
+    });
   } catch (error) {
     next(error);
   }
@@ -621,7 +645,7 @@ router.get("/orders", async (req, res, next) => {
 });
 
 // PATCH /api/admin/orders/:id/status — update order status
-router.patch("/orders/:id/status", async (req, res, next) => {
+router.patch("/orders/:id/status", async (req: AuthRequest, res, next) => {
   try {
     const { status } = req.body;
     const validStatuses = [
@@ -635,6 +659,15 @@ router.patch("/orders/:id/status", async (req, res, next) => {
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
+
+    // Special case for cancellation: enforce using the dedicated /cancel route
+    // to ensure inventory and chat closure logic is triggered.
+    if (status === 'cancelled') {
+        return res.status(400).json({
+          error: "To cancel an order, please use the dedicated /api/admin/orders/:id/cancel endpoint to ensure state reversal logic is performed correctly."
+        });
+    }
+
     await db.execute({
       sql: "UPDATE orders SET status = ? WHERE id = ?",
       args: [status, req.params.id],
@@ -644,6 +677,169 @@ router.patch("/orders/:id/status", async (req, res, next) => {
     next(error);
   }
 });
+
+// POST /api/admin/orders/:id/cancel — Robust cancellation with state reversal
+router.post("/orders/:id/cancel", async (req: AuthRequest, res, next) => {
+  let tx;
+  try {
+    const { id: orderId } = req.params;
+    tx = await db.transaction("write");
+
+    // 1. Verify order exists and is not already cancelled
+    const orderRes = await tx.execute({
+      sql: "SELECT * FROM orders WHERE id = ?",
+      args: [orderId],
+    });
+    const order = orderRes.rows[0] as any;
+
+    if (!order) {
+      await tx.rollback();
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    if (order.status === "cancelled") {
+      await tx.rollback();
+      return res.status(400).json({ error: "Order is already cancelled" });
+    }
+
+    // 2. Fetch order items to revert inventory
+    const itemsRes = await tx.execute({
+      sql: `SELECT oi.*, l.title, l.quantity as current_listing_qty, l.status as listing_status
+            FROM order_items oi
+            JOIN listings l ON oi.listing_id = l.id
+            WHERE oi.order_id = ?`,
+      args: [orderId],
+    });
+    const items = itemsRes.rows as any[];
+
+    for (const item of items) {
+      // Restore inventory quantity
+      await tx.execute({
+        sql: "UPDATE listings SET quantity = quantity + ? WHERE id = ?",
+        args: [item.quantity, item.listing_id],
+      });
+
+      // Restore status if it was archived
+      if (item.listing_status === 'archived') {
+        await tx.execute({
+          sql: "UPDATE listings SET status = 'active' WHERE id = ?",
+          args: [item.listing_id],
+        });
+      }
+
+      // Update item status
+      await tx.execute({
+        sql: "UPDATE order_items SET status = 'cancelled' WHERE id = ?",
+        args: [item.id],
+      });
+    }
+
+    // 3. Revert coupon usage
+    if (order.coupon_code) {
+      const couponRes = await tx.execute({
+        sql: "SELECT id FROM coupon_codes WHERE code = ?",
+        args: [order.coupon_code.toUpperCase()],
+      });
+      const coupon = couponRes.rows[0] as any;
+      if (coupon) {
+        await tx.execute({
+          sql: "UPDATE coupon_codes SET used_count = MAX(0, used_count - 1) WHERE id = ?",
+          args: [coupon.id],
+        });
+      }
+    }
+
+    // 4. Finalize order status
+    await tx.execute({
+      sql: "UPDATE orders SET status = 'cancelled' WHERE id = ?",
+      args: [orderId],
+    });
+
+    // 5. Audit Trace: Insert system message in chat(s)
+    function getConversationId(u1: string, u2: string) {
+       const sorted = [u1, u2].sort();
+       return `${sorted[0]}_${sorted[1]}`;
+    }
+
+    const uniqueSellers = Array.from(new Set(items.map(i => i.seller_id)));
+    const { io } = await import("../socket.js");
+
+    for (const sellerId of uniqueSellers) {
+      const convoId = getConversationId(order.buyer_id, sellerId as string);
+      const systemMessage = "⚠️ ADMINISTRATOR UPDATE: This transaction has been cancelled. This conversation is now closed and contact details have been hidden.";
+
+      const msgId = uuidv4();
+      await tx.execute({
+        sql: `INSERT INTO messages (id, conversation_id, sender_id, receiver_id, content, type)
+              VALUES (?, ?, 'SYSTEM', 'SYSTEM', ?, 'system')`,
+        args: [msgId, convoId, systemMessage]
+      });
+
+      // Live update for chat
+      if (io) {
+        io.to(`conv:${convoId}`).emit("new_message", {
+          id: msgId,
+          conversation_id: convoId,
+          sender_id: 'SYSTEM',
+          receiver_id: 'SYSTEM',
+          content: systemMessage,
+          type: 'system',
+          created_at: new Date().toISOString()
+        });
+        io.to(`user:${order.buyer_id}`).emit("unread_count_changed");
+        io.to(`user:${sellerId}`).emit("unread_count_changed");
+      }
+
+      // 6. Notifications
+      await createNotification(
+        order.buyer_id,
+        "order_cancelled",
+        "Order Cancelled 🚫",
+        "An administrator has cancelled your order. Please see chat for details.",
+        "/orders",
+        tx
+      );
+
+      await createNotification(
+        sellerId as string,
+        "order_cancelled",
+        "Order Cancelled 🚫",
+        "An administrator has cancelled an order for your listing.",
+        "/orders",
+        tx
+      );
+    }
+
+    await tx.commit();
+
+    // 7. Telegram Notifications (Async)
+    try {
+      const { sendTelegramMessage, telegramTemplates } = await import("../utils/telegram.js");
+      const buyerRes = await db.execute({ sql: "SELECT telegram_chat_id, name FROM users WHERE id = ?", args: [order.buyer_id] });
+      const buyer = buyerRes.rows[0] as any;
+
+      if (buyer?.telegram_chat_id) {
+        await sendTelegramMessage(buyer.telegram_chat_id, `🚫 Order Cancelled\n\nHi ${buyer.name}, an administrator has cancelled your order. The associated items have been returned to stock.`);
+      }
+
+      for (const sellerId of uniqueSellers) {
+        const sellerRes = await db.execute({ sql: "SELECT telegram_chat_id, name FROM users WHERE id = ?", args: [sellerId as string] });
+        const seller = sellerRes.rows[0] as any;
+        if (seller?.telegram_chat_id) {
+          await sendTelegramMessage(seller.telegram_chat_id, `🚫 Order Cancelled\n\nHi ${seller.name}, an administrator has cancelled an order for your listing. Your items have been made active again.`);
+        }
+      }
+    } catch (tgErr) {
+      console.error("[Admin] Telegram cancellation notification failed:", tgErr);
+    }
+
+    res.json({ message: "Order cancelled and inventory restored successfully." });
+  } catch (error) {
+    if (tx) await tx.rollback();
+    next(error);
+  }
+});
+
 
 // POST /api/admin/orders/:id/release-funds — release escrow funds to seller
 router.post("/orders/:id/release-funds", async (req, res, next) => {

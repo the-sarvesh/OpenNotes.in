@@ -170,19 +170,41 @@ router.get('/:conversationId', async (req: AuthRequest, res, next) => {
       io.to(`user:${userId}`).emit('unread_count_changed');
     }
 
-    const messages = await db.execute({
+    const messagesRes = await db.execute({
       sql: `
         SELECT m.id, m.conversation_id, m.sender_id, m.receiver_id, m.listing_id, 
-               m.content, m.type, m.metadata, m.is_read, m.created_at, u.name as sender_name 
+               m.content, m.type, m.metadata, m.is_read, m.created_at, u.name as sender_name,
+               oi.status as order_item_status
         FROM messages m 
         JOIN users u ON m.sender_id = u.id 
+        LEFT JOIN order_items oi ON oi.id = json_extract(m.metadata, '$.orderItemId')
         WHERE m.conversation_id = ? 
         ORDER BY m.created_at ASC
       `,
       args: [conversationId as string]
     });
 
-    res.json(messages.rows);
+    const messages = messagesRes.rows.map((msg: any) => {
+      // If it's a purchase notice and order is cancelled, mask details
+      if ((msg.type === 'purchase_notice' || msg.type === 'meetup_proposal') && msg.order_item_status === 'cancelled') {
+        return {
+          ...msg,
+          content: "⚠️ [Transaction Cancelled - Details Hidden]",
+          metadata: msg.metadata ? JSON.stringify({
+            ...JSON.parse(msg.metadata),
+            buyerLocation: "[Hidden]",
+            buyerPreferredSpot: "[Hidden]",
+            buyerAvailability: "[Hidden]",
+            buyerNote: "[Hidden]",
+            buyerMeetupDetails: "[Hidden]",
+            meetupPin: "[Hidden]"
+          }) : msg.metadata
+        };
+      }
+      return msg;
+    });
+
+    res.json(messages);
   } catch (error) {
     next(error);
   }

@@ -498,7 +498,10 @@ router.get("/my-orders", authenticate, async (req: AuthRequest, res, next) => {
 
     const enrichedOrders = orders.map(order => ({
       ...order,
-      items: itemsByOrder[String(order.id)] || []
+      items: (itemsByOrder[String(order.id)] || []).map(item => ({
+        ...item,
+        seller_email: order.status === 'cancelled' ? '[Hidden]' : item.seller_email
+      }))
     }));
 
     res.json(enrichedOrders);
@@ -555,8 +558,17 @@ router.get("/my-sales", authenticate, async (req: AuthRequest, res, next) => {
       return sum + itemFee;
     }, 0);
 
+    const processedSales = salesRes.rows.map(row => ({
+      ...row,
+      buyer_email: row.order_status === 'cancelled' ? '[Hidden]' : row.buyer_email,
+      buyer_location: row.order_status === 'cancelled' ? '[Hidden]' : row.buyer_location,
+      buyer_preferred_spot: row.order_status === 'cancelled' ? '[Hidden]' : row.buyer_preferred_spot,
+      buyer_availability: row.order_status === 'cancelled' ? '[Hidden]' : row.buyer_availability,
+      buyer_meetup_details: row.order_status === 'cancelled' ? '[Hidden]' : row.buyer_meetup_details,
+    }));
+
     res.json({
-      sales: salesRes.rows,
+      sales: processedSales,
       summary: {
         totalEarnings,
         platformFeeTotal,
