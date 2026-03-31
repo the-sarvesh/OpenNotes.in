@@ -56,28 +56,44 @@ export const createNotification = async (userId: string, type: string, title: st
 
     // Send Telegram Notification
     try {
-      const appUrl = process.env.FRONTEND_URL || 'https://open-notes-in-client.vercel.app';
-      const telegramResult = await db.execute({
-        sql: 'SELECT name, telegram_chat_id FROM users WHERE id = ?',
-        args: [userId],
-      });
-      const user = telegramResult.rows[0] as any;
-      if (user?.telegram_chat_id) {
-        const { telegramTemplates } = await import('./telegram.js');
+      const { sendTelegramPreview, sendTelegramMessage } = await import('./telegram.js');
+      
+      if (type === 'message' && metadata?.conversationId) {
+        // Skip Telegram if receiver is actively viewing this specific conversation room
+        let receiverAlreadyOnline = false;
+        if (io) {
+          const convoRoom = io.sockets.adapter.rooms.get(`conv:${metadata.conversationId}`);
+          const userRoom  = io.sockets.adapter.rooms.get(`user:${userId}`);
+          receiverAlreadyOnline = !!(userRoom && convoRoom && [...userRoom].some((sid) => convoRoom.has(sid)));
+        }
+
+        if (!receiverAlreadyOnline) {
+          // Use the specialized preview function (contains cooldown logic)
+          await sendTelegramPreview(
+            userId,
+            metadata.senderName || 'Someone',
+            metadata.content || message,
+            metadata.conversationId,
+            metadata.listingId
+          );
+        }
+      } else {
+        // Generic Telegram notification for other types
+        const telegramResult = await db.execute({
+          sql: 'SELECT telegram_chat_id FROM users WHERE id = ?',
+          args: [userId],
+        });
+        const user = telegramResult.rows[0] as any;
         
-        let template: any;
-        if (type === 'message' && metadata?.conversationId) {
-          template = telegramTemplates.newMessage(user.name, metadata.senderName || 'Someone', metadata.content || '...', metadata.conversationId);
-        } else {
+        if (user?.telegram_chat_id) {
+          const appUrl = process.env.FRONTEND_URL || 'https://opennotes.in';
           const linkUrl = link ? `${appUrl}${link}` : appUrl;
           const text = `<b>${title}</b>\n\n${message}${link ? `\n\n<a href="${linkUrl}">Open in OpenNotes →</a>` : ''}`;
-          template = { text };
+          await sendTelegramMessage(user.telegram_chat_id, text);
         }
-        
-        await sendTelegramMessage(user.telegram_chat_id, template.text, template.reply_markup);
       }
     } catch (err) {
-      console.error('[Telegram] Notification send failed:', err);
+      console.error('[Telegram] Notification integration failed:', err);
     }
 
     return true;

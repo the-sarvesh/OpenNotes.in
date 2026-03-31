@@ -218,15 +218,17 @@ export const initSocket = (httpServer: HttpServer) => {
           // Also push a badge update notification to the receiver's personal room
           io.to(`user:${receiverId}`).emit("unread_count_changed");
 
-          // Trigger Web Push for background notification
-          import('./utils/notifications.js').then(({ sendPushNotification }) => {
-            sendPushNotification(receiverId, {
-              title: `New message from ${senderName}`,
-              body: content.trim().length > 100 ? content.trim().substring(0, 97) + '...' : content.trim(),
-              url: '/messages',
-              icon: '/logo192.png',
-              tag: 'message'
-            });
+          // Trigger notifications (In-app, Web Push, Telegram)
+          import('./utils/notifications.js').then(({ createNotification }) => {
+            createNotification(
+              receiverId,
+              'message',
+              'New Message! 💬',
+              `${senderName} sent you a message.`,
+              '/messages',
+              null,
+              { conversationId, senderName, content: content.trim(), listingId }
+            );
           });
         } catch (err) {
           console.error("[Socket] send_message error:", err);

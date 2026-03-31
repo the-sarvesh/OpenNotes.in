@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import db from '../db/database.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { createNotification } from '../utils/notifications.js';
-import { sendTelegramPreview } from '../utils/telegram.js';
 
 
 const router = express.Router();
@@ -242,7 +241,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
     });
     const senderName = senderRes.rows[0]?.name || 'Someone';
 
-    // ── In-app notification ──────────────────────────────────────────────────────
+    // ── Notifications (In-app, Web Push, Telegram) ──────────────────────────
     await createNotification(
       receiver_id,
       'message',
@@ -250,7 +249,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
       `${senderName} sent you a message.`,
       '/messages',
       null,
-      { conversationId, senderName, content: content.trim() }
+      { conversationId, senderName, content: content.trim(), listingId: listing_id }
     );
 
     // ── Socket.IO real-time broadcast ────────────────────────────────────────
@@ -272,26 +271,6 @@ router.post('/', async (req: AuthRequest, res, next) => {
       io.to(`conv:${conversationId}`).emit('new_message', messagePayload);
       // Notify receiver to update unread badge
       io.to(`user:${receiver_id}`).emit('unread_count_changed');
-    }
-
-    // ── Telegram preview — fire-and-forget ─────────────────────────────────
-    // Skip if receiver is actively viewing this conversation in real time
-    const io2 = req.app.get('io');
-    const convoRoom = io2?.sockets?.adapter?.rooms?.get(`conv:${conversationId}`);
-    const userRoom  = io2?.sockets?.adapter?.rooms?.get(`user:${receiver_id}`);
-    // True only if the receiver specifically has a socket in the conversation room
-    const receiverAlreadyOnline =
-      userRoom && convoRoom && [...userRoom].some((sid) => convoRoom.has(sid));
-
-    if (!receiverAlreadyOnline) {
-      // Non-blocking: don't await so it never delays the HTTP response
-      sendTelegramPreview(
-        receiver_id as string,
-        senderName as string,
-        content.trim(),
-        conversationId,
-        listing_id ? String(listing_id) : undefined
-      ).catch((err) => console.error('[Telegram] Preview fire-and-forget error:', err));
     }
 
     res.status(201).json({
