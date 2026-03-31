@@ -703,15 +703,18 @@ export const telegramTemplates = {
     const preview = content.length > MAX ? content.slice(0, MAX) + '\u2026' : content;
     const safeSender  = escapeHtml(senderName);
     const safePreview = escapeHtml(preview);
+    const appUrl = process.env.FRONTEND_URL || 'https://opennotes.in';
+    
     const text = `💬 <b>New Message from ${safeSender}</b>` +
       (listingTitle ? `\n📦 <i>Re: ${escapeHtml(listingTitle)}</i>` : '') +
       `\n\n"${safePreview}"`;
+      
     return {
       text,
       reply_markup: {
         inline_keyboard: [
-          [{ text: '✍️ Quick Reply', callback_data: `msg_reply:${convoId}` }],
-          [{ text: '💬 Open App', url: `${process.env.FRONTEND_URL || 'https://opennotes.in'}/messages` }]
+          // Use URL instead of callback_data because UUID_UUID (73 chars) exceeds Telegram's 64-byte limit
+          [{ text: '💬 Open Conversation', url: `${appUrl}/messages?conv=${convoId}` }]
         ]
       }
     };
@@ -723,10 +726,16 @@ export const telegramTemplates = {
 
 /** Escape user-supplied strings so they're safe inside Telegram HTML parse_mode. */
 export const escapeHtml = (str: string): string =>
-  str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  str.replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }[m] || m));
 
 /**
- * Send a Telegram message preview notification when a user receives a new in-app message.
+ * Sends a rich message preview for personal messages.
  * Respects a 30-second per-conversation cooldown and skips if the bot token is not configured.
  * Safe to call fire-and-forget — all errors are caught internally.
  */
@@ -737,13 +746,17 @@ export const sendTelegramPreview = async (
   conversationId: string,
   listingId?: string
 ): Promise<void> => {
-  if (!botToken) return;
+  if (!botToken) {
+    console.warn('[Telegram] Skip preview: TELEGRAM_BOT_TOKEN not configured.');
+    return;
+  }
 
   try {
     // ── Cooldown guard (atomic: reserve slot before any await) ───────────────
     const lastNotified = telegramMsgCooldowns.get(conversationId);
-    if (lastNotified && Date.now() - lastNotified < TELEGRAM_MSG_COOLDOWN_MS) return;
-    // Reserve immediately — prevents concurrent calls from racing through
+    if (lastNotified && Date.now() - lastNotified < TELEGRAM_MSG_COOLDOWN_MS) {
+      return; // Silently skip to follow cooldown rules
+    }
     telegramMsgCooldowns.set(conversationId, Date.now());
 
     // ── Look up receiver ──────────────────────────────────────────────────────
@@ -754,12 +767,15 @@ export const sendTelegramPreview = async (
         args: [receiverId],
       });
     } catch (dbErr) {
-      // Roll back reservation so a transient DB error doesn't permanently suppress notifications
       telegramMsgCooldowns.delete(conversationId);
       throw dbErr;
     }
+    
     const user = userRes.rows[0] as any;
-    if (!user?.telegram_chat_id) return; // Telegram not linked — skip silently
+    if (!user?.telegram_chat_id) {
+      // Not linked — skip
+      return; 
+    }
 
     // ── Optionally fetch listing title for context ─────────────────────────────
     let listingTitle: string | undefined;
@@ -770,24 +786,24 @@ export const sendTelegramPreview = async (
           args: [listingId],
         });
         listingTitle = listingRes.rows[0]?.title as string | undefined;
-      } catch { /* non-critical, proceed without title */ }
+      } catch { /* non-critical */ }
     }
 
     // ── Send ──────────────────────────────────────────────────────────────────
     const template = telegramTemplates.newMessage(
       user.name, senderName, content, conversationId, listingTitle
     );
+    
     const sent = await sendTelegramMessage(
       user.telegram_chat_id, template.text, template.reply_markup
     );
 
     if (!sent) {
-      // Roll back so the next message can retry
       telegramMsgCooldowns.delete(conversationId);
-      return;
+      console.warn(`[Telegram] Failed to send preview to ${user.telegram_chat_id}`);
     }
 
-    // ── Evict oldest 100 entries when map exceeds 500 ─────────────────────────
+    // ── Evict oldest entries if cache grows too large ────────────────────────
     if (telegramMsgCooldowns.size > 500) {
       const oldest = [...telegramMsgCooldowns.entries()]
         .sort((a, b) => a[1] - b[1])
@@ -796,7 +812,6 @@ export const sendTelegramPreview = async (
       oldest.forEach((k) => telegramMsgCooldowns.delete(k));
     }
   } catch (err) {
-    // Non-blocking — log but never throw to the caller
     console.error('[Telegram] sendTelegramPreview failed:', err);
   }
 };

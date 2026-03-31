@@ -59,16 +59,23 @@ export const createNotification = async (userId: string, type: string, title: st
       const { sendTelegramPreview, sendTelegramMessage } = await import('./telegram.js');
       
       if (type === 'message' && metadata?.conversationId) {
-        // Skip Telegram if receiver is actively viewing this specific conversation room
+        // Smart Online Check — Skip Telegram if receiver is in the chat room
         let receiverAlreadyOnline = false;
-        if (io) {
-          const convoRoom = io.sockets.adapter.rooms.get(`conv:${metadata.conversationId}`);
-          const userRoom  = io.sockets.adapter.rooms.get(`user:${userId}`);
-          receiverAlreadyOnline = !!(userRoom && convoRoom && [...userRoom].some((sid) => convoRoom.has(sid)));
+        
+        try {
+          if (io) {
+            const convoRoom = io.sockets.adapter.rooms.get(`conv:${metadata.conversationId}`);
+            const userRoom  = io.sockets.adapter.rooms.get(`user:${userId}`);
+            
+            if (userRoom && convoRoom) {
+              receiverAlreadyOnline = [...userRoom].some((sid) => convoRoom.has(sid));
+            }
+          }
+        } catch (presenceErr) {
+          console.warn('[Notifications] Presence check failed, defaulting to send:', presenceErr);
         }
 
         if (!receiverAlreadyOnline) {
-          // Use the specialized preview function (contains cooldown logic)
           await sendTelegramPreview(
             userId,
             metadata.senderName || 'Someone',
