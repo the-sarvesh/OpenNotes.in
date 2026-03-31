@@ -109,6 +109,12 @@ export const AdminView: React.FC = () => {
   const [transcript, setTranscript] = useState<any[]>([]);
   const [loadingTranscript, setLoadingTranscript] = useState(false);
 
+  // User pagination & search
+  const [userSearch, setUserSearch] = useState('');
+  const [userPage, setUserPage] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const userLimit = 20;
+
   // Listing filter
   const [listingFilter, setListingFilter] = useState('');
 
@@ -141,8 +147,12 @@ export const AdminView: React.FC = () => {
         const linksRes = await apiRequest('/api/resources/subject-links');
         if (linksRes.ok) setSubjectLinks(await linksRes.json());
       } else if (tab === 'users') {
-        const res = await apiRequest('/api/admin/users');
-        if (res.ok) setUsers(await res.json());
+        const res = await apiRequest(`/api/admin/users?search=${encodeURIComponent(userSearch)}&page=${userPage}&limit=${userLimit}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUsers(data.users || []);
+          setTotalUsers(data.totalCount || 0);
+        }
       } else if (tab === 'orders') {
         const res = await apiRequest('/api/admin/orders');
         if (res.ok) setOrders(await res.json());
@@ -164,7 +174,16 @@ export const AdminView: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [tab, listingFilter]);
+  useEffect(() => { fetchData(); }, [tab, listingFilter, userPage]);
+
+  // Reset page when search changes (with a small debounce if we wanted, but simple state change for now)
+  useEffect(() => {
+    if (tab === 'users' && userPage !== 1) {
+      setUserPage(1);
+    } else {
+      fetchData();
+    }
+  }, [userSearch]);
   // Reset detail views on tab change
   useEffect(() => { setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); setEditingListing(false); }, [tab]);
 
@@ -1136,6 +1155,28 @@ export const AdminView: React.FC = () => {
                     </DetailPanel>
                   ) : (
                     <motion.div key="user-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                      {/* User Search Bar */}
+                      <div className="relative mb-4">
+                        <input
+                          type="text"
+                          placeholder="Search users by name, email or UPI..."
+                          value={userSearch}
+                          onChange={e => setUserSearch(e.target.value)}
+                          className="w-full px-11 py-3 bg-white/5 border border-white/10 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all font-medium"
+                        />
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
+                          <Users className="h-4 w-4" />
+                        </div>
+                        {userSearch && (
+                          <button
+                            onClick={() => setUserSearch('')}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+
                       {users.length === 0 ? (
                         <p className="text-center py-16 text-slate-500 text-sm">No users found</p>
                       ) : (
@@ -1197,6 +1238,31 @@ export const AdminView: React.FC = () => {
                           ))}
                         </div>
                       )}
+
+                      {/* Pagination Controls */}
+                      {totalUsers > userLimit && (
+                        <div className="flex items-center justify-between mt-6 px-1">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            Page {userPage} of {Math.ceil(totalUsers / userLimit)} · {totalUsers} Users
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              disabled={userPage <= 1}
+                              onClick={() => setUserPage(p => Math.max(1, p - 1))}
+                              className="p-2 rounded-xl border border-white/10 bg-white/5 disabled:opacity-30 hover:bg-white/10 text-white transition-all flex items-center justify-center cursor-pointer"
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <button
+                              disabled={userPage >= Math.ceil(totalUsers / userLimit)}
+                              onClick={() => setUserPage(p => p + 1)}
+                              className="p-2 rounded-xl border border-white/10 bg-white/5 disabled:opacity-30 hover:bg-white/10 text-white transition-all flex items-center justify-center cursor-pointer"
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -1251,6 +1317,16 @@ export const AdminView: React.FC = () => {
                                 className="w-full flex items-center justify-center gap-2 py-3 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 rounded-xl font-black text-sm transition-all shadow-lg shadow-[#FFC000]/20"
                               >
                                 <DollarSign className="h-4 w-4" /> Release Funds to Seller
+                              </button>
+                            </div>
+                          )}
+                          {selectedOrder.status !== 'cancelled' && (
+                            <div className="mt-2">
+                              <button
+                                onClick={() => { if (confirm('Cancel this order? This will restore inventory and close the chat.')) doAction(`/api/admin/orders/${selectedOrder.id}/cancel`, 'POST'); }}
+                                className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-xl font-bold text-sm transition-all"
+                              >
+                                <XCircle className="h-4 w-4" /> Cancel Order (Admin)
                               </button>
                             </div>
                           )}
