@@ -111,6 +111,7 @@ export const AdminView: React.FC = () => {
 
   // User pagination & search
   const [userSearch, setUserSearch] = useState('');
+  const [debouncedUserSearch, setDebouncedUserSearch] = useState('');
   const [userPage, setUserPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const userLimit = 20;
@@ -147,7 +148,7 @@ export const AdminView: React.FC = () => {
         const linksRes = await apiRequest('/api/resources/subject-links');
         if (linksRes.ok) setSubjectLinks(await linksRes.json());
       } else if (tab === 'users') {
-        const res = await apiRequest(`/api/admin/users?search=${encodeURIComponent(userSearch)}&page=${userPage}&limit=${userLimit}`);
+        const res = await apiRequest(`/api/admin/users?search=${encodeURIComponent(debouncedUserSearch)}&page=${userPage}&limit=${userLimit}`);
         if (res.ok) {
           const data = await res.json();
           setUsers(data.users || []);
@@ -176,14 +177,20 @@ export const AdminView: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [tab, listingFilter, userPage]);
 
-  // Reset page when search changes (with a small debounce if we wanted, but simple state change for now)
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedUserSearch(userSearch), 350);
+    return () => clearTimeout(t);
+  }, [userSearch]);
+
+  // Reset page when debounced search changes
   useEffect(() => {
     if (tab === 'users' && userPage !== 1) {
       setUserPage(1);
     } else {
       fetchData();
     }
-  }, [userSearch]);
+  }, [debouncedUserSearch]);
   // Reset detail views on tab change
   useEffect(() => { setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); setEditingListing(false); }, [tab]);
 
