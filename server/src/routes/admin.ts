@@ -388,6 +388,11 @@ router.patch("/listings/:id", async (req, res, next) => {
 // DELETE /api/admin/listings/:id — permanently delete a listing
 router.delete("/listings/:id", async (req, res, next) => {
   try {
+    // Clean up child rows first to avoid FK constraint violations
+    await db.execute({
+      sql: "DELETE FROM listing_images WHERE listing_id = ?",
+      args: [req.params.id],
+    });
     await db.execute({
       sql: "DELETE FROM listing_subjects WHERE listing_id = ?",
       args: [req.params.id],
@@ -618,10 +623,15 @@ router.get("/orders", async (req, res, next) => {
     const placeholders = orderIds.map(() => "?").join(",");
 
     const itemsRes = await db.execute({
-      sql: `SELECT oi.*, l.title, l.course_code, l.image_url, us.name as seller_name
+      sql: `SELECT oi.*, oi.meetup_pin, oi.pin_attempts,
+                   l.title, l.course_code, l.image_url,
+                   us.name as seller_name, us.email as seller_email,
+                   ub.name as buyer_name, ub.email as buyer_email
             FROM order_items oi
             JOIN listings l ON oi.listing_id = l.id
             JOIN users us ON oi.seller_id = us.id
+            JOIN orders o2 ON oi.order_id = o2.id
+            JOIN users ub ON o2.buyer_id = ub.id
             WHERE oi.order_id IN (${placeholders})`,
       args: orderIds
     });
@@ -836,6 +846,156 @@ router.post("/orders/:id/cancel", async (req: AuthRequest, res, next) => {
     res.json({ message: "Order cancelled and inventory restored successfully." });
   } catch (error) {
     if (tx) await tx.rollback();
+    next(error);
+  }
+});
+
+// POST /api/admin/orders/items/:itemId/force-complete — Admin bypass for stuck orders
+router.post("/orders/items/:itemId/force-complete", async (req: AuthRequest, res, next) => {
+  try {
+    const { itemId } = req.params;
+
+    // Whitelist of statuses that can be force-completed (meetup-related only)
+    const ALLOWED_FORCE_COMPLETE_STATUSES = [
+      'meetup_scheduled',
+      'meetup_in_progress',
+      'meetup_unconfirmed'
+    ];
+
+    // 1. Fetch the order item with full context
+    const itemRes = await db.execute({
+      sql: `SELECT oi.*, o.id as order_id, o.buyer_id, o.total_amount, o.platform_fee,
+                   l.title
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            JOIN listings l ON oi.listing_id = l.id
+            WHERE oi.id = ?`,
+      args: [itemId],
+    });
+
+    const item = itemRes.rows[0] as any;
+
+    if (!item) {
+      return res.status(404).json({ error: "Order item not found" });
+    }
+
+    if (item.status === "completed" || item.status === "cancelled") {
+      return res.status(400).json({ error: `Item is already ${item.status}` });
+    }
+
+    // Verify item is in an allowed meetup state
+    if (!ALLOWED_FORCE_COMPLETE_STATUSES.includes(item.status)) {
+      return res.status(400).json({
+        error: 'Force-complete allowed only from meetup states',
+        detail: `Current status "${item.status}" is not in the allowed list: ${ALLOWED_FORCE_COMPLETE_STATUSES.join(', ')}`
+      });
+    }
+
+    // 2. Mark item as completed
+    await db.execute({
+      sql: "UPDATE order_items SET status = 'completed' WHERE id = ?",
+      args: [itemId],
+    });
+
+    // 3. Check if all items in the order are now completed
+    const allItemsRes = await db.execute({
+      sql: "SELECT status FROM order_items WHERE order_id = ?",
+      args: [item.order_id],
+    });
+    const allCompleted = (allItemsRes.rows as any[]).every((r: any) => r.status === "completed");
+
+    if (allCompleted) {
+      await db.execute({
+        sql: "UPDATE orders SET status = 'completed' WHERE id = ?",
+        args: [item.order_id],
+      });
+    }
+
+    // 4. Update chat message metadata for real-time UI
+    const { io } = await import("../socket.js");
+    function _convId(u1: string, u2: string) {
+      const sorted = [u1, u2].sort();
+      return `${sorted[0]}_${sorted[1]}`;
+    }
+    const convoId = _convId(item.buyer_id as string, item.seller_id as string);
+    const msgRes = await db.execute({
+      sql: "SELECT id, metadata FROM messages WHERE conversation_id = ? AND type = 'purchase_notice'",
+      args: [convoId],
+    });
+    for (const row of msgRes.rows as any[]) {
+      const meta = JSON.parse(row.metadata || "{}");
+      if (meta.orderItemId === itemId) {
+        meta.status = "completed";
+        await db.execute({
+          sql: "UPDATE messages SET metadata = ? WHERE id = ?",
+          args: [JSON.stringify(meta), row.id],
+        });
+        if (io) {
+          io.to(`conv:${convoId}`).emit("meetup_status_changed", {
+            proposalId: itemId,
+            status: "completed",
+            messageId: row.id,
+            orderId: item.order_id,
+            buyerId: item.buyer_id,
+            sellerId: item.seller_id,
+            itemTitle: item.title,
+          });
+        }
+        break;
+      }
+    }
+
+    // 5. In-app notifications
+    await createNotification(
+      item.buyer_id as string,
+      "order_update",
+      "Exchange Completed! ✅",
+      `"${item.title}" has been marked as completed by an administrator.${
+        allCompleted ? " Your full order is now complete!" : ""
+      }`,
+      "/orders",
+    );
+    await createNotification(
+      item.seller_id as string,
+      "order_update",
+      "Exchange Completed! ✅",
+      `"${item.title}" has been marked as completed by an administrator.`,
+      "/orders",
+    );
+
+    // 6. Telegram notifications (best-effort)
+    try {
+      const { sendTelegramMessage, telegramTemplates } = await import("../utils/telegram.js");
+      const [buyerRow, sellerRow] = await Promise.all([
+        db.execute({ sql: "SELECT name, telegram_chat_id FROM users WHERE id = ?", args: [item.buyer_id] }),
+        db.execute({ sql: "SELECT name, telegram_chat_id FROM users WHERE id = ?", args: [item.seller_id] }),
+      ]);
+      const buyer = buyerRow.rows[0] as any;
+      const seller = sellerRow.rows[0] as any;
+
+      const itemSubtotal = Number(item.price_at_purchase) * Number(item.quantity);
+      const orderTotal = Number(item.total_amount) || itemSubtotal;
+      const orderFee = Number(item.platform_fee) || 0;
+      const itemFee = orderTotal > 0 ? Math.round((itemSubtotal / orderTotal) * orderFee) : 0;
+
+      if (buyer?.telegram_chat_id) {
+        await sendTelegramMessage(
+          buyer.telegram_chat_id,
+          telegramTemplates.orderCompleted(buyer.name, item.title, Number(item.price_at_purchase), Number(item.quantity), "Buyer", seller?.name || "Seller", itemSubtotal, itemFee)
+        );
+      }
+      if (seller?.telegram_chat_id) {
+        await sendTelegramMessage(
+          seller.telegram_chat_id,
+          telegramTemplates.orderCompleted(seller.name, item.title, Number(item.price_at_purchase), Number(item.quantity), "Seller", buyer?.name || "Buyer", itemSubtotal, itemFee)
+        );
+      }
+    } catch (tgErr) {
+      console.error("[Admin] Force-complete Telegram notification failed:", tgErr);
+    }
+
+    res.json({ message: "Item force-completed by admin.", orderCompleted: allCompleted });
+  } catch (error) {
     next(error);
   }
 });
@@ -1240,6 +1400,64 @@ router.post("/broadcast", async (req, res, next) => {
     next(error);
   }
 });
+// GET /api/admin/feedback — view all user feedback
+router.get("/feedback", async (req, res, next) => {
+  try {
+    const type = req.query.type as string || "all"; // buyer | seller | all
+    const rating = req.query.rating ? parseInt(req.query.rating as string) : null;
+    const hasMessage = req.query.message === "true";
+
+    let whereClause = "WHERE 1=1";
+    const args: any[] = [];
+
+    if (type !== "all") {
+      whereClause += " AND f.trigger_type = ?";
+      args.push(type);
+    }
+    if (rating) {
+      whereClause += " AND f.rating = ?";
+      args.push(rating);
+    }
+    if (hasMessage) {
+      whereClause += " AND f.message IS NOT NULL AND f.message != ''";
+    }
+
+    const feedbackRows = await db.execute({
+      sql: `
+        SELECT
+          f.id, f.trigger_type, f.reference_id, f.rating, f.message, f.created_at,
+          u.name as user_name, u.email as user_email
+        FROM app_feedback f
+        JOIN users u ON u.id = f.user_id
+        ${whereClause}
+        ORDER BY f.created_at DESC
+        LIMIT 200
+      `,
+      args,
+    });
+
+    // Use the same WHERE clause and args for stats to honor active filters
+    const statsRow = await db.execute({
+      sql: `
+        SELECT
+          COUNT(*) as total,
+          ROUND(AVG(f.rating), 1) as avg_rating,
+          COUNT(CASE WHEN f.trigger_type = 'buyer' THEN 1 END) as buyer_count,
+          COUNT(CASE WHEN f.trigger_type = 'seller' THEN 1 END) as seller_count,
+          COUNT(CASE WHEN f.message IS NOT NULL AND f.message != '' THEN 1 END) as with_message_count
+        FROM app_feedback f
+        ${whereClause}
+      `,
+      args,
+    });
+
+    res.json({
+      feedback: feedbackRows.rows,
+      stats: statsRow.rows[0] || { total: 0, avg_rating: null, buyer_count: 0, seller_count: 0, with_message_count: 0 },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;
-
