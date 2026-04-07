@@ -107,7 +107,9 @@ const App: React.FC = () => {
     triggerType: 'buyer' | 'seller';
     referenceId: string;
     itemTitle: string;
+    status?: 'scheduled' | 'ready';
   } | null>(null);
+  const feedbackTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // ── Audio refs ────────────────────────────────────────────────────
   const messageAudio = React.useRef<HTMLAudioElement | null>(null);
@@ -368,12 +370,26 @@ const App: React.FC = () => {
 
       if (!triggerType) return;
 
-      setTimeout(() => {
-        setPendingFeedback({
-          triggerType,
-          referenceId: data.orderId || data.itemId,
-          itemTitle: data.itemTitle || 'your note',
+      // Reserve slot immediately to prevent duplicate scheduling
+      setPendingFeedback({
+        triggerType,
+        referenceId: data.orderId || data.itemId,
+        itemTitle: data.itemTitle || 'your note',
+        status: 'scheduled',
+      });
+
+      // Clear any existing timeout
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+
+      // Schedule the card to show after delay
+      feedbackTimeoutRef.current = setTimeout(() => {
+        setPendingFeedback((prev) => {
+          if (!prev) return null;
+          return { ...prev, status: 'ready' };
         });
+        feedbackTimeoutRef.current = null;
       }, 1500);
     };
 
@@ -385,6 +401,12 @@ const App: React.FC = () => {
       socket.off('unread_count_changed', onUnreadCountChanged);
       socket.off('new_message', onNewMessage);
       socket.off('meetup_status_changed', onMeetupStatusChanged);
+
+      // Clear any outstanding feedback timeout on cleanup
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+        feedbackTimeoutRef.current = null;
+      }
     };
   }, [user, pendingFeedback]);
 
@@ -693,7 +715,7 @@ const App: React.FC = () => {
         <TelegramNudge key="telegram-nudge" />
         <UserGuideModal isOpen={showUserGuide} onClose={closeGuide} />
 
-        {pendingFeedback && (
+        {pendingFeedback && pendingFeedback.status === 'ready' && (
           <FeedbackCard
             key="feedback"
             triggerType={pendingFeedback.triggerType}

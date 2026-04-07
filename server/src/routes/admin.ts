@@ -855,6 +855,13 @@ router.post("/orders/items/:itemId/force-complete", async (req: AuthRequest, res
   try {
     const { itemId } = req.params;
 
+    // Whitelist of statuses that can be force-completed (meetup-related only)
+    const ALLOWED_FORCE_COMPLETE_STATUSES = [
+      'meetup_scheduled',
+      'meetup_in_progress',
+      'meetup_unconfirmed'
+    ];
+
     // 1. Fetch the order item with full context
     const itemRes = await db.execute({
       sql: `SELECT oi.*, o.id as order_id, o.buyer_id, o.total_amount, o.platform_fee,
@@ -874,6 +881,14 @@ router.post("/orders/items/:itemId/force-complete", async (req: AuthRequest, res
 
     if (item.status === "completed" || item.status === "cancelled") {
       return res.status(400).json({ error: `Item is already ${item.status}` });
+    }
+
+    // Verify item is in an allowed meetup state
+    if (!ALLOWED_FORCE_COMPLETE_STATUSES.includes(item.status)) {
+      return res.status(400).json({
+        error: 'Force-complete allowed only from meetup states',
+        detail: `Current status "${item.status}" is not in the allowed list: ${ALLOWED_FORCE_COMPLETE_STATUSES.join(', ')}`
+      });
     }
 
     // 2. Mark item as completed
@@ -1390,6 +1405,7 @@ router.get("/feedback", async (req, res, next) => {
   try {
     const type = req.query.type as string || "all"; // buyer | seller | all
     const rating = req.query.rating ? parseInt(req.query.rating as string) : null;
+    const hasMessage = req.query.message === "true";
 
     let whereClause = "WHERE 1=1";
     const args: any[] = [];
@@ -1401,6 +1417,9 @@ router.get("/feedback", async (req, res, next) => {
     if (rating) {
       whereClause += " AND f.rating = ?";
       args.push(rating);
+    }
+    if (hasMessage) {
+      whereClause += " AND f.message IS NOT NULL AND f.message != ''";
     }
 
     const feedbackRows = await db.execute({
@@ -1417,17 +1436,19 @@ router.get("/feedback", async (req, res, next) => {
       args,
     });
 
+    // Use the same WHERE clause and args for stats to honor active filters
     const statsRow = await db.execute({
       sql: `
         SELECT
           COUNT(*) as total,
-          ROUND(AVG(rating), 1) as avg_rating,
-          COUNT(CASE WHEN trigger_type = 'buyer' THEN 1 END) as buyer_count,
-          COUNT(CASE WHEN trigger_type = 'seller' THEN 1 END) as seller_count,
-          COUNT(CASE WHEN message IS NOT NULL AND message != '' THEN 1 END) as with_message_count
-        FROM app_feedback
+          ROUND(AVG(f.rating), 1) as avg_rating,
+          COUNT(CASE WHEN f.trigger_type = 'buyer' THEN 1 END) as buyer_count,
+          COUNT(CASE WHEN f.trigger_type = 'seller' THEN 1 END) as seller_count,
+          COUNT(CASE WHEN f.message IS NOT NULL AND f.message != '' THEN 1 END) as with_message_count
+        FROM app_feedback f
+        ${whereClause}
       `,
-      args: [],
+      args,
     });
 
     res.json({
@@ -1440,4 +1461,3 @@ router.get("/feedback", async (req, res, next) => {
 });
 
 export default router;
-
