@@ -98,6 +98,7 @@ export const AdminView: React.FC = () => {
   const [userActivity, setUserActivity] = useState<{ listings: any[]; orders: any[] } | null>(null);
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [forceCompleting, setForceCompleting] = useState<string | null>(null); // itemId being force-completed
 
   // Admin listing edit
   const [editingListing, setEditingListing] = useState(false);
@@ -220,11 +221,17 @@ export const AdminView: React.FC = () => {
     try {
       const res = await apiRequest(url, { method, body: body ? JSON.stringify(body) : undefined });
       const data = await res.json();
+      if (!res.ok) {
+        setActionMsg(`Error: ${data.error || data.message || 'Request failed'}`);
+        setTimeout(() => setActionMsg(''), 4000);
+        return;
+      }
       setActionMsg(data.message || 'Done');
       fetchData();
       setTimeout(() => setActionMsg(''), 3000);
     } catch {
-      setActionMsg('Action failed');
+      setActionMsg('Network error — action may have failed');
+      setTimeout(() => setActionMsg(''), 4000);
     }
   };
 
@@ -1344,18 +1351,93 @@ export const AdminView: React.FC = () => {
                       <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
                         <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-4">Items ({selectedOrder.items?.length || 0})</p>
                         <div className="space-y-3">
-                          {selectedOrder.items?.map((item: any) => (
-                            <div key={item.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
-                              <img src={item.image_url} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-white truncate">{item.title}</p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                  {item.course_code} · {item.seller_name} · Qty {item.quantity}
-                                </p>
+                          {selectedOrder.items?.map((item: any) => {
+                            const isStuck = item.status === 'pending_meetup' || item.status === 'acknowledged';
+                            const isDone  = item.status === 'completed';
+                            return (
+                              <div key={item.id} className="p-3 bg-white/5 rounded-xl border border-white/5 space-y-2.5">
+                                {/* Row 1: thumb + title + price */}
+                                <div className="flex items-center gap-3">
+                                  <img src={item.image_url} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-white truncate">{item.title}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                      {item.course_code} · Seller: <span className="text-slate-300 font-medium">{item.seller_name}</span> · Qty {item.quantity}
+                                    </p>
+                                  </div>
+                                  <p className="text-sm font-black text-[#FFC000] shrink-0">₹{item.price_at_purchase * item.quantity}</p>
+                                </div>
+
+                                {/* Row 2: status + OTP badge + Force Complete */}
+                                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-white/5">
+                                  {/* Item status */}
+                                  <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide ${
+                                    isDone
+                                      ? 'bg-emerald-500/15 text-emerald-400'
+                                      : isStuck
+                                        ? 'bg-amber-500/15 text-amber-400'
+                                        : 'bg-white/10 text-slate-400'
+                                  }`}>
+                                    {fmt(item.status)}
+                                  </span>
+
+                                  {/* OTP Badge — always visible for admin */}
+                                  {item.meetup_pin && (
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FFC000]/10 border border-[#FFC000]/25 rounded-full">
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-[#FFC000]/70">OTP</span>
+                                      <span className="text-sm font-black text-[#FFC000] tracking-widest">{item.meetup_pin}</span>
+                                      {Number(item.pin_attempts) > 0 && (
+                                        <span className="text-[9px] text-amber-500 font-bold ml-0.5">{item.pin_attempts} failed attempt{Number(item.pin_attempts) > 1 ? 's' : ''}</span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Spacer */}
+                                  <div className="flex-1" />
+
+                                  {/* Force Complete button */}
+                                  {isStuck && (
+                                    <button
+                                      disabled={forceCompleting === item.id}
+                                      onClick={async () => {
+                                        if (!confirm(`Force-complete "${item.title}"? The buyer and seller will be notified. This cannot be undone.`)) return;
+                                        setForceCompleting(item.id);
+                                        try {
+                                          const res = await apiRequest(`/api/admin/orders/items/${item.id}/force-complete`, { method: 'POST' });
+                                          const data = await res.json();
+                                          if (res.ok) {
+                                            setActionMsg(data.orderCompleted ? 'Item completed — order fully complete!' : 'Item force-completed successfully');
+                                            fetchData();
+                                            setTimeout(() => setActionMsg(''), 4000);
+                                          } else {
+                                            setActionMsg(data.error || 'Force-complete failed');
+                                          }
+                                        } catch {
+                                          setActionMsg('Network error');
+                                        } finally {
+                                          setForceCompleting(null);
+                                        }
+                                      }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                                    >
+                                      {forceCompleting === item.id ? (
+                                        <span className="h-3 w-3 border-2 border-emerald-400/30 border-t-emerald-400 animate-spin rounded-full" />
+                                      ) : (
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                      )}
+                                      Force Complete
+                                    </button>
+                                  )}
+
+                                  {isDone && (
+                                    <span className="flex items-center gap-1 text-emerald-400 text-xs font-bold">
+                                      <CheckCircle2 className="h-3.5 w-3.5" /> Completed
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-sm font-black text-[#FFC000] shrink-0">₹{item.price_at_purchase * item.quantity}</p>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     </DetailPanel>
