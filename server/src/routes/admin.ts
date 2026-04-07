@@ -920,6 +920,10 @@ router.post("/orders/items/:itemId/force-complete", async (req: AuthRequest, res
             proposalId: itemId,
             status: "completed",
             messageId: row.id,
+            orderId: item.order_id,
+            buyerId: item.buyer_id,
+            sellerId: item.seller_id,
+            itemTitle: item.title,
           });
         }
         break;
@@ -1376,6 +1380,59 @@ router.post("/broadcast", async (req, res, next) => {
     res.json({ 
       message: "Broadcast scheduled! Notifications are being sent in the background.", 
       jobId 
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+// GET /api/admin/feedback — view all user feedback
+router.get("/feedback", async (req, res, next) => {
+  try {
+    const type = req.query.type as string || "all"; // buyer | seller | all
+    const rating = req.query.rating ? parseInt(req.query.rating as string) : null;
+
+    let whereClause = "WHERE 1=1";
+    const args: any[] = [];
+
+    if (type !== "all") {
+      whereClause += " AND f.trigger_type = ?";
+      args.push(type);
+    }
+    if (rating) {
+      whereClause += " AND f.rating = ?";
+      args.push(rating);
+    }
+
+    const feedbackRows = await db.execute({
+      sql: `
+        SELECT
+          f.id, f.trigger_type, f.reference_id, f.rating, f.message, f.created_at,
+          u.name as user_name, u.email as user_email
+        FROM app_feedback f
+        JOIN users u ON u.id = f.user_id
+        ${whereClause}
+        ORDER BY f.created_at DESC
+        LIMIT 200
+      `,
+      args,
+    });
+
+    const statsRow = await db.execute({
+      sql: `
+        SELECT
+          COUNT(*) as total,
+          ROUND(AVG(rating), 1) as avg_rating,
+          COUNT(CASE WHEN trigger_type = 'buyer' THEN 1 END) as buyer_count,
+          COUNT(CASE WHEN trigger_type = 'seller' THEN 1 END) as seller_count,
+          COUNT(CASE WHEN message IS NOT NULL AND message != '' THEN 1 END) as with_message_count
+        FROM app_feedback
+      `,
+      args: [],
+    });
+
+    res.json({
+      feedback: feedbackRows.rows,
+      stats: statsRow.rows[0] || { total: 0, avg_rating: null, buyer_count: 0, seller_count: 0, with_message_count: 0 },
     });
   } catch (error) {
     next(error);

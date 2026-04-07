@@ -16,7 +16,7 @@ import { SUBJECTS_BY_SEM, SEMESTERS, LOCATIONS, STANDARD_SPOTS } from '../utils/
 import { ExternalLink, Link as LinkIcon, Save } from 'lucide-react';
 import { statusColors, formatStatus } from '../utils/status';
 
-type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats' | 'settings';
+type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats' | 'settings' | 'feedback';
 
 interface Stats {
   users: number;
@@ -90,6 +90,9 @@ export const AdminView: React.FC = () => {
   const [localDiscount, setLocalDiscount] = useState<string>('40');
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
+  const [feedbackData, setFeedbackData] = useState<{ feedback: any[]; stats: any } | null>(null);
+  const [feedbackTypeFilter, setFeedbackTypeFilter] = useState<'all' | 'buyer' | 'seller'>('all');
+  const [feedbackRatingFilter, setFeedbackRatingFilter] = useState<number | null>(null);
 
   // Detail views
   const [selectedListing, setSelectedListing] = useState<any | null>(null);
@@ -169,6 +172,12 @@ export const AdminView: React.FC = () => {
           setLocalFee(String(data.platform_fee_percentage));
           setLocalDiscount(String(data.recommended_discount_percentage ?? 40));
         }
+      } else if (tab === 'feedback') {
+        const params = new URLSearchParams();
+        if (feedbackTypeFilter !== 'all') params.set('type', feedbackTypeFilter);
+        if (feedbackRatingFilter) params.set('rating', String(feedbackRatingFilter));
+        const res = await apiRequest(`/api/admin/feedback?${params.toString()}`);
+        if (res.ok) setFeedbackData(await res.json());
       }
     } catch (err) {
       console.error('Admin fetch error:', err);
@@ -176,7 +185,7 @@ export const AdminView: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [tab, listingFilter, userPage]);
+  useEffect(() => { fetchData(); }, [tab, listingFilter, userPage, feedbackTypeFilter, feedbackRatingFilter]);
 
   // Debounce search
   useEffect(() => {
@@ -274,6 +283,7 @@ export const AdminView: React.FC = () => {
     { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
     { id: 'orders', label: 'Orders', icon: <ShoppingBag className="h-4 w-4" /> },
     { id: 'chats', label: 'Chats', icon: <MessageCircle className="h-4 w-4" /> },
+    { id: 'feedback', label: 'Feedback', icon: <Star className="h-4 w-4" /> },
     { id: 'settings', label: 'Settings', icon: <SettingsIcon className="h-4 w-4" /> },
   ];
 
@@ -1514,6 +1524,98 @@ export const AdminView: React.FC = () => {
                           >
                             View Transcript
                           </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* ══ FEEDBACK ══════════════════════════════════════════════ */}
+              {tab === 'feedback' && (
+                <motion.div key="feedback" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
+                  {/* Stats bar */}
+                  {feedbackData?.stats && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-[#FFC000]/10 border border-[#FFC000]/20 rounded-2xl p-4 text-center">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-[#FFC000] mb-1">Avg Rating</p>
+                        <p className="text-2xl font-black text-[#FFC000]">
+                          {feedbackData.stats.avg_rating ? `⭐ ${feedbackData.stats.avg_rating}` : '—'}
+                        </p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Total</p>
+                        <p className="text-2xl font-black text-white">{String(feedbackData.stats.total)}</p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Buyers</p>
+                        <p className="text-2xl font-black text-white">{String(feedbackData.stats.buyer_count)}</p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Sellers</p>
+                        <p className="text-2xl font-black text-white">{String(feedbackData.stats.seller_count)}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Filter pills */}
+                  <div className="flex flex-wrap gap-2">
+                    {(['all', 'buyer', 'seller'] as const).map(f => (
+                      <button key={f} onClick={() => setFeedbackTypeFilter(f)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${feedbackTypeFilter === f ? 'bg-[#FFC000] text-slate-900 border-[#FFC000]' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'}`}>
+                        {f === 'all' ? 'All' : f === 'buyer' ? '🛒 Buyers' : '🏷️ Sellers'}
+                      </button>
+                    ))}
+                    <div className="w-px bg-white/10 self-stretch mx-1" />
+                    {[1, 2, 3, 4, 5].map(r => (
+                      <button key={r} onClick={() => setFeedbackRatingFilter(feedbackRatingFilter === r ? null : r)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${feedbackRatingFilter === r ? 'bg-[#FFC000] text-slate-900 border-[#FFC000]' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'}`}>
+                        {'⭐'.repeat(r)}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Feedback cards */}
+                  {!feedbackData || feedbackData.feedback.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                      <Star className="h-8 w-8 text-slate-700" />
+                      <p className="text-slate-500 text-sm font-semibold">No feedback yet</p>
+                      <p className="text-slate-600 text-xs">Feedback appears here after users complete an exchange</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {feedbackData.feedback.map((fb: any) => (
+                        <div key={fb.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/[0.07] transition-colors">
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <div>
+                              <p className="font-bold text-white text-sm">{fb.user_name}</p>
+                              <p className="text-[10px] text-slate-500">{fb.user_email}</p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${fb.trigger_type === 'buyer' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                                {fb.trigger_type === 'buyer' ? '🛒 Buyer' : '🏷️ Seller'}
+                              </span>
+                              <p className="text-[9px] text-slate-600">
+                                {new Date(fb.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+                          {fb.rating && (
+                            <div className="flex items-center gap-1 mb-2">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star key={i} className="h-3.5 w-3.5" fill={i < fb.rating ? '#FFC000' : 'none'} stroke={i < fb.rating ? '#FFC000' : '#475569'} />
+                              ))}
+                              <span className="text-[10px] text-slate-400 ml-1 font-semibold">
+                                {['', 'Poor', 'Fair', 'Good', 'Great', 'Amazing!'][fb.rating]}
+                              </span>
+                            </div>
+                          )}
+                          {fb.message && (
+                            <p className="text-sm text-slate-300 leading-relaxed border-l-2 border-[#FFC000]/30 pl-3 italic">"{fb.message}"</p>
+                          )}
+                          {!fb.rating && !fb.message && (
+                            <p className="text-xs text-slate-600 italic">No rating or message submitted</p>
+                          )}
                         </div>
                       ))}
                     </div>
