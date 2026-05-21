@@ -37,6 +37,8 @@ import notificationsRoutes from "./routes/notifications.js";
 import reviewsRoutes from "./routes/reviews.js";
 import pushRoutes from "./routes/push.js";
 import resourcesRoutes from "./routes/resources.js";
+import feedbackRoutes from "./routes/feedback.js";
+
 
 // NOTE: Coupon routes are handled under /api/admin/coupons (admin.ts)
 // NOTE: Coupon validation at checkout is handled under /api/orders/validate-coupon (orders.ts)
@@ -172,6 +174,8 @@ app.use("/api/push", pushRoutes);
 app.use("/api/resources", resourcesRoutes);
 app.use("/api/telegram", telegramRoutes);
 app.use("/api/settings", settingsRouter);
+app.use("/api/feedback", feedbackRoutes);
+
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", message: "OpenNotes.in API is running" });

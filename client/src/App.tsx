@@ -27,6 +27,7 @@ import { CheckoutView } from "./views/CheckoutView.tsx";
 import { OrderSuccessView } from "./views/OrderSuccessView";
 import { UserGuideModal } from "./components/UserGuideModal";
 import { TelegramNudge } from "./components/TelegramNudge";
+import { FeedbackCard } from "./components/FeedbackCard";
 import ScrollToTop from "./components/ScrollToTop";
 import { apiRequest } from "./utils/api";
 import { NotificationManager } from "./utils/NotificationManager";
@@ -100,6 +101,15 @@ const App: React.FC = () => {
   const [showUserGuide, setShowUserGuide] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
+
+  // ── Feedback card ─────────────────────────────────────────────────
+  const [pendingFeedback, setPendingFeedback] = useState<{
+    triggerType: 'buyer' | 'seller';
+    referenceId: string;
+    itemTitle: string;
+    status?: 'scheduled' | 'ready';
+  } | null>(null);
+  const feedbackTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // ── Audio refs ────────────────────────────────────────────────────
   const messageAudio = React.useRef<HTMLAudioElement | null>(null);
@@ -332,13 +342,73 @@ const App: React.FC = () => {
     socket.on('unread_count_changed', onUnreadCountChanged);
     socket.on('new_message', onNewMessage);
 
+    // ── Feedback trigger: listen for completed meetup ───────────────
+    const onMeetupStatusChanged = (data: any) => {
+      if (data.status !== 'completed') return;
+      if (!user) return;
+
+      const now = Date.now();
+      const isSkippedUntil = Number(localStorage.getItem('feedback_skipped_until') || 0);
+      const isSubmittedUntil = Number(localStorage.getItem('feedback_submitted_until') || 0);
+      if (now < isSkippedUntil || now < isSubmittedUntil) return;
+      if (pendingFeedback) return; // one at a time
+
+      // Determine role
+      let triggerType: 'buyer' | 'seller' | null = null;
+
+      if (data.buyerId === user.id) {
+        // Buyer: once per order
+        const key = `feedback_shown_${data.orderId}`;
+        if (localStorage.getItem(key)) return;
+        triggerType = 'buyer';
+      } else if (data.sellerId === user.id) {
+        // Seller: 7-day cooldown
+        const lastShown = Number(localStorage.getItem('feedback_seller_shown') || 0);
+        if (now - lastShown < 7 * 24 * 60 * 60 * 1000) return;
+        triggerType = 'seller';
+      }
+
+      if (!triggerType) return;
+
+      // Reserve slot immediately to prevent duplicate scheduling
+      setPendingFeedback({
+        triggerType,
+        referenceId: data.orderId || data.itemId,
+        itemTitle: data.itemTitle || 'your note',
+        status: 'scheduled',
+      });
+
+      // Clear any existing timeout
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+
+      // Schedule the card to show after delay
+      feedbackTimeoutRef.current = setTimeout(() => {
+        setPendingFeedback((prev) => {
+          if (!prev) return null;
+          return { ...prev, status: 'ready' };
+        });
+        feedbackTimeoutRef.current = null;
+      }, 1500);
+    };
+
+    socket.on('meetup_status_changed', onMeetupStatusChanged);
+
     return () => {
       socket.off('connect_error', onConnectError);
       socket.off('new_notification', onNewNotification);
       socket.off('unread_count_changed', onUnreadCountChanged);
       socket.off('new_message', onNewMessage);
+      socket.off('meetup_status_changed', onMeetupStatusChanged);
+
+      // Clear any outstanding feedback timeout on cleanup
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+        feedbackTimeoutRef.current = null;
+      }
     };
-  }, [user]);
+  }, [user, pendingFeedback]);
 
   // ── Notification Sound handling ──────────────────────────────────
   useEffect(() => {
@@ -644,6 +714,16 @@ const App: React.FC = () => {
 
         <TelegramNudge key="telegram-nudge" />
         <UserGuideModal isOpen={showUserGuide} onClose={closeGuide} />
+
+        {pendingFeedback && pendingFeedback.status === 'ready' && (
+          <FeedbackCard
+            key="feedback"
+            triggerType={pendingFeedback.triggerType}
+            referenceId={pendingFeedback.referenceId}
+            itemTitle={pendingFeedback.itemTitle}
+            onClose={() => setPendingFeedback(null)}
+          />
+        )}
       </AnimatePresence>
 
       <Toaster

@@ -805,9 +805,13 @@ router.post(
           // Emit socket update if needed (optional but good for real-time)
           if (io) {
             io.to(`conv:${convoId}`).emit("meetup_status_changed", { 
-              proposalId: itemId, // Mapping orderItemId to proposalId-like structure for the client
+              proposalId: itemId,
               status: 'completed', 
-              messageId: row.id 
+              messageId: row.id,
+              orderId: item.order_id,
+              buyerId: item.buyer_id,
+              sellerId: item.seller_id,
+              itemTitle: item.title,
             });
           }
           break;

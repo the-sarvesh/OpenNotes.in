@@ -218,6 +218,17 @@ const initDb = async () => {
         FOREIGN KEY (uploader_id) REFERENCES users(id)
       );
 
+      CREATE TABLE IF NOT EXISTS app_feedback (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        trigger_type TEXT NOT NULL,
+        reference_id TEXT NOT NULL,
+        rating INTEGER CHECK(rating >= 1 AND rating <= 5),
+        message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+
       CREATE TABLE IF NOT EXISTS broadcast_jobs (
         id TEXT PRIMARY KEY,
         status TEXT NOT NULL DEFAULT 'pending',
