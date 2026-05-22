@@ -306,14 +306,16 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             </div>
 
             {/* ── Info grid ────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               <Tile label="Semester" value={formatSemester(note.semester)} />
               <div className={`p-3.5 rounded-2xl border ${conditionStyle[note.condition] || 'bg-background border-border'}`}>
                 <p className="text-[9px] font-black uppercase tracking-widest mb-1 opacity-70">Condition</p>
                 <p className="text-sm font-bold leading-tight">{note.condition}</p>
               </div>
-              <Tile label="Material" value={note.materialType} />
+              <Tile label="Material" value={note.materialType || 'N/A'} />
               <Tile label="Availability" value={`${note.quantity} left`} />
+              {note.cohort && <Tile label="Cohort" value={`Cohort ${note.cohort}`} />}
+              {note.listedDate && <Tile label="Listed" value={note.listedDate} />}
             </div>
           </div>
 

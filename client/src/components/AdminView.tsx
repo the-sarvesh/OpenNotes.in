@@ -90,6 +90,7 @@ export const AdminView: React.FC = () => {
   const [localDiscount, setLocalDiscount] = useState<string>('40');
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
+  const [actionTone, setActionTone] = useState<'success' | 'error'>('success');
   const [feedbackData, setFeedbackData] = useState<{ feedback: any[]; stats: any } | null>(null);
   const [feedbackTypeFilter, setFeedbackTypeFilter] = useState<'all' | 'buyer' | 'seller'>('all');
   const [feedbackRatingFilter, setFeedbackRatingFilter] = useState<number | null>(null);
@@ -195,7 +196,8 @@ export const AdminView: React.FC = () => {
 
   // Reset page when debounced search changes
   useEffect(() => {
-    if (tab === 'users' && userPage !== 1) {
+    if (tab !== 'users') return;
+    if (userPage !== 1) {
       setUserPage(1);
     } else {
       fetchData();
@@ -226,19 +228,29 @@ export const AdminView: React.FC = () => {
     }
   }, [resources]);
 
+  useEffect(() => {
+    if (selectedOrder && orders.length > 0) {
+      const updated = orders.find(o => o.id === selectedOrder.id);
+      if (updated) setSelectedOrder(updated);
+    }
+  }, [orders]);
+
   const doAction = async (url: string, method: string, body?: any) => {
     try {
       const res = await apiRequest(url, { method, body: body ? JSON.stringify(body) : undefined });
       const data = await res.json();
       if (!res.ok) {
+        setActionTone('error');
         setActionMsg(`Error: ${data.error || data.message || 'Request failed'}`);
         setTimeout(() => setActionMsg(''), 4000);
         return;
       }
+      setActionTone('success');
       setActionMsg(data.message || 'Done');
-      fetchData();
+      await fetchData();
       setTimeout(() => setActionMsg(''), 3000);
     } catch {
+      setActionTone('error');
       setActionMsg('Network error — action may have failed');
       setTimeout(() => setActionMsg(''), 4000);
     }
@@ -312,9 +324,13 @@ export const AdminView: React.FC = () => {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mb-5 px-4 py-3 bg-emerald-500/10 text-emerald-400 rounded-xl text-sm font-semibold border border-emerald-500/20"
+            className={`mb-5 px-4 py-3 rounded-xl text-sm font-semibold border ${
+              actionTone === 'error'
+                ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+            }`}
           >
-            ✓ {actionMsg}
+            {actionTone === 'error' ? '✖' : '✓'} {actionMsg}
           </motion.div>
         )}
       </AnimatePresence>
@@ -435,6 +451,7 @@ export const AdminView: React.FC = () => {
                               <InfoRow icon={<Layers className="h-3.5 w-3.5" />} label="Quantity" value={selectedListing.quantity} />
                               <InfoRow icon={<BookOpen className="h-3.5 w-3.5" />} label="Material Type" value={selectedListing.material_type || '—'} />
                               <InfoRow icon={<Star className="h-3.5 w-3.5" />} label="Condition" value={selectedListing.condition || '—'} />
+                              <InfoRow icon={<Users className="h-3.5 w-3.5" />} label="Cohort" value={selectedListing.cohort || '—'} />
                               <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Location" value={selectedListing.location || '—'} />
                               <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Seller" value={`${selectedListing.seller_name} (${selectedListing.seller_email || '—'})`} />
                               {selectedListing.meetup_location && (
@@ -460,6 +477,7 @@ export const AdminView: React.FC = () => {
                                   material_type: selectedListing.material_type || 'ppt',
                                   preferred_meetup_spot: selectedListing.preferred_meetup_spot || '',
                                   meetup_location: selectedListing.meetup_location || '',
+                                  cohort: selectedListing.cohort === null || selectedListing.cohort === undefined ? '' : String(selectedListing.cohort),
                                   imageUrls: '',
                                   subjects: '',
                                   is_multiple_subjects: !!selectedListing.is_multiple_subjects,
@@ -521,8 +539,7 @@ export const AdminView: React.FC = () => {
                               className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
                             />
                           </div>
-
-                          {/* Description */}
+              {/* Description */}
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Description</p>
                             <textarea
@@ -628,16 +645,35 @@ export const AdminView: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* Location */}
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Location</p>
-                            <select
-                              value={editForm.location}
-                              onChange={e => setEditForm((f: any) => ({ ...f, location: e.target.value }))}
-                              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
-                            >
-                              {LOCATIONS.map((l: string) => <option key={l} value={l}>{l}</option>)}
-                            </select>
+                          {/* Location & Cohort */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Location</p>
+                              <select
+                                value={editForm.location}
+                                onChange={e => setEditForm((f: any) => ({ ...f, location: e.target.value }))}
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              >
+                                {LOCATIONS.map((l: string) => <option key={l} value={l}>{l}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Cohort Number <span className="normal-case text-[9px] font-medium opacity-60">(optional)</span></p>
+                              <input
+                                type="number"
+                                min="1"
+                                max="99"
+                                value={editForm.cohort}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  if (val === '' || (Number(val) >= 1 && Number(val) <= 99)) {
+                                    setEditForm((f: any) => ({ ...f, cohort: val }));
+                                  }
+                                }}
+                                placeholder="e.g. 21, 22..."
+                                className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
+                              />
+                            </div>
                           </div>
 
                           {/* Meetup spot */}
@@ -718,7 +754,12 @@ export const AdminView: React.FC = () => {
                                 if (isNaN(q) || q < 0) return setActionMsg('Quantity must be a valid number ≥ 0');
 
                                 // Prep payload
-                                const payload = { ...editForm, price: p, quantity: q };
+                                const payload = { 
+                                  ...editForm, 
+                                  price: p, 
+                                  quantity: q,
+                                  cohort: editForm.cohort ? parseInt(editForm.cohort) : null
+                                };
                                 if (!payload.imageUrls.trim()) delete payload.imageUrls;
                                 if (!payload.subjects.trim()) delete payload.subjects;
 
@@ -1416,14 +1457,30 @@ export const AdminView: React.FC = () => {
                                           const res = await apiRequest(`/api/admin/orders/items/${item.id}/force-complete`, { method: 'POST' });
                                           const data = await res.json();
                                           if (res.ok) {
+                                            setActionTone('success');
                                             setActionMsg(data.orderCompleted ? 'Item completed — order fully complete!' : 'Item force-completed successfully');
-                                            fetchData();
+                                            
+                                            // Trigger global order refetch
+                                            await fetchData();
+                                            
+                                            // Re-fetch orders inside this closure to locate updated order and sync detail view properly
+                                            const freshOrdersRes = await apiRequest('/api/admin/orders');
+                                            if (freshOrdersRes.ok) {
+                                              const freshOrders = await freshOrdersRes.json();
+                                              const updated = freshOrders.find((o: any) => o.id === selectedOrder.id);
+                                              if (updated) setSelectedOrder(updated);
+                                            }
+
                                             setTimeout(() => setActionMsg(''), 4000);
                                           } else {
+                                            setActionTone('error');
                                             setActionMsg(data.error || 'Force-complete failed');
+                                            setTimeout(() => setActionMsg(''), 4000);
                                           }
                                         } catch {
+                                          setActionTone('error');
                                           setActionMsg('Network error');
+                                          setTimeout(() => setActionMsg(''), 4000);
                                         } finally {
                                           setForceCompleting(null);
                                         }
@@ -1659,14 +1716,17 @@ export const AdminView: React.FC = () => {
                                   });
                                   if (res.ok) {
                                     const data = await res.json();
+                                    setActionTone('success');
                                     setActionMsg(data.message || 'Updated');
                                     fetchData();
                                   } else {
                                     const data = await res.json();
+                                    setActionTone('error');
                                     setActionMsg(data.error || 'Update failed');
                                     setLocalFee(String(dbSettings.platform_fee_percentage));
                                   }
                                 } catch {
+                                  setActionTone('error');
                                   setActionMsg('Network error');
                                   setLocalFee(String(dbSettings.platform_fee_percentage));
                                 }
@@ -1707,14 +1767,17 @@ export const AdminView: React.FC = () => {
                                   });
                                   if (res.ok) {
                                     const data = await res.json();
+                                    setActionTone('success');
                                     setActionMsg(data.message || 'Updated discount');
                                     fetchData();
                                   } else {
                                     const data = await res.json();
+                                    setActionTone('error');
                                     setActionMsg(data.error || 'Update failed');
                                     setLocalDiscount(String(dbSettings.recommended_discount_percentage ?? 40));
                                   }
                                 } catch {
+                                  setActionTone('error');
                                   setActionMsg('Network error');
                                   setLocalDiscount(String(dbSettings.recommended_discount_percentage ?? 40));
                                 }
@@ -1811,9 +1874,11 @@ export const AdminView: React.FC = () => {
                               setBroadcastTitle('');
                               setBroadcastLink('');
                             } else {
+                              setActionTone('error');
                               setActionMsg(data.error || 'Broadcast failed');
                             }
                           } catch {
+                            setActionTone('error');
                             setActionMsg('Network error during broadcast');
                           } finally {
                             setBroadcastSending(false);

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Heart, Star, Clock, MapPin, ShoppingCart, Layers, Eye, CreditCard } from 'lucide-react';
+import { Heart, Star, Clock, MapPin, ShoppingCart, Layers, Eye, CreditCard, Users, Calendar } from 'lucide-react';
 import { formatSemester, formatMaterialType } from '../utils/formatters';
 
 export interface Note {
@@ -26,6 +26,8 @@ export interface Note {
   meetupLocation?: string;
   views?: number;
   originalPrice?: number;
+  cohort?: number;
+  listedDate?: string;
 }
 
 // ── Condition colour map ───────────────────────────────────────────
@@ -146,14 +148,24 @@ export const NoteCard = ({
         )}
 
         {/* Meta */}
-        <div className="flex items-center gap-2 text-[9px] text-text-muted mb-3">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-text-muted mb-3">
           <span className="flex items-center gap-1 shrink-0">
             <Clock className="h-2.5 w-2.5 shrink-0" /> {formatSemester(note.semester)}
           </span>
-          <span className="flex items-center gap-1 truncate">
+          <span className="flex items-center gap-1 shrink-0">
             <MapPin className="h-2.5 w-2.5 shrink-0" />
-            <span className="truncate">{note.location}</span>
+            <span>{note.location}</span>
           </span>
+          {note.cohort && (
+            <span className="flex items-center gap-1 shrink-0">
+              <Users className="h-2.5 w-2.5 shrink-0" /> Cohort {note.cohort}
+            </span>
+          )}
+          {note.listedDate && (
+            <span className="flex items-center gap-1 shrink-0">
+              <Calendar className="h-2.5 w-2.5 shrink-0" /> {note.listedDate}
+            </span>
+          )}
         </div>
 
         {/* Condition + price */}

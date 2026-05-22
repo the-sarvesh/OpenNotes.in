@@ -458,9 +458,15 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                           )}
                           <span className="text-sm font-black text-text-main">{item.note.price === 0 ? "FREE" : `₹${Math.round(item.note.price * item.quantity)}`}</span>
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1 justify-end max-w-[65%]">
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.semester}</span>
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.condition}</span>
+                          {item.note.cohort && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">Cohort {item.note.cohort}</span>
+                          )}
+                          {item.note.listedDate && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-surface border border-border rounded-md text-text-muted uppercase">{item.note.listedDate}</span>
+                          )}
                         </div>
                       </div>
                     </div>

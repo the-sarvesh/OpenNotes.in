@@ -60,6 +60,8 @@ export interface OrderItem {
   delivery_method?: string;
   material_type?: string;
   location?: string;
+  cohort?: number;
+  listing_created_at?: string;
 }
 
 

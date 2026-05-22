@@ -221,7 +221,8 @@ router.patch("/listings/:id", async (req, res, next) => {
       meetup_location,
       imageUrls: rawImageUrls,
       subjects: rawSubjects,
-      is_multiple_subjects
+      is_multiple_subjects,
+      cohort
     } = req.body;
 
     // Verify listing exists
@@ -245,6 +246,18 @@ router.patch("/listings/:id", async (req, res, next) => {
     }
     if (material_type !== undefined && !VALID_MATERIALS.includes(material_type)) {
       return res.status(400).json({ error: `Invalid material type value: ${material_type}` });
+    }
+
+    let parsedCohort = listing.cohort;
+    if (cohort !== undefined) {
+      if (cohort === null || cohort === '') {
+        parsedCohort = null;
+      } else {
+        parsedCohort = parseInt(cohort);
+        if (isNaN(parsedCohort) || parsedCohort < 1 || parsedCohort > 99) {
+          return res.status(400).json({ error: "Cohort must be a positive integer between 1 and 99" });
+        }
+      }
     }
 
     const setClauses: string[] = [];
@@ -288,6 +301,7 @@ router.patch("/listings/:id", async (req, res, next) => {
       setClauses.push("is_multiple_subjects = ?");
       args.push(is_multiple_subjects === true || is_multiple_subjects === "true" || is_multiple_subjects === 1 ? 1 : 0);
     }
+    if (cohort !== undefined) { setClauses.push("cohort = ?"); args.push(parsedCohort); }
 
     if (setClauses.length > 0) {
       args.push(id);
@@ -712,6 +726,12 @@ router.post("/orders/:id/cancel", async (req: AuthRequest, res, next) => {
       return res.status(400).json({ error: "Order is already cancelled" });
     }
 
+    // Ensure SYSTEM user exists to satisfy foreign key constraints on messages
+    await tx.execute({
+      sql: `INSERT OR IGNORE INTO users (id, email, name, role, status, is_verified)
+            VALUES ('SYSTEM', 'system@opennotes.in', 'System', 'admin', 'active', 1)`
+    });
+
     // 2. Fetch order items to revert inventory
     const itemsRes = await tx.execute({
       sql: `SELECT oi.*, l.title, l.quantity as current_listing_qty, l.status as listing_status
@@ -857,9 +877,8 @@ router.post("/orders/items/:itemId/force-complete", async (req: AuthRequest, res
 
     // Whitelist of statuses that can be force-completed (meetup-related only)
     const ALLOWED_FORCE_COMPLETE_STATUSES = [
-      'meetup_scheduled',
-      'meetup_in_progress',
-      'meetup_unconfirmed'
+      'pending_meetup',
+      'acknowledged'
     ];
 
     // 1. Fetch the order item with full context
@@ -879,36 +898,40 @@ router.post("/orders/items/:itemId/force-complete", async (req: AuthRequest, res
       return res.status(404).json({ error: "Order item not found" });
     }
 
-    if (item.status === "completed" || item.status === "cancelled") {
-      return res.status(400).json({ error: `Item is already ${item.status}` });
-    }
-
-    // Verify item is in an allowed meetup state
-    if (!ALLOWED_FORCE_COMPLETE_STATUSES.includes(item.status)) {
-      return res.status(400).json({
-        error: 'Force-complete allowed only from meetup states',
-        detail: `Current status "${item.status}" is not in the allowed list: ${ALLOWED_FORCE_COMPLETE_STATUSES.join(', ')}`
+    const inClause = ALLOWED_FORCE_COMPLETE_STATUSES.map(s => `'${s}'`).join(',');
+    
+    // 2. Perform atomic transaction
+    const tx = await db.transaction('write');
+    let allCompleted = false;
+    try {
+      const updateRes = await tx.execute({
+        sql: `UPDATE order_items SET status = 'completed' WHERE id = ? AND status IN (${inClause})`,
+        args: [itemId],
       });
-    }
 
-    // 2. Mark item as completed
-    await db.execute({
-      sql: "UPDATE order_items SET status = 'completed' WHERE id = ?",
-      args: [itemId],
-    });
+      if (updateRes.rowsAffected !== 1) {
+        await tx.rollback();
+        return res.status(400).json({ error: `Item cannot be force-completed. Ensure it is in an allowed meetup state.` });
+      }
 
-    // 3. Check if all items in the order are now completed
-    const allItemsRes = await db.execute({
-      sql: "SELECT status FROM order_items WHERE order_id = ?",
-      args: [item.order_id],
-    });
-    const allCompleted = (allItemsRes.rows as any[]).every((r: any) => r.status === "completed");
-
-    if (allCompleted) {
-      await db.execute({
-        sql: "UPDATE orders SET status = 'completed' WHERE id = ?",
+      // Check if all items in the order are now completed
+      const allItemsRes = await tx.execute({
+        sql: "SELECT status FROM order_items WHERE order_id = ?",
         args: [item.order_id],
       });
+      allCompleted = (allItemsRes.rows as any[]).every((r: any) => r.status === "completed");
+
+      if (allCompleted) {
+        await tx.execute({
+          sql: "UPDATE orders SET status = 'completed' WHERE id = ?",
+          args: [item.order_id],
+        });
+      }
+      
+      await tx.commit();
+    } catch (e) {
+      await tx.rollback();
+      throw e;
     }
 
     // 4. Update chat message metadata for real-time UI
@@ -1112,6 +1135,7 @@ router.post("/purge-data", async (_req, res, next) => {
     await db.execute("DELETE FROM notifications");
     await db.execute("DELETE FROM order_items");
     await db.execute("DELETE FROM orders");
+    await db.execute("DELETE FROM listing_images");
     await db.execute("DELETE FROM listing_subjects");
     await db.execute("DELETE FROM listings");
 

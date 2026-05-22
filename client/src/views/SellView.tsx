@@ -40,6 +40,7 @@ interface FormData {
   preferredMeetupSpot: string;
   meetupLocation: string;
   isDonation: boolean;
+  cohort: string;
 }
 
 const INITIAL_FORM: FormData = {
@@ -61,6 +62,7 @@ const INITIAL_FORM: FormData = {
   preferredMeetupSpot: STANDARD_SPOTS[0],
   meetupLocation: '',
   isDonation: false,
+  cohort: '',
 };
 
 const STEPS = [
@@ -233,6 +235,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
           preferred_meetup_spot: form.deliveryMethod !== 'courier' ? form.preferredMeetupSpot : undefined,
           meetup_location: form.deliveryMethod !== 'courier' ? form.meetupLocation : undefined,
           subjects: form.isMultipleSubjects ? form.subjects : undefined,
+          cohort: form.cohort ? parseInt(form.cohort) : undefined,
         }),
       });
       const data = await res.json();
@@ -473,13 +476,32 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                 </div>
               </div>
 
-              {/* Semester */}
-              <div>
-                <Label>Semester</Label>
-                <select value={form.semester} onChange={e => { set('semester', e.target.value); set('courseCode', ''); set('subjects', []); }} className={inputClass}>
-                  <option value="">Select semester...</option>
-                  {Object.keys(SUBJECTS_BY_SEM).map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+              {/* Semester & Cohort */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Semester</Label>
+                  <select value={form.semester} onChange={e => { set('semester', e.target.value); set('courseCode', ''); set('subjects', []); }} className={inputClass}>
+                    <option value="">Select semester...</option>
+                    {Object.keys(SUBJECTS_BY_SEM).map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label>Cohort Number <span className="normal-case text-[9px] font-medium">(optional)</span></Label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={form.cohort}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || (Number(val) >= 1 && Number(val) <= 99)) {
+                        set('cohort', val);
+                      }
+                    }}
+                    placeholder="e.g. 21, 22..."
+                    className={inputClass}
+                  />
+                </div>
               </div>
 
               {/* Multiple subjects toggle */}

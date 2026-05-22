@@ -230,6 +230,16 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                                 {formatMaterialType(item.material_type)}
                               </span>
                             )}
+                            {item.cohort && (
+                              <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-2.5 py-1 rounded-lg">
+                                Cohort {item.cohort}
+                              </span>
+                            )}
+                            {item.listing_created_at && (
+                              <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-2.5 py-1 rounded-lg">
+                                {new Date(item.listing_created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                              </span>
+                            )}
                           </div>
 
                           {/* Seller + Price grid */}

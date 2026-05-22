@@ -41,6 +41,7 @@ const initDb = async () => {
         preferred_meetup_spot TEXT,
         meetup_location TEXT,
         views INTEGER NOT NULL DEFAULT 0,
+        cohort INTEGER,
         status TEXT NOT NULL DEFAULT 'active',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (seller_id) REFERENCES users(id)
@@ -328,6 +329,7 @@ const initDb = async () => {
       "CREATE TABLE IF NOT EXISTS subject_drive_links (semester TEXT NOT NULL, subject_name TEXT NOT NULL, drive_link TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (semester, subject_name))",
       "CREATE INDEX IF NOT EXISTS idx_listings_location ON listings(location)",
       "CREATE TABLE IF NOT EXISTS broadcast_jobs (id TEXT PRIMARY KEY, admin_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', title TEXT NOT NULL, message TEXT NOT NULL, link_url TEXT, total_users INTEGER NOT NULL DEFAULT 0, sent_count INTEGER NOT NULL DEFAULT 0, failed_count INTEGER NOT NULL DEFAULT 0, error_message TEXT, started_at DATETIME, finished_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (admin_id) REFERENCES users(id))",
+      "ALTER TABLE listings ADD COLUMN cohort INTEGER",
     ];
 
     for (const migration of migrations) {
@@ -471,6 +473,30 @@ const initDb = async () => {
       }
     } catch (err: any) {
       console.warn("[Seed] Could not seed default coupon:", err.message);
+    }
+
+    // Seed a default SYSTEM user if none exists yet
+    try {
+      const existingSystemUser = await db.execute(
+        "SELECT id FROM users WHERE id = 'SYSTEM'",
+      );
+      if (existingSystemUser.rows.length === 0) {
+        await db.execute({
+          sql: `INSERT INTO users (id, email, name, role, status, is_verified)
+                VALUES (?, ?, ?, ?, ?, ?)`,
+          args: [
+            "SYSTEM",
+            "system@opennotes.in",
+            "System",
+            "admin",
+            "active",
+            1
+          ]
+        });
+        console.log("[Seed] Default SYSTEM user created.");
+      }
+    } catch (err: any) {
+      console.warn("[Seed] Could not seed default SYSTEM user:", err.message);
     }
 
     console.log("Database tables initialized successfully.");
