@@ -30,6 +30,7 @@ interface EditForm {
   meetupLocation: string;
   isDonation: boolean;
   images: EditImageItem[];
+  cohort: string;
 }
 
 interface EditListingModalProps {
@@ -110,6 +111,7 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
       isUploading: false,
       error: null,
     })),
+    cohort:              listing.cohort === null || listing.cohort === undefined ? '' : String(listing.cohort),
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -214,6 +216,7 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
         preferred_meetup_spot: form.preferredMeetupSpot,
         meetup_location: form.meetupLocation.trim() || null,
         original_price: form.originalPrice ? Number(form.originalPrice) : null,
+        cohort: form.cohort ? parseInt(form.cohort) : null,
       };
 
       // Only include price/quantity/images if not locked by active orders
@@ -467,14 +470,33 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
             )}
           </div>
 
-          {/* Condition */}
-          <div>
-            <Label>Condition</Label>
-            <select value={form.condition} onChange={(e) => set('condition', e.target.value)} className={inputClass}>
-              {['Like New', 'Good', 'Fair', 'Heavily Annotated'].map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
+          {/* Condition & Cohort */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Condition</Label>
+              <select value={form.condition} onChange={(e) => set('condition', e.target.value)} className={inputClass}>
+                {['Like New', 'Good', 'Fair', 'Heavily Annotated'].map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Cohort Number <span className="normal-case text-[9px] font-medium">(optional)</span></Label>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={form.cohort}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || (Number(val) >= 1 && Number(val) <= 99)) {
+                    set('cohort', val);
+                  }
+                }}
+                placeholder="e.g. 21, 22..."
+                className={inputClass}
+              />
+            </div>
           </div>
 
           {/* Location */}

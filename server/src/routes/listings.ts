@@ -174,7 +174,8 @@ router.post(
         delivery_method,
         preferred_meetup_spot,
         meetup_location,
-        imageUrls: preUploadedUrls
+        imageUrls: preUploadedUrls,
+        cohort
       } = req.body;
 
       // Handle pre-uploaded image URLs (JSON or Array)
@@ -233,6 +234,14 @@ router.post(
         return res.status(400).json({ error: "Quantity must be a positive number" });
       }
 
+      let parsedCohort = null;
+      if (cohort !== undefined && cohort !== null && cohort !== '') {
+        parsedCohort = parseInt(cohort);
+        if (isNaN(parsedCohort) || parsedCohort < 1 || parsedCohort > 99) {
+          return res.status(400).json({ error: "Cohort must be a positive integer between 1 and 99" });
+        }
+      }
+
       const validSemesters = ["Sem1", "Sem2", "Sem3", "Sem4", "Sem5", "Sem6", "Sem7", "Sem8"];
       if (!validSemesters.includes(semester)) {
         return res.status(400).json({ error: "Invalid semester" });
@@ -249,8 +258,8 @@ router.post(
       const deliveryMethod = delivery_method || "in_person";
       const meetupLoc = meetup_location || null;
 await db.execute({
-  sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, original_price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+  sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, original_price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, cohort, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
   args: [
     listingId,
     sellerId,
@@ -269,6 +278,7 @@ await db.execute({
     deliveryMethod,
     preferred_meetup_spot || null,
     meetupLoc,
+    parsedCohort,
   ],
 });
       // Insert all images into listing_images table
@@ -447,6 +457,7 @@ router.put("/:id", authenticate as any, async (req: AuthRequest, res, next) => {
       imageUrls: rawImageUrls,
       subjects: rawSubjects,
       original_price,
+      cohort,
     } = req.body;
 
     // Validate editable fields
@@ -480,6 +491,18 @@ router.put("/:id", authenticate as any, async (req: AuthRequest, res, next) => {
       }
     }
 
+    let parsedCohort = listing.cohort;
+    if (cohort !== undefined) {
+      if (cohort === null || cohort === '') {
+        parsedCohort = null;
+      } else {
+        parsedCohort = parseInt(cohort);
+        if (isNaN(parsedCohort) || parsedCohort < 1 || parsedCohort > 99) {
+          return res.status(400).json({ error: "Cohort must be a positive integer between 1 and 99" });
+        }
+      }
+    }
+
     // Build dynamic update
     const setClauses: string[] = [];
     const args: any[] = [];
@@ -493,6 +516,7 @@ router.put("/:id", authenticate as any, async (req: AuthRequest, res, next) => {
     if (location !== undefined)            { setClauses.push("location = ?");                  args.push(location); }
     if (preferred_meetup_spot !== undefined) { setClauses.push("preferred_meetup_spot = ?");  args.push(preferred_meetup_spot || null); }
     if (meetup_location !== undefined)     { setClauses.push("meetup_location = ?");           args.push(meetup_location || null); }
+    if (cohort !== undefined)              { setClauses.push("cohort = ?");                    args.push(parsedCohort); }
 
     // Re-activate if sold-out listing gets restocked
     if (quantity !== undefined && parsedQuantity > 0 && listing.status === 'archived') {

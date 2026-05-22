@@ -29,5 +29,9 @@ export function mapListing(item: any): Note {
     originalPrice: (item.original_price === null || item.original_price === undefined || item.original_price === '')
       ? undefined
       : (Number.isFinite(Number(item.original_price)) ? Number(item.original_price) : undefined),
+    cohort: item.cohort !== undefined && item.cohort !== null && item.cohort !== '' ? Number(item.cohort) : undefined,
+    listedDate: item.created_at
+      ? new Date(item.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : undefined,
   };
 }

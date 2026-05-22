@@ -104,6 +104,7 @@ const App: React.FC = () => {
 
   // ── Feedback card ─────────────────────────────────────────────────
   const [pendingFeedback, setPendingFeedback] = useState<{
+    status: 'scheduled' | 'ready';
     triggerType: 'buyer' | 'seller';
     referenceId: string;
     itemTitle: string;
@@ -343,6 +344,7 @@ const App: React.FC = () => {
     socket.on('new_message', onNewMessage);
 
     // ── Feedback trigger: listen for completed meetup ───────────────
+    let feedbackTimeoutId: any;
     const onMeetupStatusChanged = (data: any) => {
       if (data.status !== 'completed') return;
       if (!user) return;
@@ -396,6 +398,7 @@ const App: React.FC = () => {
     socket.on('meetup_status_changed', onMeetupStatusChanged);
 
     return () => {
+      clearTimeout(feedbackTimeoutId);
       socket.off('connect_error', onConnectError);
       socket.off('new_notification', onNewNotification);
       socket.off('unread_count_changed', onUnreadCountChanged);

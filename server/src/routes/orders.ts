@@ -479,6 +479,7 @@ router.get("/my-orders", authenticate, async (req: AuthRequest, res, next) => {
           oi.*,
           l.title, l.course_code, l.image_url, l.seller_id, l.delivery_method,
           l.meetup_location, l.condition, l.semester, l.material_type, l.location,
+          l.cohort, l.created_at AS listing_created_at,
           u.name as seller_name, u.email as seller_email
         FROM order_items oi
         JOIN listings l ON oi.listing_id = l.id
