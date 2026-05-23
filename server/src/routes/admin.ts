@@ -1024,6 +1024,124 @@ router.post("/orders/items/:itemId/force-complete", async (req: AuthRequest, res
 });
 
 
+// POST /api/admin/orders/items/:itemId/poke — Admin nudge to both parties of stuck orders
+router.post("/orders/items/:itemId/poke", async (req: AuthRequest, res, next) => {
+  try {
+    const { itemId } = req.params;
+
+    // 1. Fetch the order item with full context (buyer, seller, listing title)
+    const itemRes = await db.execute({
+      sql: `SELECT oi.*, o.buyer_id, l.title
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            JOIN listings l ON oi.listing_id = l.id
+            WHERE oi.id = ?`,
+      args: [itemId],
+    });
+
+    const item = itemRes.rows[0] as any;
+    if (!item) {
+      return res.status(404).json({ error: "Order item not found" });
+    }
+
+    if (item.status === 'completed' || item.status === 'cancelled') {
+      return res.status(400).json({ error: "Cannot poke completed or cancelled order items" });
+    }
+
+    // 2. Fetch details for buyer and seller
+    const buyerRes = await db.execute({
+      sql: "SELECT name, email, telegram_chat_id FROM users WHERE id = ?",
+      args: [item.buyer_id]
+    });
+    const sellerRes = await db.execute({
+      sql: "SELECT name, email, telegram_chat_id FROM users WHERE id = ?",
+      args: [item.seller_id]
+    });
+
+    const buyer = buyerRes.rows[0] as any;
+    const seller = sellerRes.rows[0] as any;
+
+    if (!buyer || !seller) {
+      return res.status(404).json({ error: "Buyer or Seller not found for this order item" });
+    }
+
+    // 3. Send Emails via Resend HTTP API
+    const { sendMail } = await import("../utils/email.js");
+    
+    // Email templates
+    const buyerEmailHtml = `
+      <div style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #0f172a;">Exchange Pending ⚠️</h2>
+        <p>Hi <strong>${buyer.name}</strong>,</p>
+        <p>Your exchange for '<strong>${item.title}</strong>' is still pending.</p>
+        <p style="font-size: 15px; line-height: 1.6; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
+          Have you met up yet? Please exchange the note and enter the OTP to complete your order.
+        </p>
+        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+          This is an automated reminder from OpenNotes.in.
+        </p>
+      </div>
+    `;
+
+    const sellerEmailHtml = `
+      <div style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #0f172a;">Exchange Pending ⚠️</h2>
+        <p>Hi <strong>${seller.name}</strong>,</p>
+        <p>Your exchange for '<strong>${item.title}</strong>' is still pending.</p>
+        <p style="font-size: 15px; line-height: 1.6; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
+          Have you met up yet? Please exchange the note and enter the OTP to complete your order.
+        </p>
+        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+          This is an automated reminder from OpenNotes.in.
+        </p>
+      </div>
+    `;
+
+    // Send emails asynchronously
+    Promise.all([
+      sendMail({
+        to: buyer.email,
+        subject: `Pending Exchange: ${item.title} ⚠️`,
+        html: buyerEmailHtml,
+        text: `Hi ${buyer.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`
+      }).catch(err => console.error(`[Admin Poke] Email to buyer failed: ${err.message}`)),
+      sendMail({
+        to: seller.email,
+        subject: `Pending Exchange: ${item.title} ⚠️`,
+        html: sellerEmailHtml,
+        text: `Hi ${seller.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`
+      }).catch(err => console.error(`[Admin Poke] Email to seller failed: ${err.message}`))
+    ]);
+
+    // 4. Send In-App notifications (which triggers socket + push + Telegram Bot if linked)
+    const nudgeTitle = "Exchange Pending ⚠️";
+    const nudgeMsgBuyer = `Hi ${buyer.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`;
+    const nudgeMsgSeller = `Hi ${seller.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`;
+
+    await Promise.all([
+      createNotification(
+        item.buyer_id,
+        "order_update",
+        nudgeTitle,
+        nudgeMsgBuyer,
+        "/orders"
+      ),
+      createNotification(
+        item.seller_id,
+        "order_update",
+        nudgeTitle,
+        nudgeMsgSeller,
+        "/orders"
+      )
+    ]);
+
+    res.json({ message: "Automated nudge messages sent successfully via Email, Push, and Telegram." });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
 // POST /api/admin/orders/:id/release-funds — release escrow funds to seller
 router.post("/orders/:id/release-funds", async (req, res, next) => {
   try {

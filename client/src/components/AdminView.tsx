@@ -103,6 +103,7 @@ export const AdminView: React.FC = () => {
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [forceCompleting, setForceCompleting] = useState<string | null>(null); // itemId being force-completed
+  const [pokingItemId, setPokingItemId] = useState<string | null>(null);
 
   // Admin listing edit
   const [editingListing, setEditingListing] = useState(false);
@@ -1446,54 +1447,90 @@ export const AdminView: React.FC = () => {
                                   {/* Spacer */}
                                   <div className="flex-1" />
 
-                                  {/* Force Complete button */}
+                                  {/* Force Complete & Poke buttons */}
                                   {isStuck && (
-                                    <button
-                                      disabled={forceCompleting === item.id}
-                                      onClick={async () => {
-                                        if (!confirm(`Force-complete "${item.title}"? The buyer and seller will be notified. This cannot be undone.`)) return;
-                                        setForceCompleting(item.id);
-                                        try {
-                                          const res = await apiRequest(`/api/admin/orders/items/${item.id}/force-complete`, { method: 'POST' });
-                                          const data = await res.json();
-                                          if (res.ok) {
-                                            setActionTone('success');
-                                            setActionMsg(data.orderCompleted ? 'Item completed — order fully complete!' : 'Item force-completed successfully');
-                                            
-                                            // Trigger global order refetch
-                                            await fetchData();
-                                            
-                                            // Re-fetch orders inside this closure to locate updated order and sync detail view properly
-                                            const freshOrdersRes = await apiRequest('/api/admin/orders');
-                                            if (freshOrdersRes.ok) {
-                                              const freshOrders = await freshOrdersRes.json();
-                                              const updated = freshOrders.find((o: any) => o.id === selectedOrder.id);
-                                              if (updated) setSelectedOrder(updated);
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        disabled={pokingItemId === item.id}
+                                        onClick={async () => {
+                                          setPokingItemId(item.id);
+                                          try {
+                                            const res = await apiRequest(`/api/admin/orders/items/${item.id}/poke`, { method: 'POST' });
+                                            const data = await res.json();
+                                            if (res.ok) {
+                                              setActionTone('success');
+                                              setActionMsg('Nudge sent to buyer & seller successfully!');
+                                              setTimeout(() => setActionMsg(''), 4000);
+                                            } else {
+                                              setActionTone('error');
+                                              setActionMsg(data.error || 'Failed to nudge users');
+                                              setTimeout(() => setActionMsg(''), 4000);
                                             }
-
-                                            setTimeout(() => setActionMsg(''), 4000);
-                                          } else {
+                                          } catch {
                                             setActionTone('error');
-                                            setActionMsg(data.error || 'Force-complete failed');
+                                            setActionMsg('Network error');
                                             setTimeout(() => setActionMsg(''), 4000);
+                                          } finally {
+                                            setPokingItemId(null);
                                           }
-                                        } catch {
-                                          setActionTone('error');
-                                          setActionMsg('Network error');
-                                          setTimeout(() => setActionMsg(''), 4000);
-                                        } finally {
-                                          setForceCompleting(null);
-                                        }
-                                      }}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-                                    >
-                                      {forceCompleting === item.id ? (
-                                        <span className="h-3 w-3 border-2 border-emerald-400/30 border-t-emerald-400 animate-spin rounded-full" />
-                                      ) : (
-                                        <CheckCircle2 className="h-3.5 w-3.5" />
-                                      )}
-                                      Force Complete
-                                    </button>
+                                        }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFC000]/10 hover:bg-[#FFC000]/20 border border-[#FFC000]/20 text-[#FFC000] rounded-lg text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
+                                      >
+                                        {pokingItemId === item.id ? (
+                                          <span className="h-3 w-3 border-2 border-[#FFC000]/30 border-t-[#FFC000] animate-spin rounded-full" />
+                                        ) : (
+                                          <SendIcon className="h-3.5 w-3.5" />
+                                        )}
+                                        Poke Users
+                                      </button>
+
+                                      <button
+                                        disabled={forceCompleting === item.id}
+                                        onClick={async () => {
+                                          if (!confirm(`Force-complete "${item.title}"? The buyer and seller will be notified. This cannot be undone.`)) return;
+                                          setForceCompleting(item.id);
+                                          try {
+                                            const res = await apiRequest(`/api/admin/orders/items/${item.id}/force-complete`, { method: 'POST' });
+                                            const data = await res.json();
+                                            if (res.ok) {
+                                              setActionTone('success');
+                                              setActionMsg(data.orderCompleted ? 'Item completed — order fully complete!' : 'Item force-completed successfully');
+                                              
+                                              // Trigger global order refetch
+                                              await fetchData();
+                                              
+                                              // Re-fetch orders inside this closure to locate updated order and sync detail view properly
+                                              const freshOrdersRes = await apiRequest('/api/admin/orders');
+                                              if (freshOrdersRes.ok) {
+                                                const freshOrders = await freshOrdersRes.json();
+                                                const updated = freshOrders.find((o: any) => o.id === selectedOrder.id);
+                                                if (updated) setSelectedOrder(updated);
+                                              }
+
+                                              setTimeout(() => setActionMsg(''), 4000);
+                                            } else {
+                                              setActionTone('error');
+                                              setActionMsg(data.error || 'Force-complete failed');
+                                              setTimeout(() => setActionMsg(''), 4000);
+                                            }
+                                          } catch {
+                                            setActionTone('error');
+                                            setActionMsg('Network error');
+                                            setTimeout(() => setActionMsg(''), 4000);
+                                          } finally {
+                                            setForceCompleting(null);
+                                          }
+                                        }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
+                                      >
+                                        {forceCompleting === item.id ? (
+                                          <span className="h-3 w-3 border-2 border-emerald-400/30 border-t-emerald-400 animate-spin rounded-full" />
+                                        ) : (
+                                          <CheckCircle2 className="h-3.5 w-3.5" />
+                                        )}
+                                        Force Complete
+                                      </button>
+                                    </div>
                                   )}
 
                                   {isDone && (

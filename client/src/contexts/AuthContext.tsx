@@ -11,6 +11,7 @@ export interface User {
   profile_image_url?: string;
   role?: string;
   has_password?: boolean;
+  telegram_chat_id?: string;
 }
 
 
