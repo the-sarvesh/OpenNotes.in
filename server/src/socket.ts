@@ -88,6 +88,27 @@ export const initSocket = (httpServer: HttpServer) => {
     socket.on("join_conversation", async ({ conversationId }: { conversationId: string }) => {
       if (!conversationId) return;
       try {
+        if (conversationId.startsWith("support_")) {
+          // Support chat authorization:
+          // Either current user matches the support suffix, OR is an admin.
+          const userPart = conversationId.substring(8);
+          
+          const userRoleRes = await db.execute({
+            sql: "SELECT role FROM users WHERE id = ?",
+            args: [userId]
+          });
+          const userRole = userRoleRes.rows[0]?.role;
+          const isAdmin = userRole === 'admin';
+
+          if (userId !== userPart && !isAdmin) {
+            socket.emit("error", { message: "Not authorized for this support conversation" });
+            return;
+          }
+
+          socket.join(`conv:${conversationId}`);
+          return;
+        }
+
         const [u1, u2] = conversationId.split('_');
 
         if (!u1 || !u2) {
@@ -149,6 +170,90 @@ export const initSocket = (httpServer: HttpServer) => {
         }
 
         try {
+          const isSupport = conversationId.startsWith("support_");
+
+          if (isSupport) {
+            // Validate that either sender (userId) or receiver (receiverId) is an admin
+            const userRolesRes = await db.execute({
+              sql: "SELECT id, role FROM users WHERE id IN (?, ?)",
+              args: [userId, receiverId]
+            });
+            const roles = userRolesRes.rows.reduce((acc, row: any) => {
+              acc[row.id] = row.role;
+              return acc;
+            }, {} as Record<string, string>);
+
+            const isSenderAdmin = roles[userId] === 'admin';
+            const isReceiverAdmin = roles[receiverId] === 'admin';
+
+            if (!isSenderAdmin && !isReceiverAdmin) {
+              socket.emit("message_error", { message: "Support conversations are only allowed with admin users." });
+              return;
+            }
+
+            const userPart = isSenderAdmin ? receiverId : userId;
+            const expectedConvId = `support_${userPart}`;
+            if (conversationId !== expectedConvId) {
+              socket.emit("message_error", { message: "Invalid conversation ID" });
+              return;
+            }
+
+            // Persist support message to DB (listing_id is null)
+            const { v4: uuidv4 } = await import("uuid");
+            const messageId = uuidv4();
+
+            await db.execute({
+              sql: `INSERT INTO messages (id, conversation_id, sender_id, receiver_id, listing_id, content)
+                    VALUES (?, ?, ?, ?, ?, ?)`,
+              args: [
+                messageId,
+                conversationId,
+                userId,
+                receiverId,
+                null,
+                content.trim(),
+              ],
+            });
+
+            // Fetch sender name
+            const senderRes = await db.execute({
+              sql: "SELECT name FROM users WHERE id = ?",
+              args: [userId],
+            });
+            const senderName = (senderRes.rows[0]?.name as string) || "Unknown";
+
+            const messagePayload = {
+              id: messageId,
+              conversation_id: conversationId,
+              sender_id: userId,
+              receiver_id: receiverId,
+              listing_id: null,
+              sender_name: senderName,
+              content: content.trim(),
+              is_read: false,
+              created_at: new Date().toISOString(),
+            };
+
+            io.to(`conv:${conversationId}`).to(`user:${receiverId}`).emit("new_message", messagePayload);
+            io.to(`user:${receiverId}`).emit("unread_count_changed");
+
+            // Trigger support notifications (including Telegram to Admin)
+            import('./utils/notifications.js').then(({ createNotification }) => {
+              createNotification(
+                receiverId,
+                'message',
+                'Support Message 💬',
+                `${senderName} sent you a message.`,
+                '/messages',
+                null,
+                { conversationId, senderName, content: content.trim(), listingId: null }
+              );
+            });
+
+            return;
+          }
+
+          // Otherwise, proceed with normal logic:
           // Verify order exists (any order between these two)
           const orderCheck = await db.execute({
             sql: `SELECT oi.id FROM order_items oi

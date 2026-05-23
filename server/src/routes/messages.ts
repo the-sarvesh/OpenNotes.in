@@ -16,6 +16,21 @@ const getConversationId = (userId1: string, userId2: string) => {
   return `${sorted[0]}_${sorted[1]}`;
 };
 
+// GET /api/messages/support/admin-id — get an admin user ID for support chat
+router.get('/support/admin-id', async (req: AuthRequest, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: "SELECT id, name, profile_image_url FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1",
+    });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No admin found in the system' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/messages/check/:receiverId/:listingId — check if order exists & convo started
 router.get('/check/:receiverId/:listingId', async (req: AuthRequest, res, next) => {
   try {
@@ -56,9 +71,18 @@ router.get('/check/:receiverId/:listingId', async (req: AuthRequest, res, next) 
 router.get("/conversations", async (req: AuthRequest, res, next) => {
   try {
     const userId = req.user!.id;
+    const isAdmin = req.user!.role === 'admin';
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = (page - 1) * limit;
+
+    const whereClause = isAdmin 
+      ? 'WHERE m.sender_id = ? OR m.receiver_id = ? OR m.conversation_id LIKE ?' 
+      : 'WHERE m.sender_id = ? OR m.receiver_id = ?';
+      
+    const queryArgs = isAdmin
+      ? [userId, userId, userId, userId, userId, 'support_%', limit, offset]
+      : [userId, userId, userId, userId, userId, limit, offset];
 
     const convos = await db.execute({
       sql: `
@@ -68,6 +92,7 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
                GROUP_CONCAT(DISTINCT l.title) as listing_titles,
                GROUP_CONCAT(DISTINCT l.image_url) as listing_images,
                CASE 
+                 WHEN m.conversation_id LIKE 'support_%' THEN SUBSTR(m.conversation_id, 9)
                  WHEN m.sender_id = ? THEN m.receiver_id 
                  ELSE m.sender_id 
                END as other_user_id,
@@ -90,14 +115,18 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
                     OR (o.buyer_id = m.receiver_id AND oi.seller_id = m.sender_id))
                   AND oi.status NOT IN ('completed', 'cancelled')) as active_order_count
         FROM messages m
-        JOIN listings l ON m.listing_id = l.id
-        JOIN users u ON u.id = (CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END)
-        WHERE m.sender_id = ? OR m.receiver_id = ?
+        LEFT JOIN listings l ON m.listing_id = l.id
+        JOIN users u ON u.id = (CASE 
+                                 WHEN m.conversation_id LIKE 'support_%' THEN SUBSTR(m.conversation_id, 9)
+                                 WHEN m.sender_id = ? THEN m.receiver_id 
+                                 ELSE m.sender_id 
+                               END)
+        ${whereClause}
         GROUP BY m.conversation_id
         ORDER BY last_message_at DESC
         LIMIT ? OFFSET ?
       `,
-      args: [userId, userId, userId, userId, userId, limit, offset]
+      args: queryArgs
     });
 
     // Check live socket presence for each conversation's other user
@@ -105,11 +134,16 @@ router.get("/conversations", async (req: AuthRequest, res, next) => {
     const results = convos.rows.map(convo => {
       const otherUserId = convo.other_user_id as string;
       const userRoom = io2?.sockets?.adapter?.rooms?.get(`user:${otherUserId}`);
+      
+      const listingIds = convo.listing_ids ? String(convo.listing_ids).split(',') : [];
+      const listingTitles = convo.listing_titles ? String(convo.listing_titles).split(',') : [];
+      const listingImages = convo.listing_images ? String(convo.listing_images).split(',') : [];
+
       return {
         conversationId: convo.conversation_id,
-        listingIds: String(convo.listing_ids || "").split(','),
-        listingTitles: String(convo.listing_titles || "").split(','),
-        listingImages: String(convo.listing_images || "").split(','),
+        listingIds,
+        listingTitles,
+        listingImages,
         otherUserId,
         otherUserName: String(convo.other_user_name || "User"),
         otherUserProfileImage: convo.other_user_profile_image,
@@ -214,10 +248,10 @@ router.get('/:conversationId', async (req: AuthRequest, res, next) => {
 router.post('/', async (req: AuthRequest, res, next) => {
   try {
     const senderId = req.user!.id;
-    const { receiver_id, listing_id, content } = req.body;
+    const { receiver_id, listing_id, content, isSupport } = req.body;
 
-    if (!receiver_id || !listing_id || !content?.trim()) {
-      return res.status(400).json({ error: 'receiver_id, listing_id, and content are required' });
+    if (!receiver_id || (!isSupport && !listing_id) || !content?.trim()) {
+      return res.status(400).json({ error: 'receiver_id, content are required, and listing_id is required for transaction chats.' });
     }
 
     if (content.trim().length > 2000) {
@@ -228,32 +262,58 @@ router.post('/', async (req: AuthRequest, res, next) => {
       return res.status(400).json({ error: 'Cannot message yourself' });
     }
 
-    // NEW PREFERENCE: Verify that an active order exists between these two users for this listing
-    // Active = status is NOT 'completed' and NOT 'cancelled'
-    const orderCheck = await db.execute({
-      sql: `
-        SELECT oi.id 
-        FROM order_items oi
-        JOIN orders o ON oi.order_id = o.id 
-        WHERE oi.listing_id = ? 
-          AND ((o.buyer_id = ? AND oi.seller_id = ?) OR (o.buyer_id = ? AND oi.seller_id = ?))
-          AND oi.status NOT IN ('completed', 'cancelled')
-        LIMIT 1
-      `,
-      args: [listing_id, senderId, receiver_id, receiver_id, senderId]
-    });
+    let conversationId: string;
 
-    if (orderCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'This conversation is closed. You can only message if there is an active transaction.' });
+    if (isSupport) {
+      // Validate that either sender (req.user) or receiver (receiver_id) is an admin
+      let senderRole = req.user!.role;
+      let isSupportValid = false;
+      if (senderRole === 'admin') {
+        isSupportValid = true;
+      } else {
+        const receiverRes = await db.execute({
+          sql: 'SELECT role FROM users WHERE id = ?',
+          args: [receiver_id]
+        });
+        if (receiverRes.rows[0] && (receiverRes.rows[0] as any).role === 'admin') {
+          isSupportValid = true;
+        }
+      }
+
+      if (!isSupportValid) {
+        return res.status(403).json({ error: 'Support conversations are only allowed with admin users.' });
+      }
+
+      const userPart = senderRole === 'admin' ? receiver_id : senderId;
+      conversationId = `support_${userPart}`;
+    } else {
+      // Regular message: check order is active
+      const orderCheck = await db.execute({
+        sql: `
+          SELECT oi.id 
+          FROM order_items oi
+          JOIN orders o ON oi.order_id = o.id 
+          WHERE oi.listing_id = ? 
+            AND ((o.buyer_id = ? AND oi.seller_id = ?) OR (o.buyer_id = ? AND oi.seller_id = ?))
+            AND oi.status NOT IN ('completed', 'cancelled')
+          LIMIT 1
+        `,
+        args: [listing_id, senderId, receiver_id, receiver_id, senderId]
+      });
+
+      if (orderCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'This conversation is closed. You can only message if there is an active transaction.' });
+      }
+
+      conversationId = getConversationId(senderId, receiver_id);
     }
 
-    const conversationId = getConversationId(senderId, receiver_id);
     const messageId = uuidv4();
 
     await db.execute({
       sql: `INSERT INTO messages (id, conversation_id, sender_id, receiver_id, listing_id, content) 
             VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [messageId, conversationId, senderId, receiver_id, listing_id, content.trim()]
+      args: [messageId, conversationId, senderId, receiver_id, isSupport ? null : listing_id, content.trim()]
     });
 
     // Notify receiver
@@ -267,11 +327,11 @@ router.post('/', async (req: AuthRequest, res, next) => {
     await createNotification(
       receiver_id,
       'message',
-      'New Message! 💬',
+      isSupport ? 'Support Message 💬' : 'New Message! 💬',
       `${senderName} sent you a message.`,
       '/messages',
       null,
-      { conversationId, senderName, content: content.trim(), listingId: listing_id }
+      { conversationId, senderName, content: content.trim(), listingId: isSupport ? null : listing_id }
     );
 
     // ── Socket.IO real-time broadcast ────────────────────────────────────────
@@ -282,7 +342,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
         conversation_id: conversationId,
         sender_id: senderId,
         receiver_id: receiver_id,
-        listing_id: listing_id,
+        listing_id: isSupport ? null : listing_id,
         sender_name: senderName,
         content: content.trim(),
         is_read: false,

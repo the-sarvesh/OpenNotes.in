@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
+import { useNavigate } from 'react-router-dom';
 import { SUBJECTS_BY_SEM, SEMESTERS, LOCATIONS, STANDARD_SPOTS } from '../utils/constants.js';
 import { ExternalLink, Link as LinkIcon, Save } from 'lucide-react';
 import { statusColors, formatStatus } from '../utils/status';
@@ -77,6 +78,7 @@ const StatChip: React.FC<{ label: string; value: string | number; gold?: boolean
 
 export const AdminView: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<AdminTab>('overview');
   const [stats, setStats] = useState<Stats | null>(null);
   const [listings, setListings] = useState<any[]>([]);
@@ -1168,6 +1170,18 @@ export const AdminView: React.FC = () => {
                               <span className="text-[10px] text-slate-500">per month</span>
                             </div>
                           } />
+                          {selectedUser.id !== user?.id && (
+                            <button
+                              onClick={() => {
+                                navigate('/messages', {
+                                  state: { conversationId: `support_${selectedUser.id}` }
+                                });
+                              }}
+                              className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-[#FFC000]/10 hover:bg-[#FFC000]/20 border border-[#FFC000]/20 text-[#FFC000] rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-sm cursor-pointer"
+                            >
+                              <MessageCircle className="h-4 w-4" /> Message User
+                            </button>
+                          )}
                         </div>
 
                         {/* Activity summary */}
