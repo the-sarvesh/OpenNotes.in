@@ -14,12 +14,14 @@ import {
   CheckCheck,
   Check,
   ChevronRight,
+  HelpCircle,
 } from "lucide-react";
 import { getSocket } from "../utils/socket.js";
 import { Socket } from "socket.io-client";
 import { useAuth, User } from "../contexts/AuthContext.js";
 import { apiRequest } from "../utils/api.js";
 import toast from "react-hot-toast";
+import { useLocation } from "react-router-dom";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -345,91 +347,119 @@ interface ConversationListProps {
   onBack?: () => void;
   isConnected: boolean;
   timeAgo: (d: string) => string;
+  user: User | null;
+  onStartSupport: () => void;
 }
 
 const ConversationList: React.FC<ConversationListProps> = ({
-  conversations, activeConvo, loading, onSelect, onBack, isConnected, timeAgo,
-}) => (
-  <div className="flex flex-col h-full">
-    <div className="flex items-center justify-between px-4 py-3.5 border-b border-border shrink-0 bg-surface">
-      <div className="flex items-center gap-2.5">
-        {onBack && (
-          <button onClick={onBack} className="p-1.5 hover:bg-background rounded-xl transition-colors active:scale-90">
-            <ArrowLeft className="h-5 w-5 text-text-muted" />
-          </button>
-        )}
-        <div>
-          <h1 className="text-sm font-black text-text-main tracking-tight">Messages</h1>
-          <p className="text-[9px] text-text-muted font-bold uppercase tracking-widest">
-            {conversations.length} conversation{conversations.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-      </div>
-      <ConnectionBadge isConnected={isConnected} />
-    </div>
+  conversations, activeConvo, loading, onSelect, onBack, isConnected, timeAgo, user, onStartSupport
+}) => {
+  const isUserAdmin = user?.role === 'admin';
 
-    <div className="flex-1 overflow-y-auto overscroll-contain">
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <span className="h-6 w-6 rounded-full border-[3px] border-primary border-t-transparent animate-spin" />
-        </div>
-      ) : conversations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-3">
-            <MessageCircle className="h-6 w-6 text-primary" />
-          </div>
-          <p className="text-sm font-bold text-text-main mb-1">No conversations yet</p>
-          <p className="text-xs text-text-muted leading-relaxed">Tap "Contact Seller" on a listing to start chatting</p>
-        </div>
-      ) : (
-        <div className="divide-y divide-border/60">
-          {conversations.map((convo) => (
-            <button
-              key={convo.conversationId}
-              onClick={() => onSelect(convo)}
-              className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-background transition-colors text-left ${activeConvo?.conversationId === convo.conversationId
-                  ? "bg-primary/5 border-l-[3px] border-l-primary"
-                  : "border-l-[3px] border-l-transparent"
-                }`}
-            >
-              <Avatar
-                src={convo.otherUserProfileImage}
-                name={convo.otherUserName}
-                size="sm"
-                badge={
-                  <img src={convo.listingImages[0]} alt="" className="w-5 h-5 rounded-md border-2 border-surface object-cover" />
-                }
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-text-main truncate">{convo.otherUserName}</p>
-                    {convo.otherUserOnline && (
-                      <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />
-                    )}
-                  </div>
-                  <span className="text-[9px] text-text-muted shrink-0 ml-2">{timeAgo(convo.lastMessageAt)}</span>
-                </div>
-                <p className="text-[10px] text-primary font-bold truncate mb-0.5">
-                  {convo.listingTitles[0]}{convo.listingTitles.length > 1 && ` +${convo.listingTitles.length - 1}`}
-                </p>
-                <p className="text-[10px] text-text-muted truncate">
-                  {convo.lastMessageIsMe && <span className="font-semibold">You: </span>}
-                  {convo.lastMessage}
-                </p>
-              </div>
-              {convo.unreadCount > 0 && (
-                <span className="bg-red-500 text-white text-[9px] font-black min-w-[18px] h-[18px] rounded-full flex items-center justify-center shrink-0 px-1">
-                  {convo.unreadCount}
-                </span>
-              )}
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-4 py-3.5 border-b border-border shrink-0 bg-surface">
+        <div className="flex items-center gap-2.5">
+          {onBack && (
+            <button onClick={onBack} className="p-1.5 hover:bg-background rounded-xl transition-colors active:scale-90">
+              <ArrowLeft className="h-5 w-5 text-text-muted" />
             </button>
-          ))}
+          )}
+          <div>
+            <h1 className="text-sm font-black text-text-main tracking-tight">Messages</h1>
+            <p className="text-[9px] text-text-muted font-bold uppercase tracking-widest">
+              {conversations.length} conversation{conversations.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </div>
+        <ConnectionBadge isConnected={isConnected} />
+      </div>
+
+      {/* Quick Support Action Button */}
+      {user && !isUserAdmin && (
+        <div className="p-3 bg-surface border-b border-border">
+          <button
+            onClick={onStartSupport}
+            className="w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 active:scale-95 shadow-sm"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Chat with Support Admin
+          </button>
         </div>
       )}
+
+      <div className="flex-1 overflow-y-auto overscroll-contain">
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <span className="h-6 w-6 rounded-full border-[3px] border-primary border-t-transparent animate-spin" />
+          </div>
+        ) : conversations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-3">
+              <MessageCircle className="h-6 w-6 text-primary" />
+            </div>
+            <p className="text-sm font-bold text-text-main mb-1">No conversations yet</p>
+            <p className="text-xs text-text-muted leading-relaxed">Tap "Contact Seller" on a listing to start chatting</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {conversations.map((convo) => {
+              const isSupport = convo.conversationId.startsWith("support_");
+              return (
+                <button
+                  key={convo.conversationId}
+                  onClick={() => onSelect(convo)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-background transition-colors text-left ${activeConvo?.conversationId === convo.conversationId
+                      ? "bg-primary/5 border-l-[3px] border-l-primary"
+                      : "border-l-[3px] border-l-transparent"
+                    }`}
+                >
+                  <Avatar
+                    src={convo.otherUserProfileImage}
+                    name={convo.otherUserName}
+                    size="sm"
+                    badge={
+                      isSupport ? (
+                        <div className="w-5 h-5 rounded-md border border-surface bg-primary text-black flex items-center justify-center font-bold text-[9px] shadow-sm">
+                          💬
+                        </div>
+                      ) : (
+                        <img src={convo.listingImages[0]} alt="" className="w-5 h-5 rounded-md border border-surface object-cover" />
+                      )
+                    }
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-text-main truncate">{convo.otherUserName}</p>
+                        {convo.otherUserOnline && (
+                          <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 shrink-0" />
+                        )}
+                      </div>
+                      <span className="text-[9px] text-text-muted shrink-0 ml-2">{timeAgo(convo.lastMessageAt)}</span>
+                    </div>
+                    <p className="text-[10px] text-primary font-bold truncate mb-0.5">
+                      {isSupport ? "Help & Support" : (convo.listingTitles[0] + (convo.listingTitles.length > 1 ? ` +${convo.listingTitles.length - 1}` : ""))}
+                    </p>
+                    <p className="text-[10px] text-text-muted truncate">
+                      {convo.lastMessageIsMe && <span className="font-semibold">You: </span>}
+                      {convo.lastMessage}
+                    </p>
+                  </div>
+                  {convo.unreadCount > 0 && (
+                    <span className="bg-red-500 text-white text-[9px] font-black min-w-[18px] h-[18px] rounded-full flex items-center justify-center shrink-0 px-1">
+                      {convo.unreadCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ── ChatPanel ──────────────────────────────────────────────────────
 interface ChatPanelProps {
@@ -472,6 +502,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onVerifyPin, onAcknowledgeOrder, onGoToOrders, onGoToSales,
   hasActiveOrder,
 }) => {
+  const isSupport = activeConvo.conversationId.startsWith("support_");
+  const canChat = hasActiveOrder || isSupport;
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const isInitialLoadRef = useRef(true);
@@ -579,20 +612,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               {(activeConvo.otherUserOnline || activeConvo.otherUserLastSeen) && (
                 <span className="text-text-muted"> · </span>
               )}
-              <span className="text-primary font-bold uppercase tracking-widest">{activeConvo.listingTitles[0]}</span>
+              <span className="text-primary font-bold uppercase tracking-widest">{isSupport ? "Help & Support" : activeConvo.listingTitles[0]}</span>
             </p>
           </div>
         </button>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {user && arrivedUsers[activeConvo.otherUserId] && (
+          {user && !isSupport && arrivedUsers[activeConvo.otherUserId] && (
             <div className="flex items-center gap-1 px-2 py-1.5 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 animate-pulse">
               <MapPin className="h-3 w-3 fill-current" />
               <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Arrived</span>
             </div>
           )}
 
-          {hasActiveOrder && hasPendingPin && (
+          {hasActiveOrder && !isSupport && hasPendingPin && (
             <button
               onClick={onArrived}
               disabled={user ? arrivedUsers[user.id] : false}
@@ -606,7 +639,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             </button>
           )}
 
-          {hasActiveOrder && (
+          {hasActiveOrder && !isSupport && (
             <button
               onClick={onMeetupModalOpen}
               className="p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-all active:scale-95"
@@ -702,7 +735,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       {/* ── Input bar ── */}
       <div className="px-3 sm:px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border bg-surface shrink-0">
-        {!hasActiveOrder && (
+        {!canChat && (
           <div className="mb-3 p-3 bg-background rounded-2xl border border-border text-center">
             <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest">
               This conversation is closed because the transaction is complete.
@@ -726,14 +759,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               // Small delay to ensure keyboard is fully up or viewport settled
               setTimeout(() => snapToBottom(), 300);
             }}
-            placeholder={hasActiveOrder ? "Type a message…" : "Chat disabled"}
-            className={`flex-1 px-4 py-3 bg-background border border-border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main transition-all ${!hasActiveOrder ? "opacity-50 cursor-not-allowed" : ""}`}
-            disabled={sending || !hasActiveOrder}
+            placeholder={canChat ? "Type a message…" : "Chat disabled"}
+            className={`flex-1 px-4 py-3 bg-background border border-border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text-main transition-all ${!canChat ? "opacity-50 cursor-not-allowed" : ""}`}
+            disabled={sending || !canChat}
             autoComplete="off"
           />
           <button
             onClick={onSend}
-            disabled={!newMessage.trim() || sending || !hasActiveOrder}
+            disabled={!newMessage.trim() || sending || !canChat}
             className="w-11 h-11 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 rounded-2xl font-bold flex items-center justify-center shadow-lg shadow-[#FFC000]/20 transition-all disabled:opacity-40 active:scale-95 shrink-0"
           >
             {sending
@@ -755,6 +788,8 @@ export const MessagesView: React.FC<{
   onGoToSales?: () => void;
 }> = ({ initialConversationId, onBack, onGoToOrders, onGoToSales }) => {
   const { user } = useAuth();
+  const location = useLocation();
+  const actualInitialId = initialConversationId || (location.state as any)?.conversationId;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
@@ -795,19 +830,113 @@ export const MessagesView: React.FC<{
       if (res.ok) {
         const data: Conversation[] = await res.json();
         setConversations(data);
-        if (initialConversationId && !hasHandledInitialId.current) {
-          const target = data.find((c) => c.conversationId === initialConversationId);
-          if (target) { setActiveConvo(target); hasHandledInitialId.current = true; }
+        if (actualInitialId && !hasHandledInitialId.current) {
+          const target = data.find((c) => c.conversationId === actualInitialId);
+          if (target) {
+            setActiveConvo(target);
+            hasHandledInitialId.current = true;
+          } else if (actualInitialId.startsWith("support_") && user) {
+            if (user.role !== 'admin') {
+              // Initiate synthetic support convo if we redirected here and it doesn't exist in active convos yet
+              hasHandledInitialId.current = true;
+              try {
+                const admRes = await apiRequest("/api/messages/support/admin-id");
+                if (admRes.ok) {
+                  const adminInfo = await admRes.json();
+                  const syntheticConvo: Conversation = {
+                    conversationId: actualInitialId,
+                    listingIds: [],
+                    listingTitles: [],
+                    listingImages: [],
+                    otherUserId: adminInfo.id,
+                    otherUserName: adminInfo.name,
+                    otherUserProfileImage: adminInfo.profile_image_url,
+                    unreadCount: 0,
+                    lastMessage: "",
+                    lastMessageMe: false,
+                    lastMessageAt: new Date().toISOString(),
+                    hasActiveOrder: true
+                  };
+                  setActiveConvo(syntheticConvo);
+                }
+              } catch (err) {
+                console.error("[Messages] Failed to load synthetic support admin", err);
+              }
+            } else {
+              // Admin initiating support convo with a user
+              hasHandledInitialId.current = true;
+              const targetUserId = actualInitialId.substring(8);
+              try {
+                const uRes = await apiRequest(`/api/users/${targetUserId}`);
+                if (uRes.ok) {
+                  const userInfo = await uRes.json();
+                  const syntheticConvo: Conversation = {
+                    conversationId: actualInitialId,
+                    listingIds: [],
+                    listingTitles: [],
+                    listingImages: [],
+                    otherUserId: userInfo.id,
+                    otherUserName: userInfo.name,
+                    otherUserProfileImage: userInfo.profile_image_url,
+                    unreadCount: 0,
+                    lastMessage: "",
+                    lastMessageMe: false,
+                    lastMessageAt: new Date().toISOString(),
+                    hasActiveOrder: true
+                  };
+                  setActiveConvo(syntheticConvo);
+                }
+              } catch (err) {
+                console.error("[Messages] Failed to load synthetic support user info for admin", err);
+              }
+            }
+          }
         }
       }
     } catch (err) { console.error("[Messages] fetchConversations error:", err); }
     setLoading(false);
-  }, [initialConversationId]);
+  }, [actualInitialId, user]);
+
+  const handleStartSupport = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await apiRequest("/api/messages/support/admin-id");
+      if (!res.ok) {
+        toast.error("Failed to contact support. No support admin is available at the moment.");
+        return;
+      }
+      const adminInfo = await res.json();
+      const supportConvoId = `support_${user.id}`;
+      
+      const existing = conversations.find(c => c.conversationId === supportConvoId);
+      if (existing) {
+        setActiveConvo(existing);
+      } else {
+        const syntheticConvo: Conversation = {
+          conversationId: supportConvoId,
+          listingIds: [],
+          listingTitles: [],
+          listingImages: [],
+          otherUserId: adminInfo.id,
+          otherUserName: adminInfo.name,
+          otherUserProfileImage: adminInfo.profile_image_url,
+          unreadCount: 0,
+          lastMessage: "",
+          lastMessageMe: false,
+          lastMessageAt: new Date().toISOString(),
+          hasActiveOrder: true
+        };
+        setActiveConvo(syntheticConvo);
+      }
+    } catch (err) {
+      toast.error("Network error while trying to connect to support.");
+    }
+  }, [user, conversations]);
 
   useEffect(() => {
     hasHandledInitialId.current = false;
-    if (!initialConversationId) setActiveConvo(null);
-  }, [initialConversationId]);
+    if (!actualInitialId) setActiveConvo(null);
+  }, [actualInitialId]);
 
   useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
@@ -976,6 +1105,8 @@ export const MessagesView: React.FC<{
     setSending(true); setErrorMsg(""); emitTypingStop();
     const socket = socketRef.current;
     const trimmed = newMessage.trim();
+    const isSupport = activeConvo.conversationId.startsWith("support_");
+    
     if (socket && socket.connected) {
       setNewMessage("");
       const onError = ({ message }: { message: string }) => {
@@ -986,14 +1117,23 @@ export const MessagesView: React.FC<{
       socket.emit("send_message", {
         conversationId: activeConvo.conversationId,
         receiverId: activeConvo.otherUserId,
-        listingId: activeConvo.listingIds[0],
+        listingId: isSupport ? null : activeConvo.listingIds[0],
         content: trimmed,
       });
       // Shorten fallback timeout to 1s
       setTimeout(() => { socket.off("message_error", onError); setSending(false); }, 1000);
     } else {
       try {
-        const res = await apiRequest("/api/messages", { method: "POST", body: JSON.stringify({ receiver_id: activeConvo.otherUserId, listing_id: activeConvo.listingIds[0], content: trimmed }) });
+        const bodyPayload = {
+          receiver_id: activeConvo.otherUserId,
+          content: trimmed,
+          ...(isSupport ? { isSupport: true } : { listing_id: activeConvo.listingIds[0] })
+        };
+        const res = await apiRequest("/api/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bodyPayload)
+        });
         const data = await res.json();
         if (res.ok) { setNewMessage(""); fetchMessages(activeConvo.conversationId); fetchConversations(); }
         else setErrorMsg(data.error || "Failed to send message");
@@ -1093,7 +1233,7 @@ export const MessagesView: React.FC<{
   };
 
   const handleChatBack = () => {
-    if (initialConversationId && conversations.length <= 1) onBack?.();
+    if (actualInitialId && conversations.length <= 1) onBack?.();
     else { setActiveConvo(null); fetchConversations(); }
   };
 
@@ -1182,6 +1322,7 @@ export const MessagesView: React.FC<{
             conversations={conversations} activeConvo={activeConvo}
             loading={loading} onSelect={setActiveConvo}
             isConnected={isConnected} timeAgo={timeAgo}
+            user={user} onStartSupport={handleStartSupport}
           />
         </div>
         <div className="flex-1 flex flex-col min-w-0">
@@ -1220,6 +1361,7 @@ export const MessagesView: React.FC<{
                 conversations={conversations} activeConvo={activeConvo}
                 loading={loading} onSelect={setActiveConvo}
                 onBack={onBack} isConnected={isConnected} timeAgo={timeAgo}
+                user={user} onStartSupport={handleStartSupport}
               />
             </motion.div>
           ) : (
