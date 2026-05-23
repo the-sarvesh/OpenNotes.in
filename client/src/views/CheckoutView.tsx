@@ -23,6 +23,7 @@ import { apiRequest } from "../utils/api";
 import { LOCATIONS, STANDARD_SPOTS } from "../utils/constants";
 import { useSettings } from "../contexts/SettingsContext";
 import { formatMaterialType, getPlatformFeeConfig, formatRupee, formatCashAtMeetup } from "../utils/formatters";
+import { ReachabilityModal } from "../components/ReachabilityModal";
 
 interface CheckoutViewProps {
   cart?: any[];
@@ -131,6 +132,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [showReachability, setShowReachability] = useState(false);
 
   React.useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -206,6 +208,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
   const handlePlaceOrder = async () => {
     if (!user) return;
+    if (!user.mobile_number && !user.telegram_chat_id) {
+      setShowReachability(true);
+      return;
+    }
     if (needsDelivery && buyerLocation === "Other (Manual)" && !customBuyerLocation) { toast.error("Please specify your city/region"); return; }
     if (needsMeetup && !collectionDate) { toast.error("Please select a collection date"); return; }
     if (!agreedToDelivery) { toast.error("You must agree to the delivery methods"); return; }
@@ -619,6 +625,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
           </div>
         )}
       </div>
+
+      <ReachabilityModal
+        isOpen={showReachability}
+        onClose={() => setShowReachability(false)}
+        purpose="buy"
+      />
     </div>
   );
 };

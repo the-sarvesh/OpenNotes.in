@@ -11,6 +11,7 @@ import { getPlatformFeeConfig } from '../utils/formatters';
 import { apiRequest } from '../utils/api';
 import { toast } from 'react-hot-toast';
 import { SUBJECTS_BY_SEM, LOCATIONS, STANDARD_SPOTS } from '../utils/constants';
+import { ReachabilityModal } from '../components/ReachabilityModal';
 
 // ── Types ──────────────────────────────────────────────────────────
 interface ImageUpload {
@@ -123,6 +124,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
+  const [showReachability, setShowReachability] = useState(false);
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [step]);
 
@@ -211,6 +213,10 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
 
   const handleSubmit = async () => {
     if (!user) { setError('Please sign in to sell notes.'); return; }
+    if (!user.mobile_number && !user.telegram_chat_id) {
+      setShowReachability(true);
+      return;
+    }
     if (form.images.some(img => img.isUploading)) { toast.error('Please wait for all images to finish uploading.'); return; }
     setIsSubmitting(true); setError('');
     try {
@@ -804,6 +810,12 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
           )}
         </div>
       </div>
+
+      <ReachabilityModal
+        isOpen={showReachability}
+        onClose={() => setShowReachability(false)}
+        purpose="sell"
+      />
     </motion.div>
   );
 };
