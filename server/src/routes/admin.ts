@@ -1602,4 +1602,69 @@ router.get("/feedback", async (req, res, next) => {
   }
 });
 
+// GET /api/admin/issues — public and authenticated user issue reports
+router.get("/issues", async (req, res, next) => {
+  try {
+    const status = String(req.query.status || 'all');
+    const validStatuses = ['open', 'in_progress', 'resolved'];
+    const whereClause = status !== 'all' && validStatuses.includes(status)
+      ? 'WHERE i.status = ?'
+      : '';
+    const args = whereClause ? [status] : [];
+
+    const issues = await db.execute({
+      sql: `SELECT
+              i.id, i.email, i.category, i.subject, i.description, i.page_url,
+              i.user_agent, i.status, i.created_at, i.updated_at,
+              u.name AS user_name
+            FROM issue_reports i
+            LEFT JOIN users u ON u.id = i.user_id
+            ${whereClause}
+            ORDER BY
+              CASE i.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,
+              i.created_at DESC
+            LIMIT 300`,
+      args,
+    });
+
+    const stats = await db.execute(`
+      SELECT
+        COUNT(*) AS total,
+        COUNT(CASE WHEN status = 'open' THEN 1 END) AS open_count,
+        COUNT(CASE WHEN status = 'in_progress' THEN 1 END) AS in_progress_count,
+        COUNT(CASE WHEN status = 'resolved' THEN 1 END) AS resolved_count
+      FROM issue_reports
+    `);
+
+    res.json({ issues: issues.rows, stats: stats.rows[0] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /api/admin/issues/:id — move an issue through the support workflow
+router.patch("/issues/:id", async (req, res, next) => {
+  try {
+    const status = String(req.body?.status || '');
+    if (!['open', 'in_progress', 'resolved'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid issue status.' });
+    }
+
+    const result = await db.execute({
+      sql: `UPDATE issue_reports
+            SET status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?`,
+      args: [status, req.params.id],
+    });
+
+    if (result.rowsAffected === 0) {
+      return res.status(404).json({ error: 'Issue report not found.' });
+    }
+
+    res.json({ message: `Issue marked as ${status.replace(/_/g, ' ')}.` });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

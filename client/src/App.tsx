@@ -13,6 +13,7 @@ import { HomeView } from "./views/HomeView";
 import { BrowseView } from "./views/BrowseView";
 import { SellView } from "./views/SellView";
 import { ResourcesView } from "./views/ResourcesView";
+import { ReportIssueView } from "./views/ReportIssueView";
 
 // ── Components ──────────────────────────────────────────────────────
 import { ProductDetailsModal } from "./components/ProductDetailsModal";
@@ -609,6 +610,7 @@ const App: React.FC = () => {
             } />
             <Route path="/sell" element={<SellView onGoToBrowse={() => navigate("/browse")} />} />
             <Route path="/resources" element={<ResourcesView />} />
+            <Route path="/report-issue" element={<ReportIssueView />} />
             <Route path="/profile" element={
               <ProfileView 
                 onContactSeller={handleContactSeller} 

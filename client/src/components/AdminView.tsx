@@ -12,12 +12,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SUBJECTS_BY_SEM, SEMESTERS, LOCATIONS, STANDARD_SPOTS } from '../utils/constants.js';
 import { ExternalLink, Link as LinkIcon, Save } from 'lucide-react';
 import { statusColors, formatStatus } from '../utils/status';
 
-type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats' | 'settings' | 'feedback';
+type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats' | 'issues' | 'settings' | 'feedback';
 
 interface Stats {
   users: number;
@@ -79,7 +79,8 @@ const StatChip: React.FC<{ label: string; value: string | number; gold?: boolean
 export const AdminView: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<AdminTab>('overview');
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<AdminTab>(() => searchParams.get('tab') === 'issues' ? 'issues' : 'overview');
   const [stats, setStats] = useState<Stats | null>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [resources, setResources] = useState<any[]>([]);
@@ -96,6 +97,8 @@ export const AdminView: React.FC = () => {
   const [feedbackData, setFeedbackData] = useState<{ feedback: any[]; stats: any } | null>(null);
   const [feedbackTypeFilter, setFeedbackTypeFilter] = useState<'all' | 'buyer' | 'seller'>('all');
   const [feedbackRatingFilter, setFeedbackRatingFilter] = useState<number | null>(null);
+  const [issueData, setIssueData] = useState<{ issues: any[]; stats: any } | null>(null);
+  const [issueStatusFilter, setIssueStatusFilter] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('all');
 
   // Detail views
   const [selectedListing, setSelectedListing] = useState<any | null>(null);
@@ -182,6 +185,9 @@ export const AdminView: React.FC = () => {
         if (feedbackRatingFilter) params.set('rating', String(feedbackRatingFilter));
         const res = await apiRequest(`/api/admin/feedback?${params.toString()}`);
         if (res.ok) setFeedbackData(await res.json());
+      } else if (tab === 'issues') {
+        const res = await apiRequest(`/api/admin/issues?status=${issueStatusFilter}`);
+        if (res.ok) setIssueData(await res.json());
       }
     } catch (err) {
       console.error('Admin fetch error:', err);
@@ -189,7 +195,7 @@ export const AdminView: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [tab, listingFilter, userPage, feedbackTypeFilter, feedbackRatingFilter]);
+  useEffect(() => { fetchData(); }, [tab, listingFilter, userPage, feedbackTypeFilter, feedbackRatingFilter, issueStatusFilter]);
 
   // Debounce search
   useEffect(() => {
@@ -298,6 +304,7 @@ export const AdminView: React.FC = () => {
     { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
     { id: 'orders', label: 'Orders', icon: <ShoppingBag className="h-4 w-4" /> },
     { id: 'chats', label: 'Chats', icon: <MessageCircle className="h-4 w-4" /> },
+    { id: 'issues', label: 'Issues', icon: <AlertTriangle className="h-4 w-4" /> },
     { id: 'feedback', label: 'Feedback', icon: <Star className="h-4 w-4" /> },
     { id: 'settings', label: 'Settings', icon: <SettingsIcon className="h-4 w-4" /> },
   ];
@@ -1632,6 +1639,89 @@ export const AdminView: React.FC = () => {
                           >
                             View Transcript
                           </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* ══ ISSUE REPORTS ═════════════════════════════════════════ */}
+              {tab === 'issues' && (
+                <motion.div key="issues" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
+                  {issueData?.stats && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <StatChip label="Open" value={String(issueData.stats.open_count || 0)} gold />
+                      <StatChip label="In Progress" value={String(issueData.stats.in_progress_count || 0)} />
+                      <StatChip label="Resolved" value={String(issueData.stats.resolved_count || 0)} />
+                      <StatChip label="Total" value={String(issueData.stats.total || 0)} />
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {(['all', 'open', 'in_progress', 'resolved'] as const).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => setIssueStatusFilter(status)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${issueStatusFilter === status ? 'bg-[#FFC000] text-slate-900 border-[#FFC000]' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'}`}
+                      >
+                        {status === 'all' ? 'All' : fmt(status)}
+                      </button>
+                    ))}
+                  </div>
+
+                  {!issueData || issueData.issues.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                      <CheckCircle2 className="h-8 w-8 text-emerald-500/50" />
+                      <p className="text-slate-500 text-sm font-semibold">No issue reports in this view</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {issueData.issues.map((issue: any) => (
+                        <div key={issue.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/[0.07] transition-colors">
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <span className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  {fmt(issue.category)}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${issue.status === 'resolved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : issue.status === 'in_progress' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                  {fmt(issue.status)}
+                                </span>
+                              </div>
+                              <p className="font-black text-white text-sm break-words">{issue.subject}</p>
+                              <p className="text-[10px] text-slate-500 mt-1">
+                                {issue.user_name || 'Guest user'} · <a className="hover:text-[#FFC000]" href={`mailto:${encodeURIComponent(issue.email)}`}>{issue.email}</a>
+                              </p>
+                            </div>
+                            <div className="text-left sm:text-right shrink-0">
+                              <p className="text-[9px] text-slate-600">Ref: {String(issue.id).split('-')[0].toUpperCase()}</p>
+                              <p className="text-[9px] text-slate-600 mt-0.5">{new Date(issue.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                            </div>
+                          </div>
+
+                          <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap break-words border-l-2 border-amber-500/30 pl-3">{issue.description}</p>
+                          {issue.page_url && (
+                            <p className="text-[10px] text-slate-500 mt-3 break-all"><span className="font-black uppercase tracking-wider">Page:</span> {issue.page_url}</p>
+                          )}
+
+                          <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-white/5">
+                            {issue.status !== 'open' && (
+                              <button onClick={() => doAction(`/api/admin/issues/${issue.id}`, 'PATCH', { status: 'open' })} className="px-3 py-1.5 rounded-xl text-xs font-bold border border-white/10 text-slate-300 hover:bg-white/10 transition-colors">
+                                Reopen
+                              </button>
+                            )}
+                            {issue.status === 'open' && (
+                              <button onClick={() => doAction(`/api/admin/issues/${issue.id}`, 'PATCH', { status: 'in_progress' })} className="px-3 py-1.5 rounded-xl text-xs font-bold border border-blue-500/20 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors">
+                                Start working
+                              </button>
+                            )}
+                            {issue.status !== 'resolved' && (
+                              <button onClick={() => doAction(`/api/admin/issues/${issue.id}`, 'PATCH', { status: 'resolved' })} className="px-3 py-1.5 rounded-xl text-xs font-bold border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+                                Mark resolved
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

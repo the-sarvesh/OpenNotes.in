@@ -38,6 +38,7 @@ import reviewsRoutes from "./routes/reviews.js";
 import pushRoutes from "./routes/push.js";
 import resourcesRoutes from "./routes/resources.js";
 import feedbackRoutes from "./routes/feedback.js";
+import issuesRoutes from "./routes/issues.js";
 
 
 // NOTE: Coupon routes are handled under /api/admin/coupons (admin.ts)
@@ -175,6 +176,7 @@ app.use("/api/resources", resourcesRoutes);
 app.use("/api/telegram", telegramRoutes);
 app.use("/api/settings", settingsRouter);
 app.use("/api/feedback", feedbackRoutes);
+app.use("/api/issues", issuesRoutes);
 
 
 app.get("/api/health", (_req, res) => {

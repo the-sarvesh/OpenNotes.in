@@ -675,6 +675,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="text-xs font-bold text-primary hover:underline disabled:opacity-50">
                     Didn't get the code? Resend
                   </button>
+                  <p className="text-[11px] text-text-muted mt-3">
+                    Still not receiving it?{' '}
+                    <a href="/report-issue?category=otp_verification" className="text-primary font-bold hover:underline">
+                      Report this issue
+                    </a>
+                  </p>
                 </div>
               </motion.form>
             )}

@@ -230,6 +230,24 @@ const initDb = async () => {
         FOREIGN KEY (user_id) REFERENCES users(id)
       );
 
+      CREATE TABLE IF NOT EXISTS issue_reports (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        email TEXT NOT NULL,
+        category TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        description TEXT NOT NULL,
+        page_url TEXT,
+        user_agent TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_issue_reports_status
+        ON issue_reports(status, created_at);
+
       CREATE TABLE IF NOT EXISTS broadcast_jobs (
         id TEXT PRIMARY KEY,
         status TEXT NOT NULL DEFAULT 'pending',

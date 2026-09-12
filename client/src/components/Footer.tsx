@@ -54,7 +54,7 @@ export const Footer: React.FC = () => {
           <div className="flex items-center gap-6 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-slate-500">
             <button onClick={() => openLegal('terms')} className="hover:text-white transition-colors">Terms</button>
             <button onClick={() => openLegal('privacy')} className="hover:text-white transition-colors">Privacy</button>
-            <a href="mailto:sarvesh.03.ai@gmail.com?subject=Support Request - OpenNotes" className="hover:text-[#FFC000] transition-colors">Support</a>
+            <a href="/report-issue" className="hover:text-[#FFC000] transition-colors">Report Issue</a>
           </div>
         </div>
 
