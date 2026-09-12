@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, Github, Linkedin, Heart } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { LegalModal } from './LegalModal';
 
 export const Footer: React.FC = () => {
@@ -54,7 +55,7 @@ export const Footer: React.FC = () => {
           <div className="flex items-center gap-6 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-slate-500">
             <button onClick={() => openLegal('terms')} className="hover:text-white transition-colors">Terms</button>
             <button onClick={() => openLegal('privacy')} className="hover:text-white transition-colors">Privacy</button>
-            <a href="/report-issue" className="hover:text-[#FFC000] transition-colors">Report Issue</a>
+            <Link to="/report-issue" className="hover:text-[#FFC000] transition-colors">Report Issue</Link>
           </div>
         </div>
 
