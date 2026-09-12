@@ -7,7 +7,7 @@ export const SUBJECTS_BY_SEM: Record<string, string[]> = {
   'Sem4': ['Cultural Studies', 'Evolution of Design', 'Object Oriented Programming & Design', 'Computer Organization & Architecture'],
   'Sem5': ['Algorithm Design', 'Critical Analysis of Literature & Cinema', 'Humanities and Design', 'Operating Systems (Elective)'],
   'Sem6': ['Computing and Design', 'Statistical Inferences & Applications', 'Software Design Principles', 'Database Design (Elective)'],
-  'Sem7': ['Information Security', 'Human Computer Interaction', 'Computer Networks (Elective)'],
+  'Sem7': ['Information Security', 'Human Computer Interaction', 'Computer Networks (Elective)', 'Software Engineering'],
   'Sem8': ['Capstone Project'],
 };
 
