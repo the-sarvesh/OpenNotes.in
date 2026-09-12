@@ -15,6 +15,7 @@ import {
 import { useAuth } from "../contexts/AuthContext.js";
 import { useSettings } from "../contexts/SettingsContext.js";
 import { apiRequest, API_BASE_URL } from "../utils/api.js";
+import { Link } from "react-router-dom";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -717,9 +718,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </button>
                   <p className="text-[11px] text-text-muted mt-3">
                     Still not receiving it?{' '}
-                    <a href="/report-issue?category=otp_verification&from=Login%20and%20OTP%20verification" className="text-primary font-bold hover:underline">
+                    <Link
+                      to="/report-issue?category=otp_verification&from=Login%20and%20OTP%20verification"
+                      onClick={onClose}
+                      className="text-primary font-bold hover:underline"
+                    >
                       Report this issue
-                    </a>
+                    </Link>
                   </p>
                 </div>
               </motion.form>

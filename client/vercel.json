@@ -9,7 +9,7 @@
       "destination": "https://api.opennotes.in/uploads/:path*"
     },
     {
-      "source": "/((?!api|uploads).*.)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
