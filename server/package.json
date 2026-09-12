@@ -21,7 +21,6 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.14.0",
-    "@types/nodemailer": "^7.0.11",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/uuid": "^11.0.0",
@@ -36,14 +35,15 @@
     "express-session": "^1.19.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
-    "multer-storage-cloudinary": "^4.0.0",
-    "nodemailer": "^8.0.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "socket.io": "^4.8.3",
     "telegraf": "^4.16.3",
     "uuid": "^13.0.0",
     "web-push": "^3.6.7"
+  },
+  "overrides": {
+    "qs": "6.16.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14",

@@ -1,5 +1,4 @@
 import { v2 as cloudinary } from 'cloudinary';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -22,9 +21,8 @@ if (isCloudinaryConfigured) {
 }
 
 // ── Cloudinary Storage ───────────────────────────────────────────────────────
-const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
+const cloudinaryStorage: multer.StorageEngine | null = isCloudinaryConfigured ? {
+  _handleFile(req, file, cb) {
     console.log(`[Cloudinary Storage] Processing upload for: ${file.originalname} (${file.mimetype})`);
     const isProfile = req.baseUrl.includes('users');
     const folder = isProfile ? 'opennotes/profiles' : 'opennotes/resources';
@@ -35,14 +33,38 @@ const cloudinaryStorage = isCloudinaryConfigured ? new CloudinaryStorage({
     
     console.log(`[Cloudinary Storage] Folder: ${folder}, Type: ${resource_type}`);
 
-    return {
-      folder: folder,
-      resource_type: resource_type,
+    const uploadStream = cloudinary.uploader.upload_stream({
+      folder,
+      resource_type,
       allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf', 'docx', 'doc', 'zip', 'ppt', 'pptx', 'xls', 'xlsx', 'txt'],
       public_id: `file-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
-    };
+    }, (error, result) => {
+      if (error) return cb(error);
+      if (!result) return cb(new Error('Cloudinary upload completed without a result.'));
+
+      cb(null, {
+        destination: 'cloudinary',
+        filename: result.public_id,
+        path: result.secure_url,
+        size: result.bytes,
+        cloudinaryResourceType: result.resource_type,
+      } as Partial<Express.Multer.File> & { cloudinaryResourceType: string });
+    });
+
+    file.stream.pipe(uploadStream);
   },
-}) : null;
+  _removeFile(_req, file, cb) {
+    if (!file.filename) return cb(null);
+
+    const resourceType = (file as Express.Multer.File & {
+      cloudinaryResourceType?: 'image' | 'raw' | 'video';
+    }).cloudinaryResourceType ?? 'image';
+
+    cloudinary.uploader.destroy(file.filename, { resource_type: resourceType })
+      .then(() => cb(null))
+      .catch((error: Error) => cb(error));
+  },
+} : null;
 
 // ── Local Disk Storage (Fallback for local testing) ─────────────────────────
 const diskStorage = multer.diskStorage({

@@ -66,9 +66,15 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   // Shared step row
-  const StepRow = ({
+  const StepRow: React.FC<{
+    icon: React.ElementType;
+    color: string;
+    title: string;
+    desc: string;
+    step?: number;
+  }> = ({
     icon: Icon, color, title, desc, step,
-  }: { icon: React.ElementType; color: string; title: string; desc: string; step?: number }) => (
+  }) => (
     <div className="flex gap-3.5 p-4 rounded-2xl bg-white/5 border border-white/8 hover:border-white/15 transition-colors group">
       <div className={`w-9 h-9 rounded-xl border ${COLOR_MAP[`${color}_bg`]} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}>
         <Icon className={`h-4 w-4 ${COLOR_MAP[`${color}_text`]}`} />

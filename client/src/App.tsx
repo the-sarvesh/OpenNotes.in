@@ -108,7 +108,6 @@ const App: React.FC = () => {
     triggerType: 'buyer' | 'seller';
     referenceId: string;
     itemTitle: string;
-    status?: 'scheduled' | 'ready';
   } | null>(null);
   const feedbackTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 

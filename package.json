@@ -17,6 +17,9 @@
     "install:all": "npm install && npm install --prefix client && npm install --prefix server",
     "server:init-db": "npm run init-db --prefix server"
   },
+  "overrides": {
+    "qs": "6.16.0"
+  },
   "devDependencies": {
     "concurrently": "^8.2.2"
   }
