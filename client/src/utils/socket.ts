@@ -15,6 +15,7 @@ export function getSocket(): Socket {
     (import.meta as any).env.VITE_API_URL ||
     (import.meta as any).env.VITE_API_BASE_URL ||
     (import.meta as any).env.VITE_BACKEND_URL ||
+    (isLocal ? (import.meta as any).env.VITE_DEV_API_URL : undefined) ||
     (typeof window !== "undefined"
       ? (isLocal ? `${window.location.protocol}//${window.location.hostname}:5000` : 'https://api.opennotes.in') 
       : "https://api.opennotes.in");

@@ -93,6 +93,9 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
     <AnimatePresence>
       <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center sm:p-4 bg-black/70 backdrop-blur-md">
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="user-guide-title"
           initial={{ opacity: 0, y: 60 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 60 }}
@@ -113,11 +116,13 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                 <BookOpen className="h-4 w-4 text-black" />
               </div>
               <div>
-                <p className="font-black text-white text-sm leading-none">How it Works</p>
+                <p id="user-guide-title" className="font-black text-white text-sm leading-none">How it Works</p>
                 <p className="text-[10px] text-slate-500 mt-0.5">OpenNotes.in guide</p>
               </div>
             </div>
             <button
+              type="button"
+              aria-label="Close guide"
               onClick={onClose}
               className="p-2 hover:bg-white/10 rounded-xl transition-colors text-slate-400 hover:text-white active:scale-95"
             >

@@ -10,22 +10,11 @@ import { Footer } from "./components/Footer";
 
 // ── Views ───────────────────────────────────────────────────────────
 import { HomeView } from "./views/HomeView";
-import { BrowseView } from "./views/BrowseView";
-import { SellView } from "./views/SellView";
-import { ResourcesView } from "./views/ResourcesView";
-import { ReportIssueView } from "./views/ReportIssueView";
 
 // ── Components ──────────────────────────────────────────────────────
 import { ProductDetailsModal } from "./components/ProductDetailsModal";
 import { AuthModal } from "./components/AuthModal";
 import { ProfileCompletionModal } from "./components/ProfileCompletionModal";
-import { ProfileView } from "./components/ProfileView";
-import { OrdersView } from "./components/OrdersView";
-import { AdminView } from "./components/AdminView";
-import { MessagesView } from "./components/MessagesView";
-import { CartView } from "./views/CartView.tsx";
-import { CheckoutView } from "./views/CheckoutView.tsx";
-import { OrderSuccessView } from "./views/OrderSuccessView";
 import { UserGuideModal } from "./components/UserGuideModal";
 import { TelegramNudge } from "./components/TelegramNudge";
 import { FeedbackCard } from "./components/FeedbackCard";
@@ -39,6 +28,24 @@ import type { Notification } from "./components/NotificationSystem";
 import { useAuth } from "./contexts/AuthContext";
 import { CartProvider, useCart } from "./contexts/CartContext";
 import type { Note, View } from "./types/index.ts";
+
+const BrowseView = React.lazy(() => import("./views/BrowseView").then((module) => ({ default: module.BrowseView })));
+const SellView = React.lazy(() => import("./views/SellView").then((module) => ({ default: module.SellView })));
+const ResourcesView = React.lazy(() => import("./views/ResourcesView").then((module) => ({ default: module.ResourcesView })));
+const ReportIssueView = React.lazy(() => import("./views/ReportIssueView").then((module) => ({ default: module.ReportIssueView })));
+const ProfileView = React.lazy(() => import("./components/ProfileView").then((module) => ({ default: module.ProfileView })));
+const OrdersView = React.lazy(() => import("./components/OrdersView").then((module) => ({ default: module.OrdersView })));
+const AdminView = React.lazy(() => import("./components/AdminView").then((module) => ({ default: module.AdminView })));
+const MessagesView = React.lazy(() => import("./components/MessagesView").then((module) => ({ default: module.MessagesView })));
+const CartView = React.lazy(() => import("./views/CartView").then((module) => ({ default: module.CartView })));
+const CheckoutView = React.lazy(() => import("./views/CheckoutView").then((module) => ({ default: module.CheckoutView })));
+const OrderSuccessView = React.lazy(() => import("./views/OrderSuccessView").then((module) => ({ default: module.OrderSuccessView })));
+
+const RouteLoader = () => (
+  <div className="min-h-[50vh] flex items-center justify-center" role="status" aria-label="Loading page">
+    <span className="h-8 w-8 rounded-full border-[3px] border-primary border-t-transparent animate-spin" />
+  </div>
+);
 
 const App: React.FC = () => {
   const navigate = useNavigate();
@@ -118,7 +125,7 @@ const App: React.FC = () => {
   const prevMessagesRef = React.useRef(unreadMessages);
   const prevNotifsRef = React.useRef(unreadNotifs);
 
-  const { user, login } = useAuth();
+  const { user, login, isLoading: isAuthLoading } = useAuth();
 
   useEffect(() => {
     const isProfileIncomplete = user && (!user.mobile_number || !user.upi_id);
@@ -196,7 +203,7 @@ const App: React.FC = () => {
       const token = params.get("token");
 
       if (userId && email && name) {
-        login({
+        void login({
           id: userId,
           email,
           name,
@@ -448,15 +455,23 @@ const App: React.FC = () => {
   // No longer needed: Redirect logic handled by ProtectedRoute or similar if needed
   // For now, simple redirect in main Routes is better.
   const isProtected = (path: string) => {
-    const public_ = ["/", "/auth/callback", "/reset-password", "/verify-email"];
+    const public_ = [
+      "/",
+      "/browse",
+      "/resources",
+      "/report-issue",
+      "/auth/callback",
+      "/reset-password",
+      "/verify-email",
+    ];
     return !public_.includes(path);
   };
 
   useEffect(() => {
-    if (!user && isProtected(location.pathname)) {
+    if (!isAuthLoading && !user && isProtected(location.pathname)) {
       navigate("/", { replace: true });
     }
-  }, [user, location.pathname, navigate]);
+  }, [user, isAuthLoading, location.pathname, navigate]);
 
   // ── Helpers ───────────────────────────────────────────────────────
   const requireAuth = (action: () => void) => {
@@ -583,6 +598,7 @@ const App: React.FC = () => {
       />
       <main className="flex-1">
         <AnimatePresence mode="wait">
+          <React.Suspense fallback={<RouteLoader />}>
           <Routes location={location}>
             <Route path="/" element={
               <HomeView
@@ -665,6 +681,7 @@ const App: React.FC = () => {
             <Route path="/verify-email" element={<div className="min-h-[50vh] flex items-center justify-center text-text-muted font-medium animate-pulse text-sm">Verifying your account...</div>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </React.Suspense>
         </AnimatePresence>
       </main>
 

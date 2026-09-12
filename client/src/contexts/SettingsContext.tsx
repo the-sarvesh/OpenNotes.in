@@ -4,6 +4,7 @@ import { apiRequest } from '../utils/api';
 interface Settings {
   platform_fee_percentage: number;
   recommended_discount_percentage: number;
+  subjects_by_sem: Record<string, string[]>;
 }
 
 interface SettingsContextType {

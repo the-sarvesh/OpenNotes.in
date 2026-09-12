@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
@@ -69,10 +69,10 @@ const PaymentSplitBanner: React.FC<{ platformFee: number; cashAmount: number }> 
       <div className="p-3.5 flex flex-col gap-0.5 bg-primary/5">
         <div className="flex items-center gap-1.5 mb-0.5">
           <CreditCard className="h-3 w-3 text-primary shrink-0" />
-          <span className="text-[9px] font-black text-primary uppercase tracking-widest">Pay Online Now</span>
+          <span className="text-[9px] font-black text-primary uppercase tracking-widest">{platformFee > 0 ? "Pay Online Now" : "Due Now"}</span>
         </div>
         <p className="text-2xl font-black text-text-main">{formatRupee(platformFee)}</p>
-        <p className="text-[9px] text-text-muted">Platform fee · secures order</p>
+        <p className="text-[9px] text-text-muted">{platformFee > 0 ? "Platform fee · secures order" : "No online payment required"}</p>
       </div>
       <div className="p-3.5 flex flex-col gap-0.5 bg-surface">
         <div className="flex items-center gap-1.5 mb-0.5">
@@ -133,14 +133,19 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showReachability, setShowReachability] = useState(false);
+  const checkoutRequestId = useRef(
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
 
   React.useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [step]);
 
   React.useEffect(() => {
-    if (user && contextCart.length > 0) validateCart();
-  }, []);
+    if (user && contextCart.length > 0) void validateCart();
+  }, [user?.id]);
 
   const activeCart = cart || contextCart;
 
@@ -163,15 +168,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
   const { settings, loading: settingsLoading } = useSettings();
 
-  if (settingsLoading || !settings) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <span className="h-8 w-8 rounded-full border-[3px] border-primary border-t-transparent animate-spin" />
-      </div>
-    );
-  }
-
-  const PLATFORM_FEE_PERCENTAGE = settings.platform_fee_percentage;
+  const PLATFORM_FEE_PERCENTAGE = settings?.platform_fee_percentage ?? 0;
   const total = activeCart.reduce((acc, item) => acc + item.note.price * item.quantity, 0);
   const originalTotal = activeCart.reduce((acc, item) => acc + (item.note.originalPrice || item.note.price) * item.quantity, 0);
   const totalSavings = originalTotal - total;
@@ -220,7 +217,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
     try {
       const res = await apiRequest("/api/orders", {
         method: "POST",
+        headers: { "Idempotency-Key": checkoutRequestId.current },
         body: JSON.stringify({
+          client_request_id: checkoutRequestId.current,
           items: activeCart.map(item => ({ listing_id: item.note.id, quantity: item.quantity })),
           buyer_location: buyerLocation === "Other (Manual)" ? customBuyerLocation : buyerLocation,
           buyer_preferred_spot: buyerPreferredSpot,
@@ -246,6 +245,25 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
   // ── Sidebar summary (shared between desktop sidebar + mobile bar) ─
   const config = getPlatformFeeConfig(PLATFORM_FEE_PERCENTAGE);
   const isWaived = platformFee === 0 && PLATFORM_FEE_PERCENTAGE > 0;
+
+  if (settingsLoading || !settings) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <span className="h-8 w-8 rounded-full border-[3px] border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (activeCart.length === 0) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-24 text-center">
+        <div className="text-4xl mb-4">🛒</div>
+        <h1 className="text-xl font-black text-text-main">Your cart is empty</h1>
+        <p className="text-sm text-text-muted mt-2 mb-6">Add a listing before starting checkout.</p>
+        <button onClick={() => navigate('/browse')} className="px-5 py-3 rounded-xl bg-primary text-black text-sm font-black">Browse listings</button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-36 lg:pb-24 overflow-x-hidden">
@@ -325,7 +343,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
 
                     <div>
                       <FieldLabel>Preferred Date</FieldLabel>
-                      <input type="date" value={collectionDate} min={new Date().toISOString().split("T")[0]} onChange={e => setCollectionDate(e.target.value)}
+                      <input type="date" value={collectionDate} min={new Intl.DateTimeFormat('en-CA').format(new Date())} onChange={e => setCollectionDate(e.target.value)}
                         className={`${inputCls} mb-4 [color-scheme:dark]`} />
 
                       <FieldLabel>Preferred Time of Day</FieldLabel>
@@ -407,7 +425,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                     <div>
                       <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest mb-1">OpenNotes Shield Active</p>
                       <p className="text-[11px] text-emerald-800/70 dark:text-emerald-400/70 leading-relaxed">
-                        Pay the platform fee now to lock in your order and get the seller's contact. Only share your <strong>PIN</strong> after you inspect the notes.
+                        {platformFee > 0
+                          ? <>Pay the platform fee now to reserve your order. Only share your <strong>PIN</strong> after you inspect the notes.</>
+                          : <>There is no online charge for this order. Only share your <strong>PIN</strong> after you inspect the notes.</>}
                       </p>
                     </div>
                   </div>
@@ -422,8 +442,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                       </svg>
                     </div>
                     <span className="text-xs font-medium text-text-muted leading-relaxed">
-                      I agree: I'll pay <strong className="text-text-main">{formatRupee(platformFee)} online</strong>{" "}
-                      {PLATFORM_FEE_PERCENTAGE > 0 ? "to reserve the item" : "(Waived)"}, and{" "}
+                      I agree: {platformFee > 0
+                        ? <>I'll pay <strong className="text-text-main">{formatRupee(platformFee)} online</strong> to reserve the item, and </>
+                        : <>there is <strong className="text-text-main">no online payment</strong>, and </>}
                       <strong className="text-text-main uppercase">{total - platformFee === 0 ? "nothing" : `${formatRupee(total - platformFee)} IN CASH OR UPI directly`}</strong>{" "}
                       to the seller at the meetup after inspecting the notes.
                     </span>
@@ -547,7 +568,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
               {/* Pay now / cash split */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-3 bg-primary/5 rounded-xl border border-primary/10 text-center">
-                  <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-1">Pay Online</p>
+                  <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-1">{platformFee > 0 ? 'Pay Online' : 'Due Now'}</p>
                   <p className="text-lg font-black text-text-main">₹{platformFee}</p>
                 </div>
                 <div className="p-3 bg-background rounded-xl border border-border text-center">
@@ -575,7 +596,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
                     style={{ background: "#fb641b", color: "#fff", boxShadow: "0 4px 20px rgba(251,100,27,0.3)" }}>
                     {loading ? (
                       <><span className="h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Processing…</>
-                    ) : couponResult?.valid && couponResult.feeWaived ? "Place Order · Free! 🎉"
+                    ) : platformFee === 0 ? "Place Order"
                       : <><CreditCard className="h-4 w-4" /> Pay ₹{platformFee} Now</>}
                   </button>
                 </>
@@ -590,7 +611,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-baseline gap-1.5">
             <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">
-              {step === 1 ? "Order Total" : "Pay Online Now"}
+              {step === 1 ? "Order Total" : platformFee > 0 ? "Pay Online Now" : "Due Now"}
             </span>
             <span className="text-lg font-black text-text-main">
               ₹{step === 1 ? total : platformFee}
@@ -619,7 +640,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ cart, onSuccess, onB
               style={{ background: "#fb641b", color: "#fff", boxShadow: "0 4px 20px rgba(251,100,27,0.3)" }}>
               {loading ? (
                 <><span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Processing…</>
-              ) : couponResult?.valid && couponResult.feeWaived ? <>Place Order · Free! 🎉</>
+              ) : platformFee === 0 ? <>Place Order</>
                 : <><CreditCard className="h-4 w-4" /> Pay ₹{platformFee}</>}
             </button>
           </div>

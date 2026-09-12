@@ -26,6 +26,14 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: ALLOWED_PREVIEW_ORIGINS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: OpenNotes <no-reply@opennotes.in>
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

@@ -1,6 +1,9 @@
+import "../env.js";
 import db from "./database.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const initDb = async () => {
+export const initDb = async () => {
   try {
     console.log("Initializing database tables...");
 
@@ -80,6 +83,7 @@ const initDb = async () => {
         buyer_availability TEXT,
         buyer_note TEXT,
         buyer_meetup_details TEXT,
+        idempotency_key TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (buyer_id) REFERENCES users(id)
       );
@@ -230,6 +234,40 @@ const initDb = async () => {
         FOREIGN KEY (user_id) REFERENCES users(id)
       );
 
+      CREATE TABLE IF NOT EXISTS email_delivery_logs (
+        id TEXT PRIMARY KEY,
+        recipient TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        provider_id TEXT,
+        status TEXT NOT NULL,
+        error_message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_email_delivery_recipient
+        ON email_delivery_logs(recipient, created_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_email_delivery_provider
+        ON email_delivery_logs(provider_id) WHERE provider_id IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS notification_delivery_jobs (
+        id TEXT PRIMARY KEY,
+        notification_id TEXT UNIQUE NOT NULL,
+        user_id TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_notification_jobs_pending
+        ON notification_delivery_jobs(status, next_attempt_at);
+
       CREATE TABLE IF NOT EXISTS issue_reports (
         id TEXT PRIMARY KEY,
         user_id TEXT,
@@ -239,6 +277,8 @@ const initDb = async () => {
         description TEXT NOT NULL,
         page_url TEXT,
         user_agent TEXT,
+        screenshot_url TEXT,
+        technical_context TEXT,
         status TEXT NOT NULL DEFAULT 'open',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -291,6 +331,8 @@ const initDb = async () => {
       "ALTER TABLE orders ADD COLUMN buyer_availability TEXT",
       "ALTER TABLE orders ADD COLUMN buyer_note TEXT",
       "ALTER TABLE orders ADD COLUMN buyer_meetup_details TEXT",
+      "ALTER TABLE orders ADD COLUMN idempotency_key TEXT",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_buyer_idempotency ON orders(buyer_id, idempotency_key) WHERE idempotency_key IS NOT NULL",
       "ALTER TABLE order_items ADD COLUMN meetup_pin TEXT",
       "ALTER TABLE order_items ADD COLUMN meetup_signal_count INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE order_items ADD COLUMN last_meetup_signal_at DATETIME",
@@ -310,10 +352,15 @@ const initDb = async () => {
       "CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id)",
       "CREATE INDEX IF NOT EXISTS idx_messages_receiver_id ON messages(receiver_id)",
       "CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)",
+      "CREATE TABLE IF NOT EXISTS notification_delivery_jobs (id TEXT PRIMARY KEY, notification_id TEXT UNIQUE NOT NULL, user_id TEXT NOT NULL, payload_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP, last_error TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)",
+      "CREATE INDEX IF NOT EXISTS idx_notification_jobs_pending ON notification_delivery_jobs(status, next_attempt_at)",
       "CREATE INDEX IF NOT EXISTS idx_reviews_seller_id ON reviews(seller_id)",
       "CREATE INDEX IF NOT EXISTS idx_coupon_codes_code ON coupon_codes(code)",
       "CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token)",
       "CREATE INDEX IF NOT EXISTS idx_reset_tokens_user_id ON password_reset_tokens(user_id)",
+      "CREATE TABLE IF NOT EXISTS email_delivery_logs (id TEXT PRIMARY KEY, recipient TEXT NOT NULL, purpose TEXT NOT NULL, provider_id TEXT, status TEXT NOT NULL, error_message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_email_delivery_recipient ON email_delivery_logs(recipient, created_at)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_email_delivery_provider ON email_delivery_logs(provider_id) WHERE provider_id IS NOT NULL",
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_duplicate_prevent ON reviews(reviewer_id, order_id, listing_id)",
       "CREATE INDEX IF NOT EXISTS idx_push_subs_user_id ON push_subscriptions(user_id)",
       "ALTER TABLE messages ADD COLUMN type TEXT NOT NULL DEFAULT 'text'",
@@ -337,19 +384,21 @@ const initDb = async () => {
       "ALTER TABLE users ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE users ADD COLUMN verification_token TEXT",
       "ALTER TABLE users ADD COLUMN verification_token_expires_at DATETIME",
+      "ALTER TABLE issue_reports ADD COLUMN screenshot_url TEXT",
+      "ALTER TABLE issue_reports ADD COLUMN technical_context TEXT",
       "ALTER TABLE order_items ADD COLUMN pin_attempts INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE order_items ADD COLUMN last_pin_attempt_at DATETIME",
       // ── Orders Migration: total_amount & platform_fee (BE-9.1) ─────────────
       "ALTER TABLE orders ADD COLUMN total_amount REAL NOT NULL DEFAULT 0",
       "ALTER TABLE orders ADD COLUMN platform_fee REAL NOT NULL DEFAULT 0",
       "UPDATE orders SET total_amount = COALESCE((SELECT SUM(price_at_purchase * quantity) FROM order_items WHERE order_items.order_id = orders.id), 0)",
-      "UPDATE orders SET platform_fee = COALESCE((SELECT SUM(platform_fee) FROM order_items WHERE order_items.order_id = orders.id), 0)",
       "CREATE TABLE IF NOT EXISTS subject_drive_links (semester TEXT NOT NULL, subject_name TEXT NOT NULL, drive_link TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (semester, subject_name))",
       "CREATE INDEX IF NOT EXISTS idx_listings_location ON listings(location)",
       "CREATE TABLE IF NOT EXISTS broadcast_jobs (id TEXT PRIMARY KEY, admin_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', title TEXT NOT NULL, message TEXT NOT NULL, link_url TEXT, total_users INTEGER NOT NULL DEFAULT 0, sent_count INTEGER NOT NULL DEFAULT 0, failed_count INTEGER NOT NULL DEFAULT 0, error_message TEXT, started_at DATETIME, finished_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (admin_id) REFERENCES users(id))",
       "ALTER TABLE listings ADD COLUMN cohort INTEGER",
     ];
 
+    const migrationErrors: string[] = [];
     for (const migration of migrations) {
       try {
         await db.execute(migration);
@@ -362,11 +411,14 @@ const initDb = async () => {
         ) {
           // Already applied — ignore silently
         } else {
-          console.log(
-            `Migration skipped: ${migration.substring(0, 60)} — ${err.message}`,
-          );
+          const detail = `${migration.substring(0, 60)} — ${err.message}`;
+          migrationErrors.push(detail);
+          console.error(`Migration failed: ${detail}`);
         }
       }
+    }
+    if (migrationErrors.length > 0) {
+      throw new Error(`Database migration failed: ${migrationErrors.join("; ")}`);
     }
 
     // ── Special Migration: Backfill listing_images ──────────────────────────
@@ -520,7 +572,15 @@ const initDb = async () => {
     console.log("Database tables initialized successfully.");
   } catch (err) {
     console.error("Failed to initialize database:", err);
+    throw err;
   }
 };
 
-initDb();
+// Keep the existing `npm run init-db` command working while allowing the HTTP
+// server to await initialization before it accepts requests.
+const executedFile = process.argv[1] ? path.resolve(process.argv[1]) : "";
+if (executedFile === fileURLToPath(import.meta.url)) {
+  void initDb().catch(() => {
+    process.exitCode = 1;
+  });
+}

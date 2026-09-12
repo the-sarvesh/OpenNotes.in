@@ -1,5 +1,9 @@
-const RESEND_API_KEY = process.env.SMTP_PASS || process.env.RESEND_API_KEY;
+import crypto from "crypto";
+import db from "../db/database.js";
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY || process.env.SMTP_PASS;
 const FROM_ADDRESS = process.env.EMAIL_FROM ?? "OpenNotes <no-reply@opennotes.in>";
+const EMAIL_TIMEOUT_MS = 12_000;
 
 export interface MailOptions {
   to: string;
@@ -7,13 +11,48 @@ export interface MailOptions {
   html: string;
   text?: string;
   attachments?: any[];
+  /** Stable business identifier used by Resend to deduplicate retries for 24 hours. */
+  idempotencyKey?: string;
+  purpose?: "verification" | "password_reset" | "order_reminder" | "other";
 }
+
+export interface MailDeliveryResult {
+  id: string | null;
+  mocked: boolean;
+}
+
+const recordDelivery = async (
+  id: string,
+  opts: MailOptions,
+  status: string,
+  providerId?: string | null,
+  errorMessage?: string,
+) => {
+  try {
+    await db.execute({
+      sql: `INSERT INTO email_delivery_logs
+            (id, recipient, purpose, provider_id, status, error_message)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        id,
+        opts.to.trim().toLowerCase(),
+        opts.purpose || "other",
+        providerId || null,
+        status,
+        errorMessage?.slice(0, 500) || null,
+      ],
+    });
+  } catch (error) {
+    console.error("[Email] Could not record delivery status:", error);
+  }
+};
 
 /**
  * Send a transactional email via Resend HTTP API.
  * This bypasses SMTP port blocking (587/465) on cloud providers like Render.
  */
-export async function sendMail(opts: MailOptions): Promise<void> {
+export async function sendMail(opts: MailOptions): Promise<MailDeliveryResult> {
+  const deliveryId = crypto.randomUUID();
   // If no API key, log to console (dev mode)
   if (!RESEND_API_KEY || process.env.NODE_ENV === "development") {
     console.log("\n━━━━━━━━━━━━━━━━  📧  EMAIL (dev/mock mode)  ━━━━━━━━━━━━━━━━");
@@ -22,9 +61,12 @@ export async function sendMail(opts: MailOptions): Promise<void> {
     console.log("BODY (excerpt):");
     console.log(opts.html.replace(/<[^>]+>/g, "").substring(0, 200) + "...");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-    return;
+    await recordDelivery(deliveryId, opts, "mocked");
+    return { id: null, mocked: true };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), EMAIL_TIMEOUT_MS);
   try {
     console.log(`[Email] Sending to ${opts.to} via Resend HTTP API...`);
     
@@ -33,7 +75,11 @@ export async function sendMail(opts: MailOptions): Promise<void> {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${RESEND_API_KEY}`,
+        ...(opts.idempotencyKey
+          ? { "Idempotency-Key": opts.idempotencyKey.slice(0, 256) }
+          : {}),
       },
+      signal: controller.signal,
       body: JSON.stringify({
         from: FROM_ADDRESS,
         to: opts.to,
@@ -43,17 +89,25 @@ export async function sendMail(opts: MailOptions): Promise<void> {
       }),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({})) as { id?: string; message?: string };
 
     if (!response.ok) {
       throw new Error(data.message || `HTTP ${response.status} from Resend`);
     }
 
     console.log(`[Email] Success! Message ID: ${data.id}`);
+    await recordDelivery(deliveryId, opts, "accepted", data.id || null);
+    return { id: data.id || null, mocked: false };
   } catch (err: any) {
-    console.error(`[Email Error] Failed to send via Resend API: ${err.message}`);
+    const message = err?.name === "AbortError"
+      ? "Email provider timed out"
+      : err?.message || "Unknown email provider error";
+    console.error(`[Email Error] Failed to send via Resend API: ${message}`);
+    await recordDelivery(deliveryId, opts, "failed", null, message);
     // We throw so the caller knows it failed if they await it
-    throw err;
+    throw new Error(message);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

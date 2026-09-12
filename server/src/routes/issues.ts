@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import rateLimit from 'express-rate-limit';
 import db from '../db/database.js';
 import { optionalAuthenticate, type AuthRequest } from '../middleware/auth.js';
 import { createNotification } from '../utils/notifications.js';
+import { getFileUrl, imageUpload } from '../utils/cloudinary.js';
 
 const router = Router();
 
@@ -28,9 +30,9 @@ const isValidEmail = (value: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 // Public by design: users must be able to report login and OTP problems.
-router.post('/', issueLimiter as any, optionalAuthenticate as any, async (req: AuthRequest, res) => {
+router.post('/', issueLimiter as any, optionalAuthenticate as any, imageUpload.single('screenshot') as any, async (req: AuthRequest, res) => {
   try {
-    const { email, category, subject, description, page_url, website } = req.body ?? {};
+    const { email, category, subject, description, page_url, website, technical_context } = req.body ?? {};
 
     // Honeypot for automated form spam. Respond successfully without storing it.
     if (website) {
@@ -42,6 +44,8 @@ router.post('/', issueLimiter as any, optionalAuthenticate as any, async (req: A
     const cleanSubject = String(subject || '').trim();
     const cleanDescription = String(description || '').trim();
     const cleanPageUrl = String(page_url || '').trim().slice(0, 500);
+    const cleanTechnicalContext = String(technical_context || '').trim().slice(0, 1000);
+    const screenshotUrl = req.file ? getFileUrl(req.file) : null;
 
     if (!isValidEmail(contactEmail) || contactEmail.length > 254) {
       return res.status(400).json({ error: 'Please provide a valid contact email.' });
@@ -59,8 +63,9 @@ router.post('/', issueLimiter as any, optionalAuthenticate as any, async (req: A
     const id = crypto.randomUUID();
     await db.execute({
       sql: `INSERT INTO issue_reports
-            (id, user_id, email, category, subject, description, page_url, user_agent)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, user_id, email, category, subject, description, page_url, user_agent,
+             screenshot_url, technical_context)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
         req.user?.id || null,
@@ -70,6 +75,8 @@ router.post('/', issueLimiter as any, optionalAuthenticate as any, async (req: A
         cleanDescription,
         cleanPageUrl || null,
         String(req.get('user-agent') || '').slice(0, 500) || null,
+        screenshotUrl,
+        cleanTechnicalContext || null,
       ],
     });
 

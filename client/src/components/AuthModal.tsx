@@ -178,12 +178,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const [otp, setOtp] = useState("");
   const [otpType, setOtpType] = useState<"verify" | "reset">("verify");
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const { login } = useAuth();
 
   useEffect(() => { setMode(defaultMode); }, [defaultMode]);
   useEffect(() => { setToken(resetToken); }, [resetToken]);
   useEffect(() => { if (initialEmail) setEmail(initialEmail); }, [initialEmail]);
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setResendCooldown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
 
   // Scroll lock
   useEffect(() => {
@@ -205,7 +213,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleClose = () => {
     setError(""); setSuccess(""); setEmail(""); setPassword(""); setName(""); setUpiId("");
     setForgotSent(false); setResendSent(false); setNewPassword(""); setConfirmPw(""); setResetDone(false);
-    setOtp("");
+    setOtp(""); setResendCooldown(0);
     setMode(defaultMode);
     onClose();
   };
@@ -227,18 +235,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (!res.ok) {
         if (data.requiresVerification) {
-          setError(data.error);
+          setEmail((data.email || email).trim().toLowerCase());
+          setOtpType("verify");
+          setMode("otp_verify");
+          setResendCooldown(Number(data.retryAfterSeconds) || 60);
+          setError(data.error || "Your account needs email verification.");
           return;
         }
         throw new Error(data.error || "Authentication failed");
       }
 
       if (mode === "register") {
+        setEmail(email.trim().toLowerCase());
         setOtpType("verify");
         if (data.message) setSuccess(data.message);
+        setResendCooldown(Number(data.retryAfterSeconds) || 60);
         setMode("otp_verify");
       } else {
-        login(data.user, data.token);
+        await login(data.user, data.token);
         handleClose();
       }
     } catch (err: any) { setError(err.message); }
@@ -246,6 +260,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   const handleResendVerification = async () => {
+    if (resendCooldown > 0) return;
     setError(""); setSuccess(""); setIsLoading(true);
     try {
       const res = await apiRequest("/api/auth/resend-verification", {
@@ -253,14 +268,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to resend email");
+      if (!res.ok) {
+        if (data.retryAfterSeconds) setResendCooldown(Number(data.retryAfterSeconds));
+        throw new Error(data.error || "Failed to resend email");
+      }
       setResendSent(true);
-      if (mode !== "verify_pending") setMode("verify_pending");
+      setResendCooldown(Number(data.retryAfterSeconds) || 60);
+      setSuccess("A new verification code has been sent.");
+      if (mode !== "otp_verify") setMode("otp_verify");
     } catch (err: any) { setError(err.message); }
     finally { setIsLoading(false); }
   };
 
   const resendForgotPasswordOtp = async () => {
+    if (resendCooldown > 0) return;
     setError(""); setSuccess(""); setIsLoading(true);
     try {
       const res = await apiRequest("/api/auth/forgot-password", {
@@ -268,8 +289,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to resend forgot password code");
+      if (!res.ok) {
+        if (data.retryAfterSeconds) setResendCooldown(Number(data.retryAfterSeconds));
+        throw new Error(data.error || "Failed to resend forgot password code");
+      }
       setResendSent(true);
+      setResendCooldown(Number(data.retryAfterSeconds) || 60);
       setSuccess("Reset code has been resent to your email.");
     } catch (err: any) { setError(err.message); }
     finally { setIsLoading(false); }
@@ -284,6 +309,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (!res.ok) throw new Error(data.error || "Something went wrong");
       setOtpType("reset");
       if (data.message) setSuccess(data.message);
+      setResendCooldown(60);
       setMode("otp_verify");
     } catch (err: any) { setError(err.message); }
     finally { setIsLoading(false); }
@@ -340,6 +366,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 bg-slate-950/70 backdrop-blur-sm">
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
@@ -365,7 +394,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               )}
               <div>
-                <h2 className="text-xl font-black text-text-main tracking-tight">
+                <h2 id="auth-modal-title" className="text-xl font-black text-text-main tracking-tight">
                   {mode === "login" && "Welcome back"}
                   {mode === "register" && "Join OpenNotes"}
                   {mode === "otp_verify" && (otpType === "verify" ? "Verify code" : "Reset code")}
@@ -378,7 +407,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
               </div>
             </div>
-            <button onClick={handleClose}
+            <button type="button" aria-label="Close sign in" onClick={handleClose}
               className="p-2 text-text-muted hover:text-text-main rounded-xl hover:bg-background transition-colors shrink-0">
               <X className="h-5 w-5" />
             </button>
@@ -625,13 +654,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {error && <ErrorBanner msg={error} />}
 
                 {/* OTP Input UI */}
-                <div className="flex justify-between gap-2">
+                <div
+                  className="flex justify-between gap-2"
+                  onPaste={(event) => {
+                    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+                    if (pasted.length === 6) {
+                      event.preventDefault();
+                      setOtp(pasted);
+                    }
+                  }}
+                >
                   {[...Array(6)].map((_, i) => (
                     <div key={i} className="flex-1 aspect-square max-w-[54px] relative">
                       <input
                         type="text"
                         maxLength={1}
                         inputMode="numeric"
+                        autoComplete={i === 0 ? "one-time-code" : "off"}
+                        aria-label={`Verification code digit ${i + 1}`}
                         value={otp[i] || ""}
                         onChange={(e) => {
                           const val = e.target.value.replace(/[^0-9]/g, "");
@@ -671,13 +711,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="text-center">
                   <button type="button"
                     onClick={otpType === "reset" ? resendForgotPasswordOtp : handleResendVerification}
-                    disabled={isLoading}
+                    disabled={isLoading || resendCooldown > 0}
                     className="text-xs font-bold text-primary hover:underline disabled:opacity-50">
-                    Didn't get the code? Resend
+                    {resendCooldown > 0 ? `Resend available in ${resendCooldown}s` : "Didn't get the code? Resend"}
                   </button>
                   <p className="text-[11px] text-text-muted mt-3">
                     Still not receiving it?{' '}
-                    <a href="/report-issue?category=otp_verification" className="text-primary font-bold hover:underline">
+                    <a href="/report-issue?category=otp_verification&from=Login%20and%20OTP%20verification" className="text-primary font-bold hover:underline">
                       Report this issue
                     </a>
                   </p>
@@ -724,9 +764,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Link resent!</span>
                   </div>
                 ) : (
-                  <button type="button" onClick={handleResendVerification} disabled={isLoading}
+                  <button type="button" onClick={handleResendVerification} disabled={isLoading || resendCooldown > 0}
                     className="text-xs font-bold text-primary hover:underline disabled:opacity-50">
-                    {isLoading ? "Resending..." : "Didn't get the email? Resend link"}
+                    {isLoading ? "Resending..." : resendCooldown > 0 ? `Resend available in ${resendCooldown}s` : "Didn't get the email? Resend link"}
                   </button>
                 )}
 

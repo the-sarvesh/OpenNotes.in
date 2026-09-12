@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, X, Download, FileText, Upload, Filter,
@@ -9,6 +9,7 @@ import { apiRequest, API_BASE_URL } from '../utils/api.js';
 import { useAuth } from '../contexts/AuthContext';
 import { SUBJECTS_BY_SEM } from '../utils/constants';
 import { toast } from 'react-hot-toast';
+import { useSettings } from '../contexts/SettingsContext';
 
 const SEMESTERS = ['All', 'Sem1', 'Sem2', 'Sem3', 'Sem4', 'Sem5', 'Sem6', 'Sem7', 'Sem8'];
 const CATEGORIES = [
@@ -45,6 +46,8 @@ const darkInput = "w-full bg-slate-950 border border-white/10 rounded-2xl px-4 p
 
 export const ResourcesView: React.FC = () => {
   const { user } = useAuth();
+  const { settings } = useSettings();
+  const subjectCatalog = settings?.subjects_by_sem || SUBJECTS_BY_SEM;
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,11 +58,14 @@ export const ResourcesView: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [subjectLinks, setSubjectLinks] = useState<any[]>([]);
+  const [resourceError, setResourceError] = useState('');
+  const loadingMoreRef = useRef(false);
+  const requestSequence = useRef(0);
 
   const availableSubjects = useMemo(() => {
     if (navigationPath.length === 0) return [];
-    return SUBJECTS_BY_SEM[navigationPath[0]] || [];
-  }, [navigationPath]);
+    return subjectCatalog[navigationPath[0]] || [];
+  }, [navigationPath, subjectCatalog]);
 
   const getResourceCount = (sem?: string, sub?: string, cat?: string) =>
     resources.filter(r => {
@@ -79,7 +85,7 @@ export const ResourcesView: React.FC = () => {
     if (showUploadModal) {
       const sem = navigationPath[0] || 'Sem1';
       const cat = (navigationPath.length === 3) ? navigationPath[2] : 'midsem';
-      const sub = navigationPath[1] || SUBJECTS_BY_SEM[sem]?.[0] || '';
+      const sub = navigationPath[1] || subjectCatalog[sem]?.[0] || '';
       
       setUploadForm(prev => ({
         ...prev,
@@ -88,33 +94,44 @@ export const ResourcesView: React.FC = () => {
         subject_name: sub
       }));
     }
-  }, [showUploadModal, navigationPath]);
+  }, [showUploadModal, navigationPath, subjectCatalog]);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  const fetchResources = useCallback(async (isLoadMore = false) => {
-    if (isLoadMore) setIsLoadingMore(true);
-    else setLoading(true);
-    
-    const targetPage = isLoadMore ? page + 1 : 1;
+  const fetchResources = useCallback(async (targetPage = 1, append = false) => {
+    if (append && loadingMoreRef.current) return;
+    const requestId = ++requestSequence.current;
+    if (append) {
+      loadingMoreRef.current = true;
+      setIsLoadingMore(true);
+    } else {
+      setLoading(true);
+      setResourceError('');
+    }
     try {
       const res = await apiRequest(`/api/resources?page=${targetPage}&limit=50`);
-      if (res.ok) {
-        const data = await res.json();
-        if (isLoadMore) {
-          setResources(prev => [...prev, ...data]);
-          setPage(targetPage);
-        } else {
-          setResources(data);
-          setPage(1);
-        }
-        setHasMore(data.length === 50);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Could not load resources.');
+      if (!Array.isArray(data) || requestId !== requestSequence.current) return;
+      if (append) {
+        setResources(prev => [...prev, ...data.filter(item => !prev.some(existing => existing.id === item.id))]);
+      } else {
+        setResources(data);
       }
-    } catch (error) { console.error('Failed to fetch resources:', error); }
-    finally { 
-      setLoading(false); 
-      setIsLoadingMore(false);
+      setPage(targetPage);
+      setHasMore(data.length === 50);
+      setResourceError('');
+    } catch (error: any) {
+      if (requestId === requestSequence.current) {
+        setResourceError(error.message || 'Could not load resources. Check your connection and try again.');
+      }
+    } finally {
+      if (requestId === requestSequence.current) setLoading(false);
+      if (append) {
+        loadingMoreRef.current = false;
+        setIsLoadingMore(false);
+      }
     }
-  }, [page]);
+  }, []);
 
   const fetchSubjectLinks = useCallback(async () => {
     try {
@@ -124,7 +141,7 @@ export const ResourcesView: React.FC = () => {
   }, []);
 
   useEffect(() => { 
-    fetchResources(); 
+    fetchResources(1, false);
     fetchSubjectLinks();
   }, [fetchResources, fetchSubjectLinks]);
 
@@ -157,11 +174,11 @@ export const ResourcesView: React.FC = () => {
           title: '', description: '',
           semester: navigationPath[0] || 'Sem1',
           category: (navigationPath.length === 3) ? navigationPath[2] : 'midsem',
-          subject_name: navigationPath[1] || SUBJECTS_BY_SEM[navigationPath[0] || 'Sem1']?.[0] || '',
+          subject_name: navigationPath[1] || subjectCatalog[navigationPath[0] || 'Sem1']?.[0] || '',
           course_code: '',
         });
         setUploadFile(null);
-        fetchResources();
+        fetchResources(1, false);
       } else {
         if (res.status === 413) {
           toast.error("File is too large! Maximum limit is 50MB.");
@@ -282,6 +299,15 @@ export const ResourcesView: React.FC = () => {
       </div>
 
       {!isSearchMode && renderBreadcrumbs()}
+
+      {resourceError && !loading && (
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-100" role="alert">
+          <span>{resourceError}</span>
+          <button type="button" onClick={() => fetchResources(1, false)} className="font-black text-[#FFC000] hover:underline">
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* Grid content */}
       <AnimatePresence mode="wait">
@@ -431,7 +457,7 @@ export const ResourcesView: React.FC = () => {
       {!loading && !isSearchMode && hasMore && resources.length > 0 && (
         <div className="mt-12 flex justify-center">
           <button
-            onClick={() => fetchResources(true)}
+            onClick={() => fetchResources(page + 1, true)}
             disabled={isLoadingMore}
             className="flex items-center gap-2 bg-slate-900 border border-white/10 hover:border-[#FFC000]/30 text-white px-8 py-3 rounded-2xl font-black text-sm transition-all active:scale-95 disabled:opacity-50"
           >
@@ -488,7 +514,7 @@ export const ResourcesView: React.FC = () => {
                       value={uploadForm.semester}
                       onChange={e => {
                         const newSem = e.target.value;
-                        setUploadForm({ ...uploadForm, semester: newSem, subject_name: SUBJECTS_BY_SEM[newSem]?.[0] || '' });
+                        setUploadForm({ ...uploadForm, semester: newSem, subject_name: subjectCatalog[newSem]?.[0] || '' });
                       }}
                       className={`${darkInput} appearance-none`}
                     >
@@ -516,7 +542,7 @@ export const ResourcesView: React.FC = () => {
                       className={`${darkInput} appearance-none`}
                     >
                       <option value="" disabled>Select subject…</option>
-                      {(SUBJECTS_BY_SEM[uploadForm.semester] || []).map(sub => (
+                      {(subjectCatalog[uploadForm.semester] || []).map(sub => (
                         <option key={sub} value={sub}>{sub}</option>
                       ))}
                     </select>

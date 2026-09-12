@@ -1,17 +1,11 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import db from '../db/database.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const router = express.Router();
 
-import { upload, getFileUrl } from "../utils/cloudinary.js";
+import { imageUpload, getFileUrl } from "../utils/cloudinary.js";
 
 // Get my profile
 router.get('/me', authenticate, async (req: AuthRequest, res, next) => {
@@ -62,7 +56,7 @@ router.get('/me/unread-counts', authenticate, async (req: AuthRequest, res, next
 });
 
 // Update my profile
-router.put('/me', authenticate, upload.single('profile_image') as any, async (req: AuthRequest, res, next) => {
+router.put('/me', authenticate, imageUpload.single('profile_image') as any, async (req: AuthRequest, res, next) => {
   try {
     const { name, upi_id, mobile_number, location } = req.body;
     const userId = req.user!.id;
@@ -70,27 +64,41 @@ router.put('/me', authenticate, upload.single('profile_image') as any, async (re
     const updates: string[] = [];
     const args: any[] = [];
 
-    if (name) {
-      if (name.length < 2 || name.length > 50) {
-        return res.status(400).json({ error: 'Name must be between 2 and 50 characters' });
+    if (name !== undefined) {
+      const cleanName = String(name).trim().replace(/\s+/g, ' ');
+      if (cleanName.length < 2 || cleanName.length > 80) {
+        return res.status(400).json({ error: 'Name must be between 2 and 80 characters' });
       }
       updates.push('name = ?');
-      args.push(name);
+      args.push(cleanName);
     }
     
     if (upi_id !== undefined) {
+      const cleanUpiId = String(upi_id || '').trim().toLowerCase();
+      if (cleanUpiId && (cleanUpiId.length > 100 || !/^[a-z0-9._-]{2,64}@[a-z0-9.-]{2,64}$/i.test(cleanUpiId))) {
+        return res.status(400).json({ error: 'Please enter a valid UPI ID' });
+      }
       updates.push('upi_id = ?');
-      args.push(upi_id || null);
+      args.push(cleanUpiId || null);
     }
 
     if (mobile_number !== undefined) {
+      const cleanMobile = String(mobile_number || '').replace(/[\s()-]/g, '');
+      const localMobile = cleanMobile.startsWith('+91') ? cleanMobile.slice(3) : cleanMobile;
+      if (localMobile && !/^[6-9]\d{9}$/.test(localMobile)) {
+        return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number' });
+      }
       updates.push('mobile_number = ?');
-      args.push(mobile_number || null);
+      args.push(localMobile || null);
     }
 
     if (location !== undefined) {
+      const cleanLocation = String(location || '').trim().replace(/\s+/g, ' ');
+      if (cleanLocation.length > 120) {
+        return res.status(400).json({ error: 'Location must be 120 characters or fewer' });
+      }
       updates.push('location = ?');
-      args.push(location || null);
+      args.push(cleanLocation || null);
     }
 
     if (req.file) {
@@ -167,12 +175,12 @@ router.put('/me/password', authenticate, async (req: AuthRequest, res, next) => 
     const { current_password, new_password } = req.body;
     const userId = req.user!.id;
 
-    if (!new_password) {
+    if (typeof new_password !== 'string' || !new_password) {
       return res.status(400).json({ error: 'New password is required' });
     }
 
-    if (new_password.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    if (new_password.length < 6 || new_password.length > 128) {
+      return res.status(400).json({ error: 'New password must be between 6 and 128 characters' });
     }
 
     const userRes = await db.execute({

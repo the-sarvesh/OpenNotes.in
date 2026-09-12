@@ -28,6 +28,12 @@ interface Stats {
   platformRevenue: number;
   platformVolume: number;
   activeResources: number;
+  newUsers30d: number;
+  newListings30d: number;
+  newOrders30d: number;
+  openIssues: number;
+  failedEmails24h: number;
+  failedNotificationJobs: number;
 }
 
 const fmt = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -99,6 +105,26 @@ export const AdminView: React.FC = () => {
   const [feedbackRatingFilter, setFeedbackRatingFilter] = useState<number | null>(null);
   const [issueData, setIssueData] = useState<{ issues: any[]; stats: any } | null>(null);
   const [issueStatusFilter, setIssueStatusFilter] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('all');
+  const [newSubjectBySemester, setNewSubjectBySemester] = useState<Record<string, string>>({});
+  const subjectCatalog: Record<string, string[]> = dbSettings?.subjects_by_sem || SUBJECTS_BY_SEM;
+
+  const saveSubjectCatalog = async (nextCatalog: Record<string, string[]>) => {
+    try {
+      const response = await apiRequest('/api/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ subjects_by_sem: nextCatalog }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update subjects');
+      setDbSettings((current: any) => ({ ...current, subjects_by_sem: nextCatalog }));
+      setActionTone('success');
+      setActionMsg('Subject catalogue updated');
+    } catch (error: any) {
+      setActionTone('error');
+      setActionMsg(error.message || 'Could not update subjects');
+    }
+    setTimeout(() => setActionMsg(''), 3000);
+  };
 
   // Detail views
   const [selectedListing, setSelectedListing] = useState<any | null>(null);
@@ -384,6 +410,14 @@ export const AdminView: React.FC = () => {
                     <StatChip label="Active Resources" value={stats.activeResources} />
                     <StatChip label="Total Orders" value={stats.orders} />
                   </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Last 30 days</p>
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <StatChip label="New Users" value={stats.newUsers30d} />
+                      <StatChip label="New Listings" value={stats.newListings30d} />
+                      <StatChip label="New Orders" value={stats.newOrders30d} />
+                    </div>
+                  </div>
                   <div className="grid sm:grid-cols-3 gap-4">
                     <div className="p-5 rounded-2xl border bg-red-500/10 border-red-500/20">
                       <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
@@ -407,6 +441,12 @@ export const AdminView: React.FC = () => {
                       <p className="text-3xl font-black text-white">₹{stats.platformVolume}</p>
                       <p className="text-[10px] text-slate-500 mt-1">Total transacted value</p>
                     </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <StatChip label="Open Issues" value={stats.openIssues} gold={stats.openIssues > 0} />
+                    <StatChip label="Email Failures (24h)" value={stats.failedEmails24h} gold={stats.failedEmails24h > 0} />
+                    <StatChip label="Failed Notifications" value={stats.failedNotificationJobs} gold={stats.failedNotificationJobs > 0} />
                   </div>
 
                   {/* Danger zone */}
@@ -605,7 +645,7 @@ export const AdminView: React.FC = () => {
                                 className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
                               >
                                 <option value="">Select…</option>
-                                {Object.keys(SUBJECTS_BY_SEM).map(s => <option key={s} value={s}>{s}</option>)}
+                                {Object.keys(subjectCatalog).map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
                             </div>
                             <div>
@@ -617,7 +657,7 @@ export const AdminView: React.FC = () => {
                                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/40 transition-all"
                                 >
                                   <option value="">Select…</option>
-                                  {(SUBJECTS_BY_SEM[editForm.semester] || []).map((s: string) => <option key={s} value={s}>{s}</option>)}
+                                  {(subjectCatalog[editForm.semester] || []).map((s: string) => <option key={s} value={s}>{s}</option>)}
                                 </select>
                               ) : (
                                 <input
@@ -996,7 +1036,7 @@ export const AdminView: React.FC = () => {
                                 })()}
                               </div>
                               <div className="grid sm:grid-cols-2 gap-3">
-                                {SUBJECTS_BY_SEM[sem]?.map(subject => {
+                                {subjectCatalog[sem]?.map(subject => {
                                   const existingLink = subjectLinks.find(l => l.semester === sem && l.subject_name === subject);
                                   return (
                                     <div key={subject} className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
@@ -1704,6 +1744,24 @@ export const AdminView: React.FC = () => {
                           {issue.page_url && (
                             <p className="text-[10px] text-slate-500 mt-3 break-all"><span className="font-black uppercase tracking-wider">Page:</span> {issue.page_url}</p>
                           )}
+                          {issue.screenshot_url && (
+                            <a href={issue.screenshot_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mt-3 text-xs font-bold text-[#FFC000] hover:underline">
+                              View attached screenshot
+                            </a>
+                          )}
+                          {issue.technical_context && (
+                            <details className="mt-3 text-[10px] text-slate-500">
+                              <summary className="cursor-pointer font-black uppercase tracking-wider hover:text-slate-300">Technical details</summary>
+                              <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-black/20 p-3">{issue.technical_context}</pre>
+                            </details>
+                          )}
+                          {issue.last_email_status && (
+                            <p className="text-[10px] text-slate-500 mt-3">
+                              <span className="font-black uppercase tracking-wider">Latest email:</span>{' '}
+                              <span className={issue.last_email_status === 'failed' || issue.last_email_status === 'bounced' || issue.last_email_status === 'complained' ? 'text-red-400' : 'text-emerald-400'}>{fmt(issue.last_email_status)}</span>
+                              {issue.last_email_at ? ` · ${new Date(issue.last_email_at).toLocaleString('en-IN')}` : ''}
+                            </p>
+                          )}
 
                           <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-white/5">
                             {issue.status !== 'open' && (
@@ -1937,6 +1995,73 @@ export const AdminView: React.FC = () => {
                           Global discount percentage recommended to users when setting final prices based on original cost.
                         </p>
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2 bg-blue-500/10 rounded-xl text-blue-400"><BookOpen className="h-5 w-5" /></div>
+                      <div>
+                        <h3 className="font-black text-white">Subject Catalogue</h3>
+                        <p className="text-xs text-slate-500">Changes appear in Sell, Browse, Resources, and admin forms.</p>
+                      </div>
+                    </div>
+                    <div className="grid lg:grid-cols-2 gap-4">
+                      {SEMESTERS.map((semester) => (
+                        <div key={semester} className="p-4 rounded-xl bg-slate-950/40 border border-white/10">
+                          <p className="text-[10px] font-black text-[#FFC000] uppercase tracking-widest mb-3">{semester}</p>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {(subjectCatalog[semester] || []).map((subject) => (
+                              <span key={subject} className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[10px] text-slate-300">
+                                {subject}
+                                <button
+                                  type="button"
+                                  aria-label={`Remove ${subject}`}
+                                  onClick={() => {
+                                    if (!confirm(`Remove ${subject} from ${semester}? Existing listings will remain unchanged.`)) return;
+                                    void saveSubjectCatalog({
+                                      ...subjectCatalog,
+                                      [semester]: subjectCatalog[semester].filter((item) => item !== subject),
+                                    });
+                                  }}
+                                  className="p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              value={newSubjectBySemester[semester] || ''}
+                              onChange={(event) => setNewSubjectBySemester((current) => ({ ...current, [semester]: event.target.value }))}
+                              placeholder="Add a subject"
+                              maxLength={120}
+                              className="min-w-0 flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#FFC000]/50"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const subject = (newSubjectBySemester[semester] || '').trim();
+                                if (subject.length < 2) return;
+                                if (subjectCatalog[semester]?.some((item) => item.toLowerCase() === subject.toLowerCase())) {
+                                  setActionTone('error');
+                                  setActionMsg('That subject already exists');
+                                  return;
+                                }
+                                void saveSubjectCatalog({
+                                  ...subjectCatalog,
+                                  [semester]: [...(subjectCatalog[semester] || []), subject],
+                                });
+                                setNewSubjectBySemester((current) => ({ ...current, [semester]: '' }));
+                              }}
+                              className="px-3 py-2 rounded-lg bg-[#FFC000] text-slate-900 text-xs font-black"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 

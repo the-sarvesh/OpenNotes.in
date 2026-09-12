@@ -2,7 +2,7 @@ import express from "express";
 import { v4 as uuidv4 } from "uuid";
 import db from "../db/database.js";
 import { authenticate, AuthRequest, optionalAuthenticate } from "../middleware/auth.js";
-import { upload, getFileUrl } from "../utils/cloudinary.js";
+import { resourceUpload, getFileUrl } from "../utils/cloudinary.js";
 
 const router = express.Router();
 
@@ -240,7 +240,7 @@ const checkQuota = async (req: AuthRequest, res: express.Response, next: express
  * @route POST /api/resources
  * @desc Upload a new resource
  */
-router.post("/", authenticate as any, checkQuota as any, upload.single("file") as any, async (req: AuthRequest, res, next) => {
+router.post("/", authenticate as any, checkQuota as any, resourceUpload.single("file") as any, async (req: AuthRequest, res, next) => {
   try {
     const uploaderId = req.user!.id;
     const { title, description, semester, category, subject_name, course_code } = req.body;

@@ -93,6 +93,9 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-completion-title"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
@@ -101,10 +104,12 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
         <div className="p-6 border-b border-border flex justify-between items-center bg-background/50">
           <div className="flex items-center gap-2">
             <User className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-bold text-text-main">Complete Your Profile</h2>
+            <h2 id="profile-completion-title" className="text-xl font-bold text-text-main">Complete Your Profile</h2>
           </div>
           {!isSuccess && (
             <button
+              type="button"
+              aria-label="Close profile completion"
               onClick={onClose}
               className="p-2 text-text-muted hover:text-primary rounded-full hover:bg-primary-hover transition-colors"
             >

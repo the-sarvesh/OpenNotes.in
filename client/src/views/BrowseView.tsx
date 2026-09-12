@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, X, SlidersHorizontal, BookOpen, BookMarked, FileText, Layers, ChevronDown, MapPin } from 'lucide-react';
 import { formatSemester } from '../utils/formatters';
 import { NoteCard } from '../components/NoteCard';
 import { mapListing } from '../utils/listings';
 import { apiRequest } from '../utils/api.js';
-import { LOCATIONS } from '../utils/constants';
+import { LOCATIONS, SUBJECTS_BY_SEM } from '../utils/constants';
 import type { Note, View } from '../types/index.ts';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface BrowseViewProps {
   onAddToCart: (n: Note) => void;
@@ -23,12 +24,17 @@ const MATERIAL_TYPES = [
   { label: 'All', icon: Layers },
   { label: 'PPT', icon: FileText },
   { label: 'Handwritten Notes', icon: BookMarked },
+  { label: 'Printed Notes', icon: BookOpen },
+  { label: 'Digital Notes', icon: FileText },
   { label: 'Book', icon: BookOpen },
+  { label: 'Other', icon: Layers },
 ];
 
 export const BrowseView: React.FC<BrowseViewProps> = ({
   onAddToCart, onBuyNow, onContactSeller, onViewDetails, checkAuth, cart, refreshKey,
 }) => {
+  const { settings } = useSettings();
+  const subjectCatalog = settings?.subjects_by_sem || SUBJECTS_BY_SEM;
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -36,12 +42,22 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   const [hasMore, setHasMore] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState('All');
+  const [selectedSemester, setSelectedSemester] = useState(() => localStorage.getItem('opennotes_preferred_semester') || 'All');
   const [selectedType, setSelectedType] = useState('All');
   const [selectedLocation, setSelectedLocation] = useState('All');
+  const [selectedSubject, setSelectedSubject] = useState('All');
+  const [sortBy, setSortBy] = useState('newest');
   const [availableLocations, setAvailableLocations] = useState<string[]>([]);
+  const [totalResults, setTotalResults] = useState(0);
+  const [loadError, setLoadError] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const observer = useRef<IntersectionObserver | null>(null);
+  const requestSequence = useRef(0);
+
+  const availableSubjects = useMemo(() => {
+    if (selectedSemester !== 'All') return subjectCatalog[selectedSemester] || [];
+    return [...new Set((Object.values(subjectCatalog) as string[][]).flat())].sort((a, b) => a.localeCompare(b));
+  }, [selectedSemester, subjectCatalog]);
 
   const lastNoteElementRef = useCallback((node: HTMLDivElement) => {
     if (loading || loadingMore) return;
@@ -58,8 +74,16 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
   }, [searchTerm]);
 
   useEffect(() => {
-    setNotes([]); setPage(1); setHasMore(true); setLoading(true);
-  }, [debouncedSearch, selectedSemester, selectedType, selectedLocation, refreshKey]);
+    setNotes([]); setPage(1); setHasMore(true); setLoading(true); setLoadError('');
+  }, [debouncedSearch, selectedSemester, selectedType, selectedLocation, selectedSubject, sortBy, refreshKey]);
+
+  useEffect(() => {
+    if (selectedSemester === 'All') localStorage.removeItem('opennotes_preferred_semester');
+    else localStorage.setItem('opennotes_preferred_semester', selectedSemester);
+    if (selectedSubject !== 'All' && !availableSubjects.includes(selectedSubject)) {
+      setSelectedSubject('All');
+    }
+  }, [selectedSemester, selectedSubject, availableSubjects]);
 
   useEffect(() => {
     // Fetch unique locations currently used in listings for "Normalized" filtering
@@ -69,41 +93,65 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
       .catch(console.error);
   }, []);
 
-  const fetchNotes = useCallback((pageNum: number) => {
+  const fetchNotes = useCallback(async (pageNum: number) => {
     const params = new URLSearchParams();
     if (selectedSemester !== 'All') params.set('semester', selectedSemester);
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (selectedType !== 'All') {
-      const typeMap: Record<string, string> = { 'PPT': 'ppt', 'Book': 'book', 'Handwritten Notes': 'handwritten' };
+      const typeMap: Record<string, string> = {
+        'PPT': 'ppt',
+        'Book': 'book',
+        'Handwritten Notes': 'handwritten',
+        'Printed Notes': 'printed',
+        'Digital Notes': 'digital',
+        'Other': 'other',
+      };
       params.set('material_type', typeMap[selectedType] || selectedType.toLowerCase());
     }
     if (selectedLocation !== 'All') params.set('location', selectedLocation);
+    if (selectedSubject !== 'All') params.set('subject', selectedSubject);
+    params.set('sort', sortBy);
     params.set('page', pageNum.toString());
     params.set('limit', '20');
 
     const isFirst = pageNum === 1;
     if (isFirst) setLoading(true); else setLoadingMore(true);
 
-    apiRequest(`/api/listings?${params}`)
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const mapped = data.map(mapListing);
-          setNotes(prev => isFirst ? mapped : [...prev, ...mapped]);
-          setHasMore(data.length === 20);
-        } else {
-          if (isFirst) setNotes([]);
-          setHasMore(false);
-        }
-      })
-      .catch(console.error)
-      .finally(() => { setLoading(false); setLoadingMore(false); });
-  }, [debouncedSearch, selectedSemester, selectedType, selectedLocation, refreshKey]);
+    const requestId = ++requestSequence.current;
+    try {
+      const response = await apiRequest(`/api/listings?${params}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load listings.');
+      if (requestId !== requestSequence.current) return;
+      if (Array.isArray(data)) {
+        const mapped = data.map(mapListing);
+        const total = data.length > 0 ? Number(data[0].total_count) || data.length : 0;
+        if (isFirst || data.length > 0) setTotalResults(total);
+        setNotes(prev => isFirst ? mapped : [...prev, ...mapped]);
+        setHasMore(data.length > 0 && pageNum * 20 < total);
+        setLoadError('');
+      } else {
+        if (isFirst) setNotes([]);
+        setTotalResults(0);
+        setHasMore(false);
+      }
+    } catch (error: any) {
+      if (requestId !== requestSequence.current) return;
+      setLoadError(error.message || 'Could not load listings. Check your connection and try again.');
+      if (isFirst) setNotes([]);
+      setHasMore(false);
+    } finally {
+      if (requestId === requestSequence.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    }
+  }, [debouncedSearch, selectedSemester, selectedType, selectedLocation, selectedSubject, sortBy, refreshKey]);
 
-  useEffect(() => { fetchNotes(page); }, [page, debouncedSearch, selectedSemester, selectedType, selectedLocation, refreshKey, fetchNotes]);
+  useEffect(() => { void fetchNotes(page); }, [page, fetchNotes]);
 
-  const activeFiltersCount = [selectedSemester !== 'All', selectedType !== 'All', selectedLocation !== 'All'].filter(Boolean).length;
-  const clearFilters = () => { setSelectedSemester('All'); setSelectedType('All'); setSelectedLocation('All'); };
+  const activeFiltersCount = [selectedSemester !== 'All', selectedType !== 'All', selectedLocation !== 'All', selectedSubject !== 'All'].filter(Boolean).length;
+  const clearFilters = () => { setSelectedSemester('All'); setSelectedType('All'); setSelectedLocation('All'); setSelectedSubject('All'); setSortBy('newest'); };
 
   return (
     <motion.div
@@ -120,7 +168,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
           <h1 className="text-2xl sm:text-4xl font-black text-text-main leading-none">Browse Notes</h1>
           {!loading && notes.length > 0 && (
             <span className="text-[10px] font-black text-text-muted bg-surface border border-border px-3 py-1.5 rounded-full shrink-0">
-              {notes.length} listing{notes.length !== 1 ? 's' : ''}
+              {totalResults} listing{totalResults !== 1 ? 's' : ''}
             </span>
           )}
         </div>
@@ -136,6 +184,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
             placeholder="Course code, title, subject…"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
+            aria-label="Search listings"
             className="w-full pl-10 pr-9 py-3 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-text-main placeholder:text-text-muted/60"
           />
           <AnimatePresence>
@@ -145,6 +194,7 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.7 }}
                 onClick={() => setSearchTerm('')}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-text-main transition-colors"
               >
                 <X className="h-3.5 w-3.5" />
@@ -241,6 +291,26 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                     ))}
                 </div>
               </div>
+
+              <div className="pt-2 border-t border-border grid sm:grid-cols-2 gap-3">
+                <label className="space-y-2">
+                  <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Subject</span>
+                  <select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-xs font-bold bg-background border border-border text-text-main focus:outline-none focus:ring-2 focus:ring-primary/30">
+                    <option value="All">All subjects</option>
+                    {availableSubjects.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-2">
+                  <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">Sort by</span>
+                  <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl text-xs font-bold bg-background border border-border text-text-main focus:outline-none focus:ring-2 focus:ring-primary/30">
+                    <option value="newest">Newest first</option>
+                    <option value="price_low">Price: low to high</option>
+                    <option value="price_high">Price: high to low</option>
+                    <option value="rating">Seller rating</option>
+                    <option value="popular">Most viewed</option>
+                  </select>
+                </label>
+              </div>
             </div>
           </motion.div>
         )}
@@ -295,6 +365,14 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
                 </button>
               </span>
             )}
+            {selectedSubject !== 'All' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary rounded-xl text-[10px] font-black uppercase tracking-wider">
+                {selectedSubject}
+                <button onClick={() => setSelectedSubject('All')} aria-label="Remove subject filter" className="hover:opacity-70 transition-opacity">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -306,6 +384,13 @@ export const BrowseView: React.FC<BrowseViewProps> = ({
           <p className="text-xs font-bold text-text-muted animate-pulse">Finding listings…</p>
         </div>
 
+      ) : loadError ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center" role="alert">
+          <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">⚠️</div>
+          <p className="text-base font-black text-text-main mb-1.5">Listings could not be loaded</p>
+          <p className="text-sm text-text-muted mb-5 max-w-sm leading-relaxed">{loadError}</p>
+          <button onClick={() => void fetchNotes(1)} className="px-5 py-2.5 rounded-xl bg-primary text-black text-xs font-black">Try again</button>
+        </div>
       ) : notes.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 8 }}

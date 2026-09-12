@@ -8,6 +8,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import db from "../db/database.js";
 import { sendMail, passwordResetEmail, verificationEmail } from "../utils/email.js";
+import { isValidEmail, normalizeEmail } from "../utils/validation.js";
 
 const router = express.Router();
 
@@ -15,6 +16,7 @@ const JWT_SECRET =
   process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod";
 const JWT_EXPIRES_IN = "7d";
 const RESET_TOKEN_EXPIRES_MINUTES = 30;
+const OTP_EXPIRES_MINUTES = 15;
 
 // ── Allowed email domains ─────────────────────────────────────────────────────
 const ALLOWED_DOMAINS = [
@@ -84,6 +86,18 @@ const otpLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Prevent repeated provider calls from exhausting email quota or spamming users.
+const resendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: {
+    error: "Too many resend requests. Please wait 15 minutes and try again.",
+    retryAfterSeconds: 900,
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 
 // ── Passport Google Strategy ──────────────────────────────────────────────────
 passport.use(
@@ -98,7 +112,7 @@ passport.use(
     },
     async (_accessToken, _refreshToken, profile, done) => {
       try {
-        const email = profile.emails?.[0].value;
+        const email = normalizeEmail(profile.emails?.[0].value);
         if (!email) {
           console.error(
             "Google Auth Error: No email found in profile",
@@ -120,7 +134,7 @@ passport.use(
 
         // Find or create user
         let result = await db.execute({
-          sql: "SELECT * FROM users WHERE google_id = ? OR email = ?",
+          sql: "SELECT * FROM users WHERE google_id = ? OR LOWER(email) = ?",
           args: [profile.id, email],
         });
 
@@ -178,14 +192,15 @@ passport.use(
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 router.post("/login", authLimiter as any, async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const email = normalizeEmail(req.body?.email);
 
-    if (!email || !password) {
+    if (!isValidEmail(email) || typeof password !== "string" || !password) {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
     const result = await db.execute({
-      sql: "SELECT * FROM users WHERE email = ?",
+      sql: "SELECT * FROM users WHERE LOWER(email) = ?",
       args: [email],
     });
 
@@ -254,12 +269,19 @@ router.post("/login", authLimiter as any, async (req, res, next) => {
 // ── POST /api/auth/register ───────────────────────────────────────────────────
 router.post("/register", authLimiter as any, async (req, res, next) => {
   try {
-    const { email, password, name, upi_id } = req.body;
+    const email = normalizeEmail(req.body?.email);
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    const upi_id = typeof req.body?.upi_id === "string" ? req.body.upi_id.trim() : "";
 
-    if (!email || !password || !name) {
+    if (!isValidEmail(email) || !password || !name) {
       return res
         .status(400)
-        .json({ error: "Email, password, and name are required" });
+        .json({ error: "A valid email, password, and name are required" });
+    }
+
+    if (name.length < 2 || name.length > 80) {
+      return res.status(400).json({ error: "Name must be between 2 and 80 characters" });
     }
 
     // ── Domain enforcement ───────────────────────────────────────────────────
@@ -270,14 +292,14 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
       });
     }
 
-    if (password.length < 6) {
+    if (password.length < 6 || password.length > 128) {
       return res
         .status(400)
-        .json({ error: "Password must be at least 6 characters long" });
+        .json({ error: "Password must be between 6 and 128 characters" });
     }
 
     const existingRes = await db.execute({
-      sql: "SELECT id, is_verified FROM users WHERE email = ?",
+      sql: "SELECT id, is_verified, verification_token, verification_token_expires_at FROM users WHERE LOWER(email) = ?",
       args: [email],
     });
 
@@ -290,7 +312,7 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = (existingUser as any)?.id || uuidv4();
     const otp = generateOTP();
-    const verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const verificationTokenExpiresAt = new Date(Date.now() + OTP_EXPIRES_MINUTES * 60 * 1000).toISOString();
 
     if (existingUser) {
       // Update existing unverified user
@@ -309,12 +331,36 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
     const { frontendUrl } = getUrls(req);
     const verifyUrl = `${frontendUrl}/verify-email?token=${otp}&email=${encodeURIComponent(email)}`;
 
-    const mailOpts = verificationEmail(email, name, verifyUrl, otp);
-    
-    // Send email asynchronously to avoid hanging the response
-    sendMail(mailOpts).catch(err => {
+    const mailOpts = {
+      ...verificationEmail(email, name, verifyUrl, otp),
+      idempotencyKey: `verify-${userId}-${otp}`,
+      purpose: "verification" as const,
+    };
+
+    try {
+      await sendMail(mailOpts);
+    } catch (err) {
       console.error("[Registration Email Error]:", err);
-    });
+      if (existingUser) {
+        await db.execute({
+          sql: "UPDATE users SET verification_token = ?, verification_token_expires_at = ? WHERE id = ?",
+          args: [
+            (existingUser as any).verification_token || null,
+            (existingUser as any).verification_token_expires_at || null,
+            userId,
+          ],
+        }).catch((restoreError) => {
+          console.error("[Registration] Failed to restore previous verification code:", restoreError);
+        });
+      }
+      return res.status(503).json({
+        error: "Your account was created, but the verification email could not be sent. Please use Resend code in one minute.",
+        code: "EMAIL_DELIVERY_FAILED",
+        requiresVerification: true,
+        email,
+        retryAfterSeconds: 60,
+      });
+    }
 
     res.status(201).json({
       message: process.env.NODE_ENV !== "production" 
@@ -339,16 +385,17 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
 // ── POST /api/auth/verify-otp ────────────────────────────────────────────────
 router.post("/verify-otp", otpLimiter as any, async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
+    const email = normalizeEmail(req.body?.email);
+    const otp = typeof req.body?.otp === "string" ? req.body.otp.trim() : "";
 
-    if (!email || !otp) {
+    if (!isValidEmail(email) || !/^\d{6}$/.test(otp)) {
       return res.status(400).json({ error: "Email and code are required" });
     }
 
     const result = await db.execute({
       sql: `SELECT id, is_verified, verification_token, verification_token_expires_at 
-            FROM users WHERE email = ?`,
-      args: [email.toLowerCase().trim()],
+            FROM users WHERE LOWER(email) = ?`,
+      args: [email],
     });
 
     const user = result.rows[0] as any;
@@ -386,19 +433,20 @@ router.post("/verify-otp", otpLimiter as any, async (req, res, next) => {
 // ── POST /api/auth/verify-reset-otp ──────────────────────────────────────────
 router.post("/verify-reset-otp", otpLimiter as any, async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
+    const email = normalizeEmail(req.body?.email);
+    const otp = typeof req.body?.otp === "string" ? req.body.otp.trim() : "";
 
-    if (!email || !otp) {
+    if (!isValidEmail(email) || !/^\d{6}$/.test(otp)) {
       return res.status(400).json({ error: "Email and code are required" });
     }
 
     const sql = `SELECT prt.id, prt.token, prt.expires_at FROM password_reset_tokens prt
                  JOIN users u ON prt.user_id = u.id
-                 WHERE u.email = ? AND prt.used = 0
+                 WHERE LOWER(u.email) = ? AND prt.used = 0
                  ORDER BY prt.expires_at DESC LIMIT 1`;
     const result = await db.execute({
       sql,
-      args: [email.toLowerCase().trim()],
+      args: [email],
     });
 
     if (result.rows.length === 0) {
@@ -542,15 +590,15 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
   };
 
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body?.email);
 
-    if (!email || typeof email !== "string") {
-      return res.status(400).json({ error: "email is required" });
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "A valid email is required" });
     }
 
     const userRes = await db.execute({
-      sql: "SELECT id, name, email, password_hash FROM users WHERE email = ?",
-      args: [email.toLowerCase().trim()],
+      sql: "SELECT id, name, email, password_hash FROM users WHERE LOWER(email) = ?",
+      args: [email],
     });
 
     const user = userRes.rows[0];
@@ -589,10 +637,20 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
       RESET_TOKEN_EXPIRES_MINUTES,
     );
     
-    // Send email asynchronously
-    sendMail(mailOpts).catch(err => {
+    try {
+      await sendMail({
+        ...mailOpts,
+        idempotencyKey: `reset-${String(user.id)}-${otp}`,
+        purpose: "password_reset" as const,
+      });
+    } catch (err) {
       console.error("[Forgot Password Email Error]:", err);
-    });
+      return res.status(503).json({
+        error: "The reset email service is temporarily unavailable. Please try again in one minute.",
+        code: "EMAIL_DELIVERY_FAILED",
+        retryAfterSeconds: 60,
+      });
+    }
 
     return res.json({
       message: process.env.NODE_ENV !== "production"
@@ -609,7 +667,8 @@ router.post("/forgot-password", resetLimiter as any, async (req, res, next) => {
 // Accepts { token, new_password, email }. Verifies token and updates the password.
 router.post("/reset-password", resetLimiter as any, async (req, res, next) => {
   try {
-    const { token, new_password, email } = req.body;
+    const { token, new_password } = req.body;
+    const email = normalizeEmail(req.body?.email);
 
     if (!token || !new_password) {
       return res
@@ -617,10 +676,10 @@ router.post("/reset-password", resetLimiter as any, async (req, res, next) => {
         .json({ error: "Code and new password are required" });
     }
 
-    if ((new_password as string).length < 6) {
+    if (typeof new_password !== "string" || new_password.length < 6 || new_password.length > 128) {
       return res
         .status(400)
-        .json({ error: "Password must be at least 6 characters" });
+        .json({ error: "Password must be between 6 and 128 characters" });
     }
 
     // Attempt to find token. If email is provided, we can be more specific.
@@ -633,8 +692,9 @@ router.post("/reset-password", resetLimiter as any, async (req, res, next) => {
     let args = [token];
 
     if (email) {
-      sql += " AND u.email = ?";
-      args.push(email.toLowerCase().trim());
+      if (!isValidEmail(email)) return res.status(400).json({ error: "A valid email is required" });
+      sql += " AND LOWER(u.email) = ?";
+      args.push(email);
     }
 
     const tokenRes = await db.execute({ sql, args });
@@ -701,17 +761,17 @@ router.get("/verify-email", async (req, res, next) => {
 });
 
 // ── POST /api/auth/resend-verification ────────────────────────────────────────
-router.post("/resend-verification", async (req, res, next) => {
+router.post("/resend-verification", resendLimiter as any, async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body?.email);
 
-    if (!email) {
-      return res.status(400).json({ error: "Email is required" });
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "A valid email is required" });
     }
 
     const result = await db.execute({
-      sql: "SELECT id, name, email, is_verified FROM users WHERE email = ?",
-      args: [email.toLowerCase().trim()],
+      sql: "SELECT id, name, email, is_verified FROM users WHERE LOWER(email) = ?",
+      args: [email],
     });
 
     const user = result.rows[0];
@@ -724,25 +784,37 @@ router.post("/resend-verification", async (req, res, next) => {
     }
 
     const otp = generateOTP();
-    const verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-    await db.execute({
-      sql: "UPDATE users SET verification_token = ?, verification_token_expires_at = ? WHERE id = ?",
-      args: [otp, verificationTokenExpiresAt, user.id],
-    });
+    const verificationTokenExpiresAt = new Date(Date.now() + OTP_EXPIRES_MINUTES * 60 * 1000).toISOString();
 
     const { frontendUrl } = getUrls(req);
     const verifyUrl = `${frontendUrl}/verify-email?token=${otp}&email=${encodeURIComponent(user.email as string)}`;
 
     const mailOpts = verificationEmail(user.email as string, user.name as string, verifyUrl, otp);
     
-    // Send email asynchronously
-    sendMail(mailOpts).catch(err => {
+    try {
+      await sendMail({
+        ...mailOpts,
+        idempotencyKey: `verify-${String(user.id)}-${otp}`,
+        purpose: "verification" as const,
+      });
+    } catch (err) {
       console.error("[Resend Verification Email Error]:", err);
+      return res.status(503).json({
+        error: "The verification email could not be sent right now. Please try again in one minute.",
+        code: "EMAIL_DELIVERY_FAILED",
+        retryAfterSeconds: 60,
+      });
+    }
+
+    // Rotate the valid OTP only after the email provider accepts the message.
+    await db.execute({
+      sql: "UPDATE users SET verification_token = ?, verification_token_expires_at = ? WHERE id = ?",
+      args: [otp, verificationTokenExpiresAt, user.id],
     });
 
     res.json({
-      message: "If that email is registered and unverified, a new code has been sent.",
+      message: "A new 6-digit verification code has been sent.",
+      retryAfterSeconds: 60,
     });
   } catch (error) {
     next(error);

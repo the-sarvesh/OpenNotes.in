@@ -17,7 +17,7 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (user: User, token?: string) => void;
+  login: (user: User, token?: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   isLoading: boolean;
@@ -64,11 +64,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     checkStatus();
   }, []);
 
-  const login = (newUser: User, token?: string) => {
-    setUser(newUser);
-    localStorage.setItem('open_notes_user', JSON.stringify(newUser));
+  const login = async (newUser: User, token?: string) => {
     if (token) {
       localStorage.setItem('open_notes_token', token);
+    }
+    try {
+      const response = await apiRequest('/api/users/me');
+      const completeUser = response.ok ? await response.json() : newUser;
+      setUser(completeUser);
+      localStorage.setItem('open_notes_user', JSON.stringify(completeUser));
+    } catch {
+      setUser(newUser);
+      localStorage.setItem('open_notes_user', JSON.stringify(newUser));
     }
   };
 
