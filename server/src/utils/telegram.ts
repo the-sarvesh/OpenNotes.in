@@ -631,7 +631,7 @@ const formatOrderDetails = (item: string, price: string | number, qty: string | 
   const priceDisplay = Number(price) === 0 ? 'FREE' : `₹${price}`;
   const cashAmount = Math.round(total - platformFee);
   
-  let details = `📦 <b>Item:</b> ${item}\n💰 <b>Price:</b> ${priceDisplay} x ${qty}\n👤 <b>${role === 'Seller' ? 'Buyer' : 'Seller'}:</b> ${otherParty}\n\n`;
+  let details = `📦 <b>Item:</b> ${escapeHtml(String(item))}\n💰 <b>Price:</b> ${priceDisplay} x ${qty}\n👤 <b>${role === 'Seller' ? 'Buyer' : 'Seller'}:</b> ${escapeHtml(String(otherParty))}\n\n`;
   
   if (role === 'Buyer') {
     details += `💰 <b>Total Bill:</b> ₹${Math.round(total)}\n`;
@@ -646,9 +646,9 @@ const formatOrderDetails = (item: string, price: string | number, qty: string | 
 };
 
 const formatMeetupCard = (location: string, spot: string, availability: string, note?: string, details?: string) => {
-  let card = `\n📍 <b>Location:</b> ${location || 'BITS'}\n📍 <b>Spot:</b> ${spot || 'Not specified'}\n🕒 <b>Availability:</b> ${availability}`;
-  if (note) card += `\n📝 <b>Note:</b> ${note}`;
-  if (details) card += `\nℹ️ <b>Instructions:</b> ${details}`;
+  let card = `\n📍 <b>Location:</b> ${escapeHtml(String(location || 'BITS'))}\n📍 <b>Spot:</b> ${escapeHtml(String(spot || 'Not specified'))}\n🕒 <b>Availability:</b> ${escapeHtml(String(availability || 'Not specified'))}`;
+  if (note) card += `\n📝 <b>Note:</b> ${escapeHtml(String(note))}`;
+  if (details) card += `\nℹ️ <b>Instructions:</b> ${escapeHtml(String(details))}`;
   return card + '\n';
 };
 

@@ -1,18 +1,11 @@
 import express from "express";
-import multer from "multer";
-import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import db from "../db/database.js";
 import { authenticate, AuthRequest } from "../middleware/auth.js";
 
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const router = express.Router();
 
-import { upload, getFileUrl } from "../utils/cloudinary.js";
+import { imageUpload, getFileUrl } from "../utils/cloudinary.js";
 
 // GET /api/listings/locations — get all unique locations from active listings
 router.get("/locations", async (req, res, next) => {
@@ -30,12 +23,34 @@ router.get("/locations", async (req, res, next) => {
   }
 });
 
+// GET /api/listings/subjects — subjects that currently have active listings.
+router.get("/subjects", async (_req, res, next) => {
+  try {
+    const result = await db.execute(`
+      SELECT subject_name FROM (
+        SELECT course_code AS subject_name FROM listings
+        WHERE status = 'active' AND course_code != 'Multiple'
+        UNION
+        SELECT ls.subject_name FROM listing_subjects ls
+        JOIN listings l ON l.id = ls.listing_id
+        WHERE l.status = 'active'
+      )
+      WHERE subject_name IS NOT NULL AND subject_name != ''
+      ORDER BY subject_name COLLATE NOCASE ASC
+    `);
+    res.json(result.rows.map((row: any) => String(row.subject_name)));
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get all listings (with filtering)
 router.get("/", async (req, res, next) => {
   try {
-    const { semester, search, material_type, location } = req.query;
+    const { semester, search, material_type, location, subject, sort } = req.query;
     let query = `
-      SELECT l.*, u.name as seller_name, COALESCE(AVG(r.rating), 0) as seller_rating
+      SELECT l.*, u.name as seller_name, COALESCE(AVG(r.rating), 0) as seller_rating,
+             COUNT(*) OVER() as total_count
       FROM listings l
       JOIN users u ON l.seller_id = u.id
       LEFT JOIN reviews r ON r.seller_id = u.id
@@ -51,10 +66,14 @@ router.get("/", async (req, res, next) => {
     const searchStr = typeof search === 'string' ? search : '';
     const materialTypeStr = typeof material_type === 'string' ? material_type : '';
     const locationStr = typeof location === 'string' ? location : '';
+    const subjectStr = typeof subject === 'string' ? subject.trim() : '';
 
     if (searchStr) {
-      query += " AND (l.course_code LIKE ? OR l.title LIKE ?)";
-      args.push(`%${searchStr}%`, `%${searchStr}%`);
+      query += ` AND (l.course_code LIKE ? OR l.title LIKE ? OR EXISTS (
+        SELECT 1 FROM listing_subjects search_subjects
+        WHERE search_subjects.listing_id = l.id AND search_subjects.subject_name LIKE ?
+      ))`;
+      args.push(`%${searchStr}%`, `%${searchStr}%`, `%${searchStr}%`);
     }
 
     if (materialTypeStr) {
@@ -67,11 +86,28 @@ router.get("/", async (req, res, next) => {
       args.push(locationStr);
     }
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    if (subjectStr) {
+      query += ` AND (LOWER(l.course_code) = LOWER(?) OR EXISTS (
+        SELECT 1 FROM listing_subjects selected_subject
+        WHERE selected_subject.listing_id = l.id
+          AND LOWER(selected_subject.subject_name) = LOWER(?)
+      ))`;
+      args.push(subjectStr, subjectStr);
+    }
+
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
     const offset = (page - 1) * limit;
 
-    query += " GROUP BY l.id ORDER BY l.created_at DESC LIMIT ? OFFSET ?";
+    const sortOptions: Record<string, string> = {
+      newest: "l.created_at DESC",
+      price_low: "l.price ASC, l.created_at DESC",
+      price_high: "l.price DESC, l.created_at DESC",
+      rating: "seller_rating DESC, l.created_at DESC",
+      popular: "l.views DESC, l.created_at DESC",
+    };
+    const orderBy = sortOptions[String(sort || 'newest')] || sortOptions.newest;
+    query += ` GROUP BY l.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
     args.push(limit, offset);
 
     const listings = await db.execute({ sql: query, args });
@@ -138,7 +174,7 @@ router.get("/", async (req, res, next) => {
 router.post(
   "/upload-image",
   authenticate as any,
-  upload.single("image") as any,
+  imageUpload.single("image") as any,
   async (req: AuthRequest, res, next) => {
     try {
       if (!req.file) {
@@ -195,6 +231,11 @@ router.post(
       if (!Array.isArray(imageUrls)) {
         imageUrls = typeof imageUrls === 'string' ? [imageUrls] : [];
       }
+      imageUrls = imageUrls
+        .filter((url): url is string => typeof url === 'string')
+        .map((url) => url.trim())
+        .filter((url) => (url.startsWith('https://') || url.startsWith('/uploads/')) && url.length <= 1000)
+        .slice(0, 3);
       
       // Fallback if no images provided
       if (imageUrls.length === 0) {
@@ -216,28 +257,39 @@ router.post(
       }
 
       // Input Validation
-      const parsedPrice = parseInt(price);
-      const parsedQuantity = quantity !== undefined ? parseInt(quantity) : 1;
+      const parsedPrice = Number(price);
+      const parsedQuantity = quantity !== undefined ? Number(quantity) : 1;
+      const cleanTitle = String(title).trim().replace(/\s+/g, ' ');
+      const cleanDescription = String(description || '').trim();
+      const cleanCourseCode = String(course_code).trim().replace(/\s+/g, ' ');
+      const cleanLocation = String(location).trim().replace(/\s+/g, ' ');
+
+      if (cleanTitle.length < 3 || cleanTitle.length > 120) {
+        return res.status(400).json({ error: "Title must be between 3 and 120 characters" });
+      }
+      if (cleanDescription.length > 2000 || cleanCourseCode.length > 120 || cleanLocation.length > 120) {
+        return res.status(400).json({ error: "One or more listing fields are too long" });
+      }
       
       let parsedOriginalPrice = null;
       if (req.body.original_price !== undefined && req.body.original_price !== null && req.body.original_price !== '') {
         parsedOriginalPrice = Number(req.body.original_price);
-        if (isNaN(parsedOriginalPrice) || parsedOriginalPrice < 0) {
-          return res.status(400).json({ error: "Original price must be 0 or a positive number" });
+        if (!Number.isInteger(parsedOriginalPrice) || parsedOriginalPrice < 0 || parsedOriginalPrice > 1000000) {
+          return res.status(400).json({ error: "Original price must be a whole number between 0 and 1,000,000" });
         }
       }
 
-      if (isNaN(parsedPrice) || parsedPrice < 0) {
-        return res.status(400).json({ error: "Price must be 0 or a positive number" });
+      if (!Number.isInteger(parsedPrice) || parsedPrice < 0 || parsedPrice > 1000000) {
+        return res.status(400).json({ error: "Price must be a whole number between 0 and 1,000,000" });
       }
-      if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
-        return res.status(400).json({ error: "Quantity must be a positive number" });
+      if (!Number.isInteger(parsedQuantity) || parsedQuantity <= 0 || parsedQuantity > 100) {
+        return res.status(400).json({ error: "Quantity must be between 1 and 100" });
       }
 
       let parsedCohort = null;
       if (cohort !== undefined && cohort !== null && cohort !== '') {
-        parsedCohort = parseInt(cohort);
-        if (isNaN(parsedCohort) || parsedCohort < 1 || parsedCohort > 99) {
+        parsedCohort = Number(cohort);
+        if (!Number.isInteger(parsedCohort) || parsedCohort < 1 || parsedCohort > 99) {
           return res.status(400).json({ error: "Cohort must be a positive integer between 1 and 99" });
         }
       }
@@ -256,57 +308,71 @@ router.post(
       const isMultiple =
         is_multiple_subjects === "true" || is_multiple_subjects === true;
       const deliveryMethod = delivery_method || "in_person";
-      const meetupLoc = meetup_location || null;
-await db.execute({
-  sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, original_price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, cohort, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-  args: [
-    listingId,
-    sellerId,
-    title,
-    description || null,
-    course_code,
-    semester,
-    condition,
-    parsedPrice,
-    parsedOriginalPrice,
-    location,
-    mainImageUrl,
-    parsedQuantity,
-    material_type,
-    isMultiple ? 1 : 0,
-    deliveryMethod,
-    preferred_meetup_spot || null,
-    meetupLoc,
-    parsedCohort,
-  ],
-});
-      // Insert all images into listing_images table
-      for (let i = 0; i < imageUrls.length; i++) {
-        await db.execute({
-          sql: "INSERT INTO listing_images (id, listing_id, url, is_main) VALUES (?, ?, ?, ?)",
-          args: [uuidv4(), listingId, imageUrls[i], i === 0 ? 1 : 0],
-        });
+      const preferredMeetupSpot = String(preferred_meetup_spot || '').trim();
+      const meetupLoc = String(meetup_location || '').trim();
+      if (!['in_person', 'courier', 'both'].includes(deliveryMethod)) {
+        return res.status(400).json({ error: "Invalid delivery method" });
+      }
+      if (preferredMeetupSpot.length > 120 || meetupLoc.length > 300) {
+        return res.status(400).json({ error: "Meetup details are too long" });
+      }
+      if (deliveryMethod !== 'courier' && (!preferredMeetupSpot || !meetupLoc)) {
+        return res.status(400).json({ error: "Meetup spot and location are required for in-person delivery" });
       }
 
-      if (isMultiple && subjects) {
+      if (!['Like New', 'Good', 'Fair', 'Heavily Annotated'].includes(String(condition))) {
+        return res.status(400).json({ error: "Invalid item condition" });
+      }
+
+      let subjectList: string[] = [];
+      if (isMultiple) {
         try {
-          const subjectList = typeof subjects === 'string' 
+          const parsedSubjects = typeof subjects === 'string'
             ? JSON.parse(subjects) 
             : subjects;
-          
-          if (!Array.isArray(subjectList)) {
+          if (!Array.isArray(parsedSubjects)) {
             throw new Error("Subjects must be an array");
           }
-          for (const subject of subjectList) {
-            await db.execute({
-              sql: "INSERT INTO listing_subjects (listing_id, subject_name) VALUES (?, ?)",
-              args: [listingId, subject],
-            });
-          }
+          subjectList = [...new Set(parsedSubjects.map((value: unknown) => String(value).trim()))]
+            .filter((value) => value.length > 0 && value.length <= 120)
+            .slice(0, 10);
+          if (subjectList.length === 0) throw new Error("At least one subject is required");
         } catch (e) {
           return res.status(400).json({ error: "Invalid subjects format" });
         }
+      }
+
+      const tx = await db.transaction('write');
+      try {
+        await tx.execute({
+          sql: `INSERT INTO listings (id, seller_id, title, description, course_code, semester, condition, price, original_price, location, image_url, quantity, material_type, is_multiple_subjects, delivery_method, preferred_meetup_spot, meetup_location, cohort, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+          args: [
+            listingId, sellerId, cleanTitle, cleanDescription || null, cleanCourseCode,
+            semester, condition, parsedPrice, parsedOriginalPrice, cleanLocation,
+            mainImageUrl, parsedQuantity, material_type, isMultiple ? 1 : 0,
+            deliveryMethod, preferredMeetupSpot || null, meetupLoc || null, parsedCohort,
+          ],
+        });
+
+        for (let i = 0; i < imageUrls.length; i++) {
+          await tx.execute({
+            sql: "INSERT INTO listing_images (id, listing_id, url, is_main) VALUES (?, ?, ?, ?)",
+            args: [uuidv4(), listingId, imageUrls[i], i === 0 ? 1 : 0],
+          });
+        }
+
+        for (const subject of subjectList) {
+          await tx.execute({
+            sql: "INSERT INTO listing_subjects (listing_id, subject_name) VALUES (?, ?)",
+            args: [listingId, subject],
+          });
+        }
+
+        await tx.commit();
+      } catch (error) {
+        await tx.rollback();
+        throw error;
       }
 
       res

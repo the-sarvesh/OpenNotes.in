@@ -18,7 +18,14 @@ const envBaseUrl = (
 // If in production and no env URL is set, use relative paths (works best with Vercel rewrites)
 export const API_BASE_URL = isLocal ? '' : (envBaseUrl || '');
 
-console.log(`[API] Initialized with BASE_URL: "${API_BASE_URL}" (Local: ${isLocal})`);
+if ((import.meta as any).env.DEV) {
+  console.log(`[API] Initialized with BASE_URL: "${API_BASE_URL}" (Local: ${isLocal})`);
+}
+
+export const clearStoredAuth = () => {
+  localStorage.removeItem('open_notes_user');
+  localStorage.removeItem('open_notes_token');
+};
 
 export const apiRequest = async (url: string, options: RequestInit = {}) => {
   const headers = new Headers(options.headers || {});
@@ -32,7 +39,9 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
     headers.set('Content-Type', 'application/json');
   }
 
-  console.log(`[API Request] Calling: ${options.method || 'GET'} ${fullUrl}`);
+  if ((import.meta as any).env.DEV) {
+    console.log(`[API Request] Calling: ${options.method || 'GET'} ${fullUrl}`);
+  }
 
   const token = localStorage.getItem('open_notes_token');
   if (token) {
@@ -51,7 +60,7 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
     const isAuthRoute = url.includes('/api/auth/login') || url.includes('/api/auth/register');
     
     if (!isAuthRoute) {
-      localStorage.removeItem('open_notes_user');
+      clearStoredAuth();
       if (!window.location.pathname.includes('/auth/callback')) {
         window.location.href = '/?error=session_expired';
       }
@@ -72,7 +81,7 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
     }
     
     if (data?.error === 'ACCOUNT_BLOCKED') {
-      localStorage.removeItem('open_notes_user');
+      clearStoredAuth();
       window.location.href = '/?error=blocked';
       return response;
     }

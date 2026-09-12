@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, Star, MessageCircle, MapPin, ChevronLeft, ChevronRight, Users, Package, Clock, CheckCircle2, XCircle, Truck, Hash, Send } from 'lucide-react';
+import { ShoppingBag, Star, MessageCircle, MapPin, ChevronLeft, ChevronRight, Users, Package, Clock, Check, CheckCircle2, XCircle, Truck, Hash, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
 import { useNavigate } from 'react-router-dom';
@@ -26,6 +26,8 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [retryKey, setRetryKey] = useState(0);
 
   const [reviewOrder, setReviewOrder] = useState<Order | null>(null);
   const [reviewItem, setReviewItem] = useState<OrderItem | null>(null);
@@ -38,17 +40,21 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
   useEffect(() => {
     if (!user) return;
     setLoading(true);
+    setLoadError('');
     apiRequest('/api/orders/my-orders')
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setOrders(data); })
-      .catch(console.error)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load your orders.');
+        if (Array.isArray(data)) setOrders(data);
+      })
+      .catch((error) => setLoadError(error.message || 'Could not load your orders.'))
       .finally(() => setLoading(false));
 
     apiRequest('/api/telegram/status')
       .then(r => r.json())
       .then(data => setTelegramLinked(data.isLinked))
       .catch(console.error);
-  }, [user]);
+  }, [user?.id, retryKey]);
 
   const handleLeaveReview = async () => {
     if (!reviewOrder || !reviewItem || submittingReview || !user) return;
@@ -111,7 +117,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
             <div>
               <h3 className="text-sm font-black text-blue-700 dark:text-blue-400 mb-0.5">Connect Telegram</h3>
               <p className="text-[11px] text-blue-800/70 dark:text-blue-300/70 leading-relaxed font-medium">
-                Get instant Notification and updates on ur products.
+                Get instant notifications and updates about your orders.
               </p>
             </div>
           </div>
@@ -130,7 +136,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
              }}
              className="w-full sm:w-auto px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all active:scale-95 shrink-0 shadow-lg shadow-blue-600/20"
           >
-            connet now.
+            Connect now
           </button>
         </div>
       )}
@@ -143,6 +149,13 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
               <span className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></span>
             </div>
             <p className="text-xs font-bold text-text-muted animate-pulse">Loading your orders…</p>
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center py-24 px-8 text-center" role="alert">
+            <XCircle className="h-9 w-9 text-red-500/70 mb-4" />
+            <p className="font-black text-lg text-text-main mb-2">Orders could not be loaded</p>
+            <p className="text-sm text-text-muted max-w-xs mb-5">{loadError}</p>
+            <button onClick={() => setRetryKey((key) => key + 1)} className="px-5 py-2.5 rounded-xl bg-primary text-black text-xs font-black">Try again</button>
           </div>
         ) : orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 px-8 text-center">
@@ -187,6 +200,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                 </div>
 
                 <div className="p-4 sm:p-6 space-y-4">
+                  <OrderTimeline order={selectedOrder} />
                   {/* Delivery / collection / meetup banner */}
                   {(selectedOrder.delivery_details || selectedOrder.buyer_availability || selectedOrder.buyer_preferred_spot || selectedOrder.buyer_location) && (
                     <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/40 rounded-2xl px-4 py-3.5 shadow-sm shadow-blue-500/5">
@@ -310,7 +324,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Online Platform Fee</p>
-                          <p className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">Paid successfully</p>
+                          <p className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">{selectedOrder.platform_fee === 0 ? 'No online charge' : 'Paid successfully'}</p>
                         </div>
                         <p className="text-xl font-black text-emerald-800 dark:text-emerald-300">
                           {selectedOrder.platform_fee === 0 ? '₹0 (Waived)' : `₹${selectedOrder.platform_fee}`}
@@ -495,5 +509,34 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
         )}
       </AnimatePresence>
     </motion.div>
+  );
+};
+
+const OrderTimeline = ({ order }: { order: Order }) => {
+  const acknowledged = order.status === 'completed' || order.items?.some((item) => ['acknowledged', 'completed'].includes(item.status));
+  const completed = order.status === 'completed';
+  const cancelled = order.status === 'cancelled';
+  const steps = [
+    { label: 'Order placed', done: true },
+    { label: 'Seller acknowledged', done: Boolean(acknowledged) },
+    { label: 'Meetup completed', done: completed },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-4" aria-label="Order progress">
+      <div className="flex items-start">
+        {steps.map((step, index) => (
+          <React.Fragment key={step.label}>
+            <div className="flex flex-col items-center text-center w-24 sm:w-32">
+              <div className={`h-7 w-7 rounded-full flex items-center justify-center border ${cancelled ? 'border-red-500/30 bg-red-500/10 text-red-500' : step.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border bg-background text-text-muted'}`}>
+                {step.done && !cancelled ? <Check className="h-3.5 w-3.5" /> : <span className="text-[10px] font-black">{index + 1}</span>}
+              </div>
+              <span className="mt-2 text-[9px] sm:text-[10px] font-bold text-text-muted leading-tight">{cancelled && index === 0 ? 'Order cancelled' : step.label}</span>
+            </div>
+            {index < steps.length - 1 && <div className={`h-0.5 flex-1 mt-3.5 ${!cancelled && steps[index + 1].done ? 'bg-emerald-500' : 'bg-border'}`} />}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
   );
 };

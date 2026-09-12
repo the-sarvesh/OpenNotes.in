@@ -251,8 +251,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Desktop Nav Links */}
             <div className="hidden md:flex items-center gap-7 border-b border-transparent">
-              {navLink('/browse', 'Browse Notes', true)}
-              {navLink('/resources', 'Study Material', true)}
+              {navLink('/browse', 'Browse Notes')}
+              {navLink('/resources', 'Study Material')}
               <button
                 onClick={() => {
                   if (!user) {
@@ -523,7 +523,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         if (onClick) {
                           onClick();
                         } else {
-                          const needsAuth = ['/sell', '/browse', '/resources', '/profile', '/orders', '/cart', '/messages'].includes(path);
+                          const needsAuth = ['/sell', '/profile', '/orders', '/cart', '/messages'].includes(path);
                           if (needsAuth && !user) {
                             setShowAuth(true);
                           } else {

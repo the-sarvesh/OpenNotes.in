@@ -7,6 +7,13 @@ import { v4 as uuidv4 } from "uuid";
 
 let isProcessingBroadcast = false;
 
+const escapeEmailHtml = (value: unknown) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#039;");
+
 /**
  * Background worker to process pending Telegram broadcast jobs.
  * This runs out-of-band using setImmediate to avoid blocking the request cycle.
@@ -136,7 +143,13 @@ router.get("/stats", async (_req, res, next) => {
         (SELECT COUNT(*) FROM orders) as orders,
         (SELECT COALESCE(SUM(platform_fee), 0) FROM orders) as platform_revenue,
         (SELECT COALESCE(SUM(total_amount), 0) FROM orders) as platform_volume,
-        (SELECT COUNT(*) FROM resources WHERE status = 'active') as active_resources
+        (SELECT COUNT(*) FROM resources WHERE status = 'active') as active_resources,
+        (SELECT COUNT(*) FROM users WHERE created_at >= datetime('now', '-30 days')) as new_users_30d,
+        (SELECT COUNT(*) FROM listings WHERE created_at >= datetime('now', '-30 days')) as new_listings_30d,
+        (SELECT COUNT(*) FROM orders WHERE created_at >= datetime('now', '-30 days')) as new_orders_30d,
+        (SELECT COUNT(*) FROM issue_reports WHERE status != 'resolved') as open_issues,
+        (SELECT COUNT(*) FROM email_delivery_logs WHERE status = 'failed' AND created_at >= datetime('now', '-24 hours')) as failed_emails_24h,
+        (SELECT COUNT(*) FROM notification_delivery_jobs WHERE status = 'failed') as failed_notification_jobs
     `);
 
     const row = stats.rows[0];
@@ -149,6 +162,12 @@ router.get("/stats", async (_req, res, next) => {
       platformRevenue: Number(row.platform_revenue),
       platformVolume: Number(row.platform_volume),
       activeResources: Number(row.active_resources),
+      newUsers30d: Number(row.new_users_30d),
+      newListings30d: Number(row.new_listings_30d),
+      newOrders30d: Number(row.new_orders_30d),
+      openIssues: Number(row.open_issues),
+      failedEmails24h: Number(row.failed_emails_24h),
+      failedNotificationJobs: Number(row.failed_notification_jobs),
     });
   } catch (error) {
     next(error);
@@ -1069,11 +1088,15 @@ router.post("/orders/items/:itemId/poke", async (req: AuthRequest, res, next) =>
     const { sendMail } = await import("../utils/email.js");
     
     // Email templates
+    const safeBuyerName = escapeEmailHtml(buyer.name);
+    const safeSellerName = escapeEmailHtml(seller.name);
+    const safeItemTitle = escapeEmailHtml(item.title);
+    const reminderWindow = Math.floor(Date.now() / (5 * 60 * 1000));
     const buyerEmailHtml = `
       <div style="font-family: sans-serif; padding: 20px; color: #333;">
         <h2 style="color: #0f172a;">Exchange Pending ⚠️</h2>
-        <p>Hi <strong>${buyer.name}</strong>,</p>
-        <p>Your exchange for '<strong>${item.title}</strong>' is still pending.</p>
+        <p>Hi <strong>${safeBuyerName}</strong>,</p>
+        <p>Your exchange for '<strong>${safeItemTitle}</strong>' is still pending.</p>
         <p style="font-size: 15px; line-height: 1.6; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
           Have you met up yet? Please exchange the note and enter the OTP to complete your order.
         </p>
@@ -1086,8 +1109,8 @@ router.post("/orders/items/:itemId/poke", async (req: AuthRequest, res, next) =>
     const sellerEmailHtml = `
       <div style="font-family: sans-serif; padding: 20px; color: #333;">
         <h2 style="color: #0f172a;">Exchange Pending ⚠️</h2>
-        <p>Hi <strong>${seller.name}</strong>,</p>
-        <p>Your exchange for '<strong>${item.title}</strong>' is still pending.</p>
+        <p>Hi <strong>${safeSellerName}</strong>,</p>
+        <p>Your exchange for '<strong>${safeItemTitle}</strong>' is still pending.</p>
         <p style="font-size: 15px; line-height: 1.6; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
           Have you met up yet? Please exchange the note and enter the OTP to complete your order.
         </p>
@@ -1097,21 +1120,25 @@ router.post("/orders/items/:itemId/poke", async (req: AuthRequest, res, next) =>
       </div>
     `;
 
-    // Send emails asynchronously
-    Promise.all([
+    const emailResults = await Promise.allSettled([
       sendMail({
         to: buyer.email,
         subject: `Pending Exchange: ${item.title} ⚠️`,
         html: buyerEmailHtml,
-        text: `Hi ${buyer.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`
-      }).catch(err => console.error(`[Admin Poke] Email to buyer failed: ${err.message}`)),
+        text: `Hi ${buyer.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`,
+        purpose: "order_reminder",
+        idempotencyKey: `order-reminder-${item.id}-buyer-${reminderWindow}`,
+      }),
       sendMail({
         to: seller.email,
         subject: `Pending Exchange: ${item.title} ⚠️`,
         html: sellerEmailHtml,
-        text: `Hi ${seller.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`
-      }).catch(err => console.error(`[Admin Poke] Email to seller failed: ${err.message}`))
+        text: `Hi ${seller.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`,
+        purpose: "order_reminder",
+        idempotencyKey: `order-reminder-${item.id}-seller-${reminderWindow}`,
+      }),
     ]);
+    const failedEmails = emailResults.filter(result => result.status === "rejected").length;
 
     // 4. Send In-App notifications (which triggers socket + push + Telegram Bot if linked)
     const nudgeTitle = "Exchange Pending ⚠️";
@@ -1135,7 +1162,12 @@ router.post("/orders/items/:itemId/poke", async (req: AuthRequest, res, next) =>
       )
     ]);
 
-    res.json({ message: "Automated nudge messages sent successfully via Email, Push, and Telegram." });
+    res.json({
+      message: failedEmails
+        ? "In-app reminders were sent, but one or more reminder emails could not be delivered."
+        : "Reminder emails and in-app notifications were sent successfully.",
+      emailFailures: failedEmails,
+    });
   } catch (error) {
     next(error);
   }
@@ -1615,8 +1647,15 @@ router.get("/issues", async (req, res, next) => {
     const issues = await db.execute({
       sql: `SELECT
               i.id, i.email, i.category, i.subject, i.description, i.page_url,
-              i.user_agent, i.status, i.created_at, i.updated_at,
-              u.name AS user_name
+              i.user_agent, i.screenshot_url, i.technical_context,
+              i.status, i.created_at, i.updated_at,
+              u.name AS user_name,
+              (SELECT edl.status FROM email_delivery_logs edl
+               WHERE edl.recipient = LOWER(i.email)
+               ORDER BY edl.created_at DESC LIMIT 1) AS last_email_status,
+              (SELECT edl.updated_at FROM email_delivery_logs edl
+               WHERE edl.recipient = LOWER(i.email)
+               ORDER BY edl.created_at DESC LIMIT 1) AS last_email_at
             FROM issue_reports i
             LEFT JOIN users u ON u.id = i.user_id
             ${whereClause}

@@ -15,6 +15,7 @@ import { ReachabilityModal } from '../components/ReachabilityModal';
 
 // ── Types ──────────────────────────────────────────────────────────
 interface ImageUpload {
+  id: string;
   file: File;
   preview: string;
   url: string | null;
@@ -66,6 +67,23 @@ const INITIAL_FORM: FormData = {
   cohort: '',
 };
 
+const draftKey = (userId?: string) => `opennotes_listing_draft_${userId || 'guest'}`;
+
+const loadDraft = (userId?: string): FormData => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(draftKey(userId)) || 'null');
+    if (!saved || typeof saved !== 'object') return { ...INITIAL_FORM, images: [] };
+    return {
+      ...INITIAL_FORM,
+      ...saved,
+      images: [],
+      subjects: Array.isArray(saved.subjects) ? saved.subjects : [],
+    };
+  } catch {
+    return { ...INITIAL_FORM, images: [] };
+  }
+};
+
 const STEPS = [
   { id: 1, label: 'Photo', icon: Camera },
   { id: 2, label: 'Course', icon: BookOpen },
@@ -94,12 +112,14 @@ const Toggle: React.FC<{ checked: boolean; onChange: () => void; color?: string 
 
 // ── Image compression ─────────────────────────────────────────────
 const compressImage = async (file: File): Promise<File> => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
+    reader.onerror = () => reject(new Error('Could not read this image.'));
     reader.onload = (event) => {
       const img = new Image();
       img.src = event.target?.result as string;
+      img.onerror = () => reject(new Error('This image is damaged or unsupported.'));
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const MAX = 1200;
@@ -123,12 +143,24 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState<FormData>(INITIAL_FORM);
+  const [form, setForm] = useState<FormData>(() => loadDraft(user?.id));
   const [showReachability, setShowReachability] = useState(false);
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [step]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const { images: _images, ...serializableDraft } = form;
+      const hasContent = Boolean(
+        serializableDraft.title || serializableDraft.description || serializableDraft.semester,
+      );
+      if (hasContent) localStorage.setItem(draftKey(user?.id), JSON.stringify(serializableDraft));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [form, user?.id]);
+
   const { settings } = useSettings();
+  const subjectCatalog = settings?.subjects_by_sem || SUBJECTS_BY_SEM;
   const PLATFORM_FEE_PERCENTAGE = settings?.platform_fee_percentage ?? 0;
   const platformFee = Math.round(Number(form.price || 0) * (PLATFORM_FEE_PERCENTAGE / 100));
 
@@ -142,7 +174,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
     }
   }, [form.isDonation, form.materialType]);
 
-  const uploadFile = async (index: number, file: File) => {
+  const uploadFile = async (id: string, file: File) => {
     try {
       const fd = new FormData();
       fd.append('image', file);
@@ -150,15 +182,17 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       setForm(prev => {
-        const imgs = [...prev.images];
-        if (imgs[index]) imgs[index] = { ...imgs[index], url: data.url, isUploading: false };
-        return { ...prev, images: imgs };
+        const images = prev.images.map(img => img.id === id
+          ? { ...img, url: data.url, isUploading: false, error: null }
+          : img);
+        return { ...prev, images };
       });
     } catch (err: any) {
       setForm(prev => {
-        const imgs = [...prev.images];
-        if (imgs[index]) imgs[index] = { ...imgs[index], isUploading: false, error: err.message };
-        return { ...prev, images: imgs };
+        const images = prev.images.map(img => img.id === id
+          ? { ...img, isUploading: false, error: err.message }
+          : img);
+        return { ...prev, images };
       });
       toast.error(`Image upload failed: ${err.message}`);
     }
@@ -166,20 +200,39 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
 
   const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
+    e.target.value = '';
     if (!files.length) return;
-    const newFiles = files.slice(0, 3 - form.images.length);
+    const validFiles = files.filter(file => {
+      const validType = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
+      const validSize = file.size <= 8 * 1024 * 1024;
+      if (!validType) toast.error(`${file.name}: use a PNG, JPEG, or WebP image.`);
+      else if (!validSize) toast.error(`${file.name}: image must be 8 MB or smaller.`);
+      return validType && validSize;
+    });
+    const newFiles = validFiles.slice(0, 3 - form.images.length);
     if (!newFiles.length) { toast.error('You can only upload up to 3 images.'); return; }
-    for (const file of newFiles) {
-      const preview = URL.createObjectURL(file);
-      setForm(prev => {
-        if (prev.images.length >= 3) return prev;
-        const newEntry: ImageUpload = { file, preview, url: null, isUploading: true, error: null };
-        const updated = [...prev.images, newEntry];
-        const idx = updated.length - 1;
-        (async () => { const compressed = await compressImage(file); uploadFile(idx, compressed); })();
-        return { ...prev, images: updated };
-      });
-    }
+    const entries: ImageUpload[] = newFiles.map(file => ({
+      id: crypto.randomUUID(),
+      file,
+      preview: URL.createObjectURL(file),
+      url: null,
+      isUploading: true,
+      error: null,
+    }));
+    setForm(prev => ({ ...prev, images: [...prev.images, ...entries].slice(0, 3) }));
+    await Promise.all(entries.map(async entry => {
+      try {
+        const compressed = await compressImage(entry.file);
+        await uploadFile(entry.id, compressed);
+      } catch (error: any) {
+        setForm(prev => ({
+          ...prev,
+          images: prev.images.map(img => img.id === entry.id
+            ? { ...img, isUploading: false, error: error.message || 'Could not read image' }
+            : img),
+        }));
+      }
+    }));
   };
 
   const removeImage = (index: number) => {
@@ -220,7 +273,14 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
     if (form.images.some(img => img.isUploading)) { toast.error('Please wait for all images to finish uploading.'); return; }
     setIsSubmitting(true); setError('');
     try {
-      const typeMap: Record<string, string> = { 'Handwritten Notes': 'handwritten', 'PPT': 'ppt', 'Book': 'book' };
+      const typeMap: Record<string, string> = {
+        'Handwritten Notes': 'handwritten',
+        'Printed Notes': 'printed',
+        'Digital Notes': 'digital',
+        'PPT': 'ppt',
+        'Book': 'book',
+        'Other': 'other',
+      };
       const res = await apiRequest('/api/listings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -246,6 +306,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create listing');
+      localStorage.removeItem(draftKey(user.id));
       setSuccess(true);
     } catch (err: any) { setError(err.message); }
     finally { setIsSubmitting(false); }
@@ -287,7 +348,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
     );
   }
 
-  const subjects = form.semester ? SUBJECTS_BY_SEM[form.semester] || [] : [];
+  const subjects = form.semester ? subjectCatalog[form.semester] || [] : [];
   const priceNum = Number(form.price);
 
   return (
@@ -300,8 +361,27 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
     >
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-black text-text-main tracking-tight mb-1">List Your Notes</h1>
-        <p className="text-sm text-text-muted">Three quick steps to go live.</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-text-main tracking-tight mb-1">List Your Notes</h1>
+            <p className="text-sm text-text-muted">Three quick steps to go live. Your text is saved automatically.</p>
+          </div>
+          {(form.title || form.description || form.semester) && (
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem(draftKey(user?.id));
+                form.images.forEach((image) => URL.revokeObjectURL(image.preview));
+                setForm({ ...INITIAL_FORM, images: [] });
+                setStep(1);
+                toast.success('Draft cleared');
+              }}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-[10px] font-black uppercase tracking-wider text-text-muted hover:text-red-500 hover:border-red-500/30"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Clear draft
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Platform fee info banner */}
@@ -370,7 +450,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                 <AnimatePresence>
                   {form.images.map((img, index) => (
                     <motion.div
-                      key={img.preview}
+                      key={img.id}
                       initial={{ opacity: 0, scale: 0.85 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.85 }}
@@ -405,6 +485,8 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
 
                       {/* Remove button */}
                       <button
+                        type="button"
+                        aria-label={`Remove photo ${index + 1}`}
                         onClick={() => removeImage(index)}
                         className="absolute top-1.5 right-1.5 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10 active:scale-90"
                       >
@@ -427,7 +509,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                     htmlFor="img-upload"
                     className="aspect-square border-2 border-dashed border-border hover:border-primary rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center gap-2 group bg-background"
                   >
-                    <input id="img-upload" type="file" accept="image/*" multiple className="hidden" onChange={handleImage} />
+                    <input id="img-upload" type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={handleImage} />
                     <div className="p-2.5 bg-surface border border-border group-hover:border-primary/30 rounded-xl transition-all">
                       <Camera className="h-5 w-5 text-text-muted group-hover:text-primary transition-colors" />
                     </div>
@@ -468,8 +550,8 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
               {/* Material type */}
               <div>
                 <Label>Material Type</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {['PPT', 'Handwritten Notes', 'Book'].map(t => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {['PPT', 'Handwritten Notes', 'Printed Notes', 'Digital Notes', 'Book', 'Other'].map(t => (
                     <button key={t} type="button"
                       onClick={() => { set('materialType', t); if (t !== 'PPT') set('isMultipleSubjects', false); }}
                       className={`py-3 px-2 rounded-xl text-xs font-bold border transition-all ${form.materialType === t
@@ -488,7 +570,7 @@ export const SellView: React.FC<{ onGoToBrowse?: () => void }> = ({ onGoToBrowse
                   <Label>Semester</Label>
                   <select value={form.semester} onChange={e => { set('semester', e.target.value); set('courseCode', ''); set('subjects', []); }} className={inputClass}>
                     <option value="">Select semester...</option>
-                    {Object.keys(SUBJECTS_BY_SEM).map(s => <option key={s} value={s}>{s}</option>)}
+                    {Object.keys(subjectCatalog).map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>

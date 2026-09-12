@@ -8,6 +8,7 @@ import { applyCoupon, calculateOrderFees } from "../utils/orders.js";
 import { io } from "../socket.js";
 import { sendTelegramMessage, telegramTemplates } from "../utils/telegram.js";
 import { getSetting } from "../utils/settings.js";
+import { normalizeOrderItems } from "../utils/validation.js";
 
 
 const router = express.Router();
@@ -29,12 +30,11 @@ const getConversationId = (
 router.post("/quote", authenticate, async (req: AuthRequest, res, next) => {
   try {
     const { items, coupon_code } = req.body;
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).json({ error: "items array is required" });
-    }
+    const normalized = normalizeOrderItems(items);
+    if (normalized.error) return res.status(400).json({ error: normalized.error });
 
     let subtotal = 0;
-    for (const item of items) {
+    for (const item of normalized.items) {
       const listingRes = await db.execute({
         sql: "SELECT price FROM listings WHERE id = ? AND status = 'active'",
         args: [item.listing_id],
@@ -91,6 +91,32 @@ router.post("/validate-coupon", authenticate, async (req: AuthRequest, res, next
 router.post("/", authenticate, async (req: AuthRequest, res, next) => {
   try {
     const buyerId = req.user!.id;
+    const idempotencyKey = String(
+      req.get("idempotency-key") || req.body?.client_request_id || "",
+    ).trim();
+
+    if (idempotencyKey && !/^[A-Za-z0-9_-]{8,128}$/.test(idempotencyKey)) {
+      return res.status(400).json({ error: "Invalid checkout request identifier" });
+    }
+
+    if (idempotencyKey) {
+      const existingOrder = await db.execute({
+        sql: "SELECT id, total_amount, platform_fee, platform_fee_waived, coupon_code FROM orders WHERE buyer_id = ? AND idempotency_key = ?",
+        args: [buyerId, idempotencyKey],
+      });
+      if (existingOrder.rows[0]) {
+        const order = existingOrder.rows[0] as any;
+        return res.status(200).json({
+          message: "Order already created",
+          orderId: order.id,
+          totalAmount: order.total_amount,
+          platformFee: order.platform_fee,
+          feeWaived: Boolean(order.platform_fee_waived),
+          couponApplied: order.coupon_code,
+          idempotentReplay: true,
+        });
+      }
+    }
     const {
       items,
       buyer_location,
@@ -101,26 +127,29 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       coupon_code,
     } = req.body;
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "Order items are required" });
-    }
+    const normalized = normalizeOrderItems(items);
+    if (normalized.error) return res.status(400).json({ error: normalized.error });
 
-    if (!buyer_availability) {
+    const cleanAvailability = String(buyer_availability || '').trim();
+    const cleanBuyerLocation = String(buyer_location || '').trim().slice(0, 120);
+    const cleanPreferredSpot = String(buyer_preferred_spot || '').trim().slice(0, 120);
+    const cleanBuyerNote = String(buyer_note || '').trim().slice(0, 500);
+    const cleanMeetupDetails = String(buyer_meetup_details || '').trim().slice(0, 500);
+
+    if (!cleanAvailability || cleanAvailability.length > 120) {
       return res
         .status(400)
         .json({ error: "You must provide your availability for meetup." });
     }
+
+    const normalizedItems = normalized.items;
 
     let subtotal = 0;
     const orderId = uuidv4();
     const orderItemsToInsert: any[] = [];
 
     // ── Validate all items first (before touching DB state) ──────────────────
-    for (const item of items) {
-      if (!item.listing_id || !item.quantity || Number(item.quantity) <= 0) {
-        return res.status(400).json({ error: "Invalid item quantity" });
-      }
-
+    for (const item of normalizedItems) {
       const listingRes = await db.execute({
         sql: "SELECT id, seller_id, price, quantity, title, image_url FROM listings WHERE id = ? AND status = ?",
         args: [item.listing_id, "active"],
@@ -180,7 +209,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
 
     try {
       // ── Re-validate all items INSIDE the transaction to prevent race conditions ──
-      for (const item of items) {
+      for (const item of normalizedItems) {
         const listingRes = await tx.execute({
           sql: "SELECT id, seller_id, price, quantity, title, status FROM listings WHERE id = ?",
           args: [item.listing_id],
@@ -189,11 +218,15 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         const listing = listingRes.rows[0] as any;
 
         if (!listing || listing.status !== "active") {
-          throw new Error(`Listing "${listing?.title || item.listing_id}" is no longer active.`);
+          const conflict = new Error(`Listing "${listing?.title || item.listing_id}" is no longer active.`) as Error & { status?: number };
+          conflict.status = 409;
+          throw conflict;
         }
 
         if (Number(listing.quantity) < item.quantity) {
-          throw new Error(`Not enough stock for "${listing.title}". Available: ${listing.quantity}`);
+          const conflict = new Error(`Not enough stock for "${listing.title}". Available: ${listing.quantity}`) as Error & { status?: number };
+          conflict.status = 409;
+          throw conflict;
         }
       }
 
@@ -201,8 +234,9 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         sql: `INSERT INTO orders
                 (id, buyer_id, total_amount, platform_fee, platform_fee_waived,
                  coupon_code, status, buyer_location, buyer_preferred_spot,
-                 buyer_availability, buyer_note, buyer_meetup_details, platform_fee_paid)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 buyer_availability, buyer_note, buyer_meetup_details, platform_fee_paid,
+                 idempotency_key)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           orderId,
           buyerId,
@@ -211,12 +245,13 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           feeWaived ? 1 : 0,
           appliedCouponCode,
           "pending_meetup",
-          buyer_location || null,
-          buyer_preferred_spot || null,
-          buyer_availability,
-          buyer_note || null,
-          buyer_meetup_details || null,
+          cleanBuyerLocation || null,
+          cleanPreferredSpot || null,
+          cleanAvailability,
+          cleanBuyerNote || null,
+          cleanMeetupDetails || null,
           1,
+          idempotencyKey || null,
         ],
       });
 
@@ -262,7 +297,7 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         const totalToCollect = itemSubtotal - itemPlatformFee;
 
         // Structured purchase message
-        const initialMessage = `Hi! I just purchased your "${orderItem.title}".\n\nI'm based in ${buyer_location || "BITS"}${buyer_preferred_spot ? ` and prefer meeting at ${buyer_preferred_spot}` : ""}.\n\nAvailability: ${buyer_availability}${buyer_meetup_details ? `\nDetails: ${buyer_meetup_details}` : ""}`;
+        const initialMessage = `Hi! I just purchased your "${orderItem.title}".\n\nI'm based in ${cleanBuyerLocation || "BITS"}${cleanPreferredSpot ? ` and prefer meeting at ${cleanPreferredSpot}` : ""}.\n\nAvailability: ${cleanAvailability}${cleanMeetupDetails ? `\nDetails: ${cleanMeetupDetails}` : ""}`;
         const metadata = JSON.stringify({
           type: 'purchase_notice',
           listingId: orderItem.listing_id,
@@ -270,11 +305,11 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           listingImage: orderItem.image_url,
           orderItemId: orderItem.id,
           meetupPin: orderItem.meetup_pin,
-          buyerLocation: buyer_location,
-          buyerPreferredSpot: buyer_preferred_spot,
-          buyerAvailability: buyer_availability,
-          buyerNote: buyer_note,
-          buyerMeetupDetails: buyer_meetup_details,
+          buyerLocation: cleanBuyerLocation,
+          buyerPreferredSpot: cleanPreferredSpot,
+          buyerAvailability: cleanAvailability,
+          buyerNote: cleanBuyerNote,
+          buyerMeetupDetails: cleanMeetupDetails,
           price: orderItem.price_at_purchase,
           quantity: orderItem.quantity,
           totalToCollect: totalToCollect
@@ -302,7 +337,8 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           "Item Sold! 🎉",
           `A buyer has purchased ${orderItem.quantity}x "${orderItem.title}".`,
           "/orders",
-          tx
+          tx,
+          { skipTelegram: true },
         );
 
         // Notify seller — message
@@ -318,7 +354,8 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           "New Meetup Details 💬",
           `${buyerName} sent their meetup availability.`,
           "/messages",
-          tx
+          tx,
+          { skipTelegram: true },
         );
       }
 
@@ -333,6 +370,24 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       await tx.commit();
     } catch (err) {
       await tx.rollback();
+      if (idempotencyKey && String((err as any)?.message || err).toLowerCase().includes("unique")) {
+        const existingOrder = await db.execute({
+          sql: "SELECT id, total_amount, platform_fee, platform_fee_waived, coupon_code FROM orders WHERE buyer_id = ? AND idempotency_key = ?",
+          args: [buyerId, idempotencyKey],
+        });
+        if (existingOrder.rows[0]) {
+          const order = existingOrder.rows[0] as any;
+          return res.status(200).json({
+            message: "Order already created",
+            orderId: order.id,
+            totalAmount: order.total_amount,
+            platformFee: order.platform_fee,
+            feeWaived: Boolean(order.platform_fee_waived),
+            couponApplied: order.coupon_code,
+            idempotentReplay: true,
+          });
+        }
+      }
       throw err;
     }
 
@@ -365,11 +420,11 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
             listingImage: orderItem.image_url,
             orderItemId: orderItem.id,
             meetupPin: orderItem.meetup_pin,
-            buyerLocation: buyer_location,
-            buyerPreferredSpot: buyer_preferred_spot,
-            buyerAvailability: buyer_availability,
-            buyerNote: buyer_note,
-            buyerMeetupDetails: buyer_meetup_details,
+            buyerLocation: cleanBuyerLocation,
+            buyerPreferredSpot: cleanPreferredSpot,
+            buyerAvailability: cleanAvailability,
+            buyerNote: cleanBuyerNote,
+            buyerMeetupDetails: cleanMeetupDetails,
             price: orderItem.price_at_purchase,
             quantity: orderItem.quantity,
             totalToCollect: orderItem.price_at_purchase * orderItem.quantity - (totalAmount > 0 ? Math.round(((orderItem.price_at_purchase * orderItem.quantity) / totalAmount) * platformFee) : 0)
@@ -406,11 +461,11 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         // Notify buyer with Full Info
         if (buyer?.telegram_chat_id) {
           const meetupObj = {
-            location: buyer_location,
-            spot: buyer_preferred_spot,
-            availability: buyer_availability,
-            note: buyer_note,
-            details: buyer_meetup_details
+            location: cleanBuyerLocation,
+            spot: cleanPreferredSpot,
+            availability: cleanAvailability,
+            note: cleanBuyerNote,
+            details: cleanMeetupDetails
           };
           const template = telegramTemplates.orderPlaced(buyer.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, seller.name, orderItem.meetup_pin, orderItem.id, meetupObj, itemSubtotal, itemPlatformFee);
           await sendTelegramMessage(buyer.telegram_chat_id, template.text, template.reply_markup);
@@ -419,11 +474,11 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
         // Notify seller with Full Info
         if (seller?.telegram_chat_id) {
           const meetupObj = {
-            location: buyer_location,
-            spot: buyer_preferred_spot,
-            availability: buyer_availability,
-            note: buyer_note,
-            details: buyer_meetup_details
+            location: cleanBuyerLocation,
+            spot: cleanPreferredSpot,
+            availability: cleanAvailability,
+            note: cleanBuyerNote,
+            details: cleanMeetupDetails
           };
           const template = telegramTemplates.newOrder(seller.name, orderItem.title, orderItem.price_at_purchase, orderItem.quantity, buyer.name, orderItem.id, meetupObj, itemSubtotal, itemPlatformFee);
           await sendTelegramMessage(seller.telegram_chat_id, template.text, template.reply_markup);
@@ -441,11 +496,11 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
       feeWaived,
       couponApplied: appliedCouponCode,
       items: orderItemsToInsert,
-      buyer_location: buyer_location || null,
-      buyer_preferred_spot: buyer_preferred_spot || null,
-      buyer_availability: buyer_availability,
-      buyer_note: buyer_note || null,
-      buyer_meetup_details: buyer_meetup_details || null,
+      buyer_location: cleanBuyerLocation || null,
+      buyer_preferred_spot: cleanPreferredSpot || null,
+      buyer_availability: cleanAvailability,
+      buyer_note: cleanBuyerNote || null,
+      buyer_meetup_details: cleanMeetupDetails || null,
     });
   } catch (error) {
     next(error);
@@ -655,6 +710,8 @@ router.post(
         "Order Acknowledged! ✅",
         `The seller has acknowledged your purchase of "${item.title}". You can now coordinate the meetup.`,
         "/orders",
+        undefined,
+        { skipTelegram: true },
       );
 
       // Telegram Notifications (Acknowledge)
@@ -843,6 +900,8 @@ router.post(
         "Exchange Completed! ✅",
         `"${item.title}" has been handed over. ${allCompleted ? "Your full order is now complete!" : "Waiting for remaining items."}`,
         "/orders",
+        undefined,
+        { skipTelegram: true },
       );
 
       // ── Telegram Notifications ──────────────────────────────────────────────

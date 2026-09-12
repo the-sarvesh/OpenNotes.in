@@ -245,11 +245,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   useEffect(() => {
-    apiRequest('/api/listings')
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setNotes(data.slice(0, 4).map(mapListing)); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    const loadFeatured = async () => {
+      try {
+        const preferredSemester = localStorage.getItem('opennotes_preferred_semester');
+        const preferredUrl = preferredSemester
+          ? `/api/listings?semester=${encodeURIComponent(preferredSemester)}&limit=4`
+          : '/api/listings?limit=4';
+        let response = await apiRequest(preferredUrl);
+        let data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load featured listings');
+        if (preferredSemester && Array.isArray(data) && data.length === 0) {
+          response = await apiRequest('/api/listings?limit=4');
+          data = await response.json();
+        }
+        if (!cancelled && Array.isArray(data)) setNotes(data.slice(0, 4).map(mapListing));
+      } catch (error) {
+        console.error('[Home] Featured listings failed:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void loadFeatured();
+    return () => { cancelled = true; };
   }, [refreshKey]);
 
   return (

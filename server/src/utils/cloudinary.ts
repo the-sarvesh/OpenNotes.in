@@ -25,7 +25,15 @@ const cloudinaryStorage: multer.StorageEngine | null = isCloudinaryConfigured ? 
   _handleFile(req, file, cb) {
     console.log(`[Cloudinary Storage] Processing upload for: ${file.originalname} (${file.mimetype})`);
     const isProfile = req.baseUrl.includes('users');
-    const folder = isProfile ? 'opennotes/profiles' : 'opennotes/resources';
+    const isIssue = req.baseUrl.includes('issues');
+    const isListing = req.baseUrl.includes('listings');
+    const folder = isProfile
+      ? 'opennotes/profiles'
+      : isIssue
+        ? 'opennotes/issues'
+        : isListing
+          ? 'opennotes/listings'
+          : 'opennotes/resources';
     
     // Determine Cloudinary resource_type
     const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf'];
@@ -78,10 +86,44 @@ const diskStorage = multer.diskStorage({
   },
 });
 
-export const upload = multer({ 
-  storage: isCloudinaryConfigured ? cloudinaryStorage! : diskStorage,
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
+const storage = isCloudinaryConfigured ? cloudinaryStorage! : diskStorage;
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const RESOURCE_MIME_TYPES = new Set([
+  ...IMAGE_MIME_TYPES,
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'application/zip',
+  'application/x-zip-compressed',
+]);
+
+const fileFilter = (allowedTypes: Set<string>) =>
+  (_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    if (!allowedTypes.has(file.mimetype.toLowerCase())) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
+    }
+    cb(null, true);
+  };
+
+export const imageUpload = multer({
+  storage,
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter: fileFilter(IMAGE_MIME_TYPES),
 });
+
+export const resourceUpload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 },
+  fileFilter: fileFilter(RESOURCE_MIME_TYPES),
+});
+
+// Backwards-compatible export for any external imports.
+export const upload = resourceUpload;
 
 /**
  * Utility to get the correct public URL for an uploaded file

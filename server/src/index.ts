@@ -5,13 +5,11 @@ import path from "path";
 import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import { createServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
-import session from "express-session";
 import passport from "passport";
-import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import db from "./db/database.js";
 import fs from "fs";
-import "./db/init.js";
+import { initDb } from "./db/init.js";
 import { initSocket, io } from "./socket.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,6 +37,8 @@ import pushRoutes from "./routes/push.js";
 import resourcesRoutes from "./routes/resources.js";
 import feedbackRoutes from "./routes/feedback.js";
 import issuesRoutes from "./routes/issues.js";
+import resendWebhookRoutes from "./routes/resend-webhook.js";
+import { processNotificationDeliveryJobs } from "./utils/notifications.js";
 
 
 // NOTE: Coupon routes are handled under /api/admin/coupons (admin.ts)
@@ -56,21 +56,15 @@ const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 5000;
 
+// Render/Vercel forward the real client IP and protocol through one trusted proxy.
+// This is required for accurate rate limiting and secure-cookie detection.
+app.set("trust proxy", 1);
+
 const JWT_SECRET =
   process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod";
 
-// ── Security: Warn if session secret is default ───────────────────────────────
+// ── Security: refuse to start with a default signing key ─────────────────────
 if (process.env.NODE_ENV === "production") {
-  if (
-    !process.env.SESSION_SECRET ||
-    process.env.SESSION_SECRET === "opennotes-session-secret"
-  ) {
-    console.error(
-      "[FATAL] SESSION_SECRET is not set or is using the default value in production. " +
-      "Server startup aborted.",
-    );
-    process.exit(1);
-  }
   if (
     !process.env.JWT_SECRET ||
     process.env.JWT_SECRET === "opennotes-dev-secret-change-in-prod"
@@ -92,9 +86,31 @@ export { io } from "./socket.js";
 // ── Express Middleware ───────────────────────────────────────────────────────
 app.use(cookieParser());
 
-// Global Request Logger
+// Safe baseline headers without a restrictive CSP that could break existing
+// Cloudinary images, Google OAuth, sockets, or Vercel assets.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
+// Request IDs make a user report traceable without logging private query values.
 app.use((req, res, next) => {
-  console.log(`[Server] ${new Date().toISOString()} - ${req.method} ${req.url}`);
+  const requestId = String(req.get("x-request-id") || crypto.randomUUID()).slice(0, 128);
+  const startedAt = Date.now();
+  res.setHeader("X-Request-Id", requestId);
+  res.on("finish", () => {
+    console.log(JSON.stringify({
+      type: "http_request",
+      requestId,
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Date.now() - startedAt,
+    }));
+  });
   next();
 });
 
@@ -105,6 +121,13 @@ const allowedOrigins = [
   "https://opennotes.in",
   "https://www.opennotes.in"
 ].filter(Boolean) as string[];
+
+for (const previewOrigin of (process.env.ALLOWED_PREVIEW_ORIGINS || "").split(",")) {
+  const normalized = previewOrigin.trim().replace(/\/$/, "");
+  if (normalized.startsWith("https://") && !allowedOrigins.includes(normalized)) {
+    allowedOrigins.push(normalized);
+  }
+}
 
 // Fallback if FRONTEND_URL is missing but we know the Vercel domain
 if (!allowedOrigins.includes("https://open-notes-in-client.vercel.app")) {
@@ -117,8 +140,7 @@ app.use(
       // Allow requests with no origin (like mobile apps or curl)
       if (!origin) return callback(null, true);
       if (
-        allowedOrigins.indexOf(origin) !== -1 ||
-        (origin.startsWith('https://open-notes-in-client-') && origin.endsWith('.vercel.app'))
+        allowedOrigins.indexOf(origin) !== -1
       ) {
         callback(null, true);
       } else {
@@ -129,38 +151,13 @@ app.use(
   }),
 );
 app.set("io", io);
-app.use(express.json());
+app.use("/api/webhooks/resend", express.raw({ type: "application/json", limit: "256kb" }), resendWebhookRoutes);
+app.use(express.json({ limit: "1mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../../uploads")));
 
-// Session & Passport (Session is still used by Passport Google strategy)
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "opennotes-session-secret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax'
-    },
-  }),
-);
-
+// OAuth callbacks issue JWTs and explicitly use session:false, so a process-local
+// session store is unnecessary and unsafe when the service scales horizontally.
 app.use(passport.initialize());
-app.use(passport.session());
-
-// Passport serialization
-passport.serializeUser((user: any, done) => done(null, user.id));
-passport.deserializeUser(async (id: string, done) => {
-  try {
-    const result = await db.execute({
-      sql: "SELECT * FROM users WHERE id = ?",
-      args: [id],
-    });
-    done(null, result.rows[0] as any);
-  } catch (err) {
-    done(err);
-  }
-});
 
 // ── API Routes ───────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
@@ -179,8 +176,23 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/api/issues", issuesRoutes);
 
 
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", message: "OpenNotes.in API is running" });
+app.get("/api/health", async (_req, res) => {
+  try {
+    await db.execute("SELECT 1 AS ok");
+    res.json({
+      status: "ok",
+      database: "connected",
+      emailConfigured: Boolean(process.env.RESEND_API_KEY || process.env.SMTP_PASS),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[Health] Database check failed:", error);
+    res.status(503).json({
+      status: "degraded",
+      database: "unavailable",
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 app.get("/", (_req, res) => {
@@ -191,8 +203,17 @@ app.get("/", (_req, res) => {
 // ── Error Handler ────────────────────────────────────────────────────────────
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('[Error Handler]:', err);
-  res.status(err.status || 500).json({
-    error: err.message || "Internal server error",
+  const uploadMessages: Record<string, string> = {
+    LIMIT_FILE_SIZE: "The selected file is too large.",
+    LIMIT_FILE_COUNT: "Too many files were selected.",
+    LIMIT_UNEXPECTED_FILE: "This file type or upload field is not supported.",
+  };
+  const uploadMessage = typeof err?.code === "string" ? uploadMessages[err.code] : undefined;
+  const status = uploadMessage ? 400 : (Number(err.status || err.statusCode) || 500);
+  const isSafeClientError = status >= 400 && status < 500;
+  res.status(status).json({
+    error: uploadMessage || (isSafeClientError && err.message ? err.message : "Internal server error"),
+    requestId: res.getHeader("X-Request-Id"),
   });
 });
 
@@ -227,25 +248,38 @@ const registerTelegramWebhook = async () => {
   }
 };
 
-// ── Start HTTP + WebSocket server ────────────────────────────────────────────
-httpServer.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Socket.IO ready for real-time messaging`);
-  initTelegramBot();
-  const appUrl = process.env.BACKEND_URL;
-  if (appUrl && appUrl.startsWith('https://')) {
-    registerTelegramWebhook();
-  } else if (process.env.USE_POLLING === 'true') {
-    // In local development, ONLY use polling if explicitly enabled
-    // Otherwise, a local dev server will "steal" webhook traffic from the production bot
-    const bot = (await import('./utils/telegram.js')).getBot();
-    if (bot) {
-      bot.launch().then(() => console.log('[Telegram] Bot started in polling mode (USE_POLLING=true)')).catch(e => console.error('[Telegram] Polling error:', e));
+// ── Start HTTP + WebSocket server only after the schema is ready ─────────────
+const startServer = async () => {
+  await initDb();
+  httpServer.listen(PORT, async () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Socket.IO ready for real-time messaging`);
+    initTelegramBot();
+    const appUrl = process.env.BACKEND_URL;
+    if (appUrl && appUrl.startsWith('https://')) {
+      registerTelegramWebhook();
+    } else if (process.env.USE_POLLING === 'true') {
+      // In local development, ONLY use polling if explicitly enabled.
+      // Otherwise, a local server could steal traffic from the production bot.
+      const bot = (await import('./utils/telegram.js')).getBot();
+      if (bot) {
+        bot.launch().then(() => console.log('[Telegram] Bot started in polling mode (USE_POLLING=true)')).catch(e => console.error('[Telegram] Polling error:', e));
+      }
+    } else {
+      console.log('[Telegram] Skipping bot polling (Set USE_POLLING=true if testing locally)');
     }
-  } else {
-    console.log('[Telegram] Skipping bot polling (Set USE_POLLING=true if testing locally)');
-  }
+    void processNotificationDeliveryJobs();
+  });
+};
+
+void startServer().catch((error) => {
+  console.error("[FATAL] Server startup failed:", error);
+  process.exit(1);
 });
+
+setInterval(() => {
+  void processNotificationDeliveryJobs();
+}, 30 * 1000);
 
 // ── Auto-archive out-of-stock listings every 1 hour ─────────────────────────
 setInterval(

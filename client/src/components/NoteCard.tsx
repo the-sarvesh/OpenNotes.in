@@ -40,6 +40,16 @@ const conditionColor: Record<string, string> = {
 
 // Mobile check
 const isMobile = () => typeof window !== 'undefined' && window.innerWidth < 768;
+const FAVORITES_KEY = 'opennotes_favorite_listings';
+
+const readFavorites = (): Set<string> => {
+  try {
+    const value = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
+    return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+};
 
 export const NoteCard = ({
   note,
@@ -59,11 +69,19 @@ export const NoteCard = ({
   cart?: { note: any; quantity: number }[];
   key?: React.Key;
 }) => {
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(() => readFavorites().has(note.id));
   const cartQty    = cart.find(i => i.note.id === note.id)?.quantity || 0;
   const maxReached = cartQty >= note.quantity;
   const outOfStock = note.quantity === 0;
   const mobile     = isMobile();
+
+  const toggleFavorite = () => {
+    const favorites = readFavorites();
+    if (favorites.has(note.id)) favorites.delete(note.id);
+    else favorites.add(note.id);
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+    setIsFavorite(favorites.has(note.id));
+  };
 
   return (
     <div className="bg-surface rounded-2xl border border-border shadow-sm hover:shadow-lg hover:shadow-primary/8 hover:border-primary/20 hover:-translate-y-0.5 transition-[transform,box-shadow,border-color] duration-200 overflow-hidden group flex flex-col h-full" style={{ willChange: 'transform' }}>
@@ -79,6 +97,7 @@ export const NoteCard = ({
           className={`w-full h-full object-cover transition-transform duration-500 ${mobile ? '' : 'group-hover:scale-105'}`}
           referrerPolicy="no-referrer"
           loading="lazy"
+          decoding="async"
         />
 
         {/* Gradient */}
@@ -86,7 +105,9 @@ export const NoteCard = ({
 
         {/* Favourite */}
         <button
-          onClick={e => { e.stopPropagation(); setIsFavorite(!isFavorite); }}
+          onClick={e => { e.stopPropagation(); toggleFavorite(); }}
+          aria-label={isFavorite ? `Remove ${note.title} from saved listings` : `Save ${note.title}`}
+          aria-pressed={isFavorite}
           className="absolute top-2 left-2 p-1.5 bg-black/30 backdrop-blur-md border border-white/20 rounded-full text-white hover:text-red-400 transition-colors z-10 active:scale-90"
         >
           <Heart className={`h-3.5 w-3.5 ${isFavorite ? 'fill-red-500 text-red-500' : ''}`} />
@@ -211,6 +232,7 @@ export const NoteCard = ({
         <div className="flex gap-1.5">
           <button
             onClick={() => onAddToCart(note)}
+            aria-label={`Add ${note.title} to cart`}
             disabled={outOfStock || maxReached}
             className={`flex-1 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors flex items-center justify-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
               isInCart
@@ -229,6 +251,7 @@ export const NoteCard = ({
               onBuyNow?.(note);
             }}
             disabled={outOfStock}
+            aria-label={`Buy ${note.title} now`}
             className="flex-1 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-colors flex items-center justify-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: '#fb641b', color: '#fff', boxShadow: '0 2px 10px rgba(251,100,27,0.22)' }}
           >

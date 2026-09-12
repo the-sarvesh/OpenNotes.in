@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Mail, Send } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ImagePlus, Mail, Send, X } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +33,8 @@ export const ReportIssueView: React.FC = () => {
   const [description, setDescription] = useState('');
   const [pageUrl, setPageUrl] = useState(searchParams.get('from') || '');
   const [website, setWebsite] = useState('');
+  const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [reference, setReference] = useState('');
 
@@ -40,20 +42,32 @@ export const ReportIssueView: React.FC = () => {
     if (user?.email) setEmail(user.email);
   }, [user?.email]);
 
+  useEffect(() => () => {
+    if (screenshotPreview) URL.revokeObjectURL(screenshotPreview);
+  }, [screenshotPreview]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     try {
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('category', category);
+      formData.append('subject', subject);
+      formData.append('description', description);
+      formData.append('page_url', pageUrl);
+      formData.append('website', website);
+      formData.append('technical_context', JSON.stringify({
+        screen: `${window.screen.width}x${window.screen.height}`,
+        viewport: `${window.innerWidth}x${window.innerHeight}`,
+        online: navigator.onLine,
+        language: navigator.language,
+        capturedAt: new Date().toISOString(),
+      }));
+      if (screenshot) formData.append('screenshot', screenshot);
       const response = await apiRequest('/api/issues', {
         method: 'POST',
-        body: JSON.stringify({
-          email,
-          category,
-          subject,
-          description,
-          page_url: pageUrl,
-          website,
-        }),
+        body: formData,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not submit your report.');
@@ -139,6 +153,48 @@ export const ReportIssueView: React.FC = () => {
             <div>
               <label className="block text-xs font-black uppercase tracking-wider text-text-muted mb-2">Page where it happened <span className="normal-case font-medium tracking-normal">(optional)</span></label>
               <input value={pageUrl} onChange={(event) => setPageUrl(event.target.value)} className={inputClass} placeholder="For example: Login, Sell, Checkout" maxLength={500} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider text-text-muted mb-2">Screenshot <span className="normal-case font-medium tracking-normal">(optional)</span></label>
+              {screenshotPreview ? (
+                <div className="relative overflow-hidden rounded-2xl border border-border bg-background">
+                  <img src={screenshotPreview} alt="Issue screenshot preview" className="w-full max-h-72 object-contain" />
+                  <button
+                    type="button"
+                    aria-label="Remove screenshot"
+                    onClick={() => {
+                      URL.revokeObjectURL(screenshotPreview);
+                      setScreenshot(null);
+                      setScreenshotPreview('');
+                    }}
+                    className="absolute right-2 top-2 p-2 rounded-full bg-black/70 text-white hover:bg-black"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-background px-4 py-6 text-sm font-bold text-text-muted cursor-pointer hover:border-primary/50 hover:text-primary transition-colors">
+                  <ImagePlus className="h-5 w-5" /> Attach PNG, JPG, or WebP (max 8 MB)
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 8 * 1024 * 1024) {
+                        toast.error('Screenshot must be smaller than 8 MB.');
+                        event.target.value = '';
+                        return;
+                      }
+                      setScreenshot(file);
+                      setScreenshotPreview(URL.createObjectURL(file));
+                    }}
+                  />
+                </label>
+              )}
+              <p className="text-[11px] text-text-muted mt-1.5">Please hide passwords, OTPs, payment details, and other private information.</p>
             </div>
 
             <div className="hidden" aria-hidden="true">
