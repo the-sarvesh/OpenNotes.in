@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, Star, MapPin, MessageCircle, ShoppingCart, Trash2, Package,
   Tag, Layers, Eye, ShieldCheck, ChevronLeft, ChevronRight,
-  Share2, Maximize2, Check, CreditCard,
+  Share2, Maximize2, Check, CreditCard, ImageOff,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext.js';
@@ -20,6 +20,7 @@ interface ProductDetailsModalProps {
   isInCart: boolean;
   cart: { note: any; quantity: number }[];
   onContactSeller: (sellerId: string, listingId: string, listingTitle: string) => void;
+  standalone?: boolean;
 }
 
 // ── condition pill colours ────────────────────────────────────────
@@ -46,7 +47,7 @@ const Tile: React.FC<{ label: string; value: string; className?: string }> = ({ 
 );
 
 export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
-  note, onClose, onAddToCart, onBuyNow, isInCart, cart, onContactSeller,
+  note, onClose, onAddToCart, onBuyNow, isInCart, cart, onContactSeller, standalone = false,
 }) => {
   const { user } = useAuth();
   const { settings } = useSettings();
@@ -55,17 +56,39 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showLightbox, setShowLightbox] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [failedImages, setFailedImages] = useState<Set<number>>(() => new Set());
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
   const hasTrackedView = React.useRef(false);
 
   const images = note.images && note.images.length > 0 ? note.images : [note.image];
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const shareUrl = new URL(`/listings/${encodeURIComponent(note.id)}`, window.location.origin).toString();
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    toast.success('Link copied!');
-    setTimeout(() => setCopied(false), 2000);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: note.title, text: `View ${note.title} on OpenNotes.in`, url: shareUrl });
+        return;
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      toast.success('Listing link copied');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Could not copy the listing link');
+    }
+  };
+
+  const markImageFailed = (index: number) => {
+    setFailedImages(current => {
+      const next = new Set(current);
+      next.add(index);
+      return next;
+    });
   };
 
   const nextImage = (e: React.MouseEvent) => {
@@ -82,10 +105,15 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
       apiRequest(`/api/listings/${note.id}/view`, { method: 'POST' }).catch(() => { });
       hasTrackedView.current = true;
     }
-    document.body.style.overflow = 'hidden';
+    if (!standalone) document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = '';
+      if (!standalone) document.body.style.overflow = '';
     };
+  }, [note.id, standalone]);
+
+  useEffect(() => {
+    setCurrentImageIndex(0);
+    setFailedImages(new Set());
   }, [note.id]);
 
   const handleDelete = async () => {
@@ -110,19 +138,22 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             'In-person or Courier';
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/75 p-0 sm:p-4">
+    <div className={standalone
+      ? 'relative flex justify-center'
+      : 'fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/75 p-0 sm:p-4'}>
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 16 }}
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
         style={{ willChange: 'transform' }}
-        className="bg-surface w-full max-w-3xl sm:rounded-[2rem] shadow-2xl flex flex-col sm:flex-row max-h-[92vh] sm:max-h-[86vh] overflow-hidden border border-border"
+        className={`bg-surface w-full sm:rounded-[2rem] shadow-2xl flex flex-col sm:flex-row overflow-hidden border border-border ${standalone ? 'max-w-5xl sm:min-h-[620px]' : 'max-w-3xl max-h-[92vh] sm:max-h-[86vh]'}`}
       >
         {/* ── Mobile close pill ──────────────────────────────────── */}
         <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/30 z-10" />
         <button
           onClick={onClose}
+          aria-label={standalone ? 'Back to listings' : 'Close listing details'}
           className="sm:hidden absolute top-4 right-4 z-10 p-2 bg-black/25 backdrop-blur-md rounded-full text-white active:scale-90 transition-all"
         >
           <X className="h-5 w-5" />
@@ -137,29 +168,48 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
         >
           {/* Image */}
           <AnimatePresence mode="wait">
-            <motion.img
-              key={currentImageIndex}
-              src={images[currentImageIndex]}
-              alt={`${note.title} — ${currentImageIndex + 1}`}
-              initial={{ opacity: 0, scale: 1.02 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.15 }}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
+            {failedImages.has(currentImageIndex) ? (
+              <motion.div
+                key={`unavailable-${currentImageIndex}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="w-full h-full flex flex-col items-center justify-center gap-3 p-8 text-center text-slate-500"
+                role="img"
+                aria-label={`${note.title} image unavailable`}
+              >
+                <ImageOff className="h-10 w-10" />
+                <p className="text-xs font-bold">Image temporarily unavailable</p>
+              </motion.div>
+            ) : (
+              <motion.img
+                key={currentImageIndex}
+                src={images[currentImageIndex]}
+                alt={`${note.title} — ${currentImageIndex + 1}`}
+                initial={{ opacity: 0, scale: 1.02 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.15 }}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+                onError={() => markImageFailed(currentImageIndex)}
+              />
+            )}
           </AnimatePresence>
 
           {/* Top-left action buttons */}
           <div className="absolute top-3 left-3 flex gap-1.5 z-20">
             <button
               onClick={e => { e.stopPropagation(); handleShare(); }}
+              aria-label={copied ? 'Listing link copied' : 'Share listing'}
+              title={copied ? 'Link copied' : 'Share listing'}
               className="p-2 bg-black/25 hover:bg-black/45 backdrop-blur-md rounded-xl text-white transition-all active:scale-90"
             >
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Share2 className="h-3.5 w-3.5" />}
             </button>
             <button
               onClick={e => { e.stopPropagation(); setShowLightbox(true); }}
+              aria-label="Enlarge listing image"
+              title="Enlarge image"
               className="p-2 bg-black/25 hover:bg-black/45 backdrop-blur-md rounded-xl text-white transition-all active:scale-90"
             >
               <Maximize2 className="h-3.5 w-3.5" />
@@ -171,12 +221,14 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             <>
               <button
                 onClick={prevImage}
+                aria-label="Previous listing image"
                 className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/25 hover:bg-black/45 backdrop-blur-md rounded-full text-white transition-all sm:opacity-0 group-hover/carousel:opacity-100 active:scale-90 z-10"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <button
                 onClick={nextImage}
+                aria-label="Next listing image"
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/25 hover:bg-black/45 backdrop-blur-md rounded-full text-white transition-all sm:opacity-0 group-hover/carousel:opacity-100 active:scale-90 z-10"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -215,6 +267,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             <div className="hidden sm:flex justify-end -mt-1 -mr-1">
               <button
                 onClick={onClose}
+                aria-label={standalone ? 'Back to listings' : 'Close listing details'}
                 className="p-1.5 hover:bg-background rounded-xl transition-all active:scale-90 text-text-muted"
               >
                 <X className="h-5 w-5" />
@@ -369,6 +422,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
+                  aria-label="Delete listing"
                   className="p-3 sm:p-3.5 bg-red-500/10 text-red-500 rounded-xl sm:rounded-2xl hover:bg-red-500 hover:text-white transition-all active:scale-90 shrink-0"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -377,6 +431,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 
               <button
                 onClick={() => onContactSeller(note.sellerId || '', note.id, note.title)}
+                aria-label="Message seller"
                 className="p-3 sm:p-3.5 bg-surface border border-border rounded-xl sm:rounded-2xl text-text-muted hover:text-primary hover:border-primary transition-all active:scale-90 shrink-0"
                 title="Message seller"
               >
@@ -425,6 +480,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
           >
             <button
               onClick={() => setShowLightbox(false)}
+              aria-label="Close full-screen image"
               className="absolute top-5 right-5 p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all z-[160]"
             >
               <X className="h-5 w-5" />
@@ -439,22 +495,30 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
             >
               {images.length > 1 && (
                 <>
-                  <button onClick={prevImage} className="absolute left-0 top-1/2 -translate-y-1/2 p-3.5 bg-white/8 hover:bg-white/15 rounded-full text-white transition-all active:scale-90 z-10">
+                  <button onClick={prevImage} aria-label="Previous listing image" className="absolute left-0 top-1/2 -translate-y-1/2 p-3.5 bg-white/8 hover:bg-white/15 rounded-full text-white transition-all active:scale-90 z-10">
                     <ChevronLeft className="h-7 w-7" />
                   </button>
-                  <button onClick={nextImage} className="absolute right-0 top-1/2 -translate-y-1/2 p-3.5 bg-white/8 hover:bg-white/15 rounded-full text-white transition-all active:scale-90 z-10">
+                  <button onClick={nextImage} aria-label="Next listing image" className="absolute right-0 top-1/2 -translate-y-1/2 p-3.5 bg-white/8 hover:bg-white/15 rounded-full text-white transition-all active:scale-90 z-10">
                     <ChevronRight className="h-7 w-7" />
                   </button>
                 </>
               )}
 
-              <img
-                src={images[currentImageIndex]}
-                alt="Full preview"
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                onClick={e => e.stopPropagation()}
-                referrerPolicy="no-referrer"
-              />
+              {failedImages.has(currentImageIndex) ? (
+                <div className="flex flex-col items-center justify-center gap-3 text-white/60" role="img" aria-label={`${note.title} image unavailable`}>
+                  <ImageOff className="h-12 w-12" />
+                  <p className="text-sm font-bold">Image temporarily unavailable</p>
+                </div>
+              ) : (
+                <img
+                  src={images[currentImageIndex]}
+                  alt={`${note.title} full preview`}
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                  onClick={e => e.stopPropagation()}
+                  onError={() => markImageFailed(currentImageIndex)}
+                  referrerPolicy="no-referrer"
+                />
+              )}
 
               <p className="absolute bottom-0 left-0 right-0 text-center py-5 text-white/50 text-xs font-medium tracking-widest uppercase">
                 {currentImageIndex + 1} / {images.length}

@@ -145,12 +145,14 @@ export const NoteCard = ({
       <div className="p-3 sm:p-4 flex flex-col flex-grow">
 
         {/* Title */}
-        <h3
-          className="font-bold text-xs sm:text-sm text-text-main line-clamp-2 leading-snug mb-2 cursor-pointer hover:text-primary transition-colors"
+        <button
+          type="button"
+          className="font-bold text-xs sm:text-sm text-text-main line-clamp-2 leading-snug mb-2 text-left hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
           onClick={() => onViewDetails?.(note)}
+          aria-label={`View ${note.title}`}
         >
           {note.title}
-        </h3>
+        </button>
 
         {/* Tags */}
         {(note.materialType || (note.isMultipleSubjects && note.subjects?.length)) && (

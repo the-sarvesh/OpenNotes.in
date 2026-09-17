@@ -14,7 +14,6 @@ import { HomeView } from "./views/HomeView";
 // ── Components ──────────────────────────────────────────────────────
 import { ProductDetailsModal } from "./components/ProductDetailsModal";
 import { AuthModal } from "./components/AuthModal";
-import { ProfileCompletionModal } from "./components/ProfileCompletionModal";
 import { UserGuideModal } from "./components/UserGuideModal";
 import { TelegramNudge } from "./components/TelegramNudge";
 import { FeedbackCard } from "./components/FeedbackCard";
@@ -90,11 +89,6 @@ const App: React.FC = () => {
 
   // ── UI state ──────────────────────────────────────────────────────────
   const [showAuth, setShowAuth] = useState(false);
-  const [showProfileCompletion, setShowProfileCompletion] = useState(false);
-  const [profileModalDismissCount, setProfileModalDismissCount] = useState<number>(() => {
-    return parseInt(localStorage.getItem("profileModalDismissCount") || "0", 10);
-  });
-  const [hasDismissedProfileModalThisSession, setHasDismissedProfileModalThisSession] = useState(false);
 
   const [authMode, setAuthMode] = useState<
     "login" | "register" | "forgot" | "reset"
@@ -127,21 +121,6 @@ const App: React.FC = () => {
   const prevNotifsRef = React.useRef(unreadNotifs);
 
   const { user, login, isLoading: isAuthLoading } = useAuth();
-
-  useEffect(() => {
-    const isProfileIncomplete = user && (!user.mobile_number || !user.upi_id);
-    const hasNotExceededStrikes = profileModalDismissCount < 3;
-
-    if (isProfileIncomplete && hasNotExceededStrikes && !hasDismissedProfileModalThisSession) {
-      // Don't show if they are on the auth callback page (it's too fast)
-      if (location.pathname !== "/auth/callback") {
-        setShowProfileCompletion(true);
-      }
-    } else {
-      setShowProfileCompletion(false);
-    }
-  }, [user, location.pathname, profileModalDismissCount, hasDismissedProfileModalThisSession]);
-
 
   // ── Validate cart freshness whenever user authenticates (FE-4) ───────────
   useEffect(() => {
@@ -440,14 +419,6 @@ const App: React.FC = () => {
     prevNotifsRef.current = unreadNotifs;
   }, [unreadMessages, unreadNotifs, user]);
 
-  // ── First-time user guide ─────────────────────────────────────────
-  useEffect(() => {
-    const hasSeen = localStorage.getItem("hasSeenGuide");
-    if (!hasSeen) {
-      setTimeout(() => setShowUserGuide(true), 1500); // Give it a moment to breathe
-    }
-  }, []);
-
   const closeGuide = () => {
     setShowUserGuide(false);
     localStorage.setItem("hasSeenGuide", "true");
@@ -711,24 +682,6 @@ const App: React.FC = () => {
           resetToken={resetToken}
           initialEmail={authEmail}
         />
-
-        <ProfileCompletionModal
-          key="profile-completion"
-          isOpen={showProfileCompletion}
-          onClose={() => {
-            setShowProfileCompletion(false);
-            setHasDismissedProfileModalThisSession(true);
-            // Only increment strike count if they dismissed without completing
-            if (user && (!user.mobile_number || !user.upi_id)) {
-              setProfileModalDismissCount((prev) => {
-                const newCount = prev + 1;
-                localStorage.setItem("profileModalDismissCount", newCount.toString());
-                return newCount;
-              });
-            }
-          }}
-        />
-
 
         {selectedNote && (
           <ProductDetailsModal

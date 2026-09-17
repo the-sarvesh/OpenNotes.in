@@ -286,13 +286,14 @@ export const ResourcesView: React.FC = () => {
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
         <input
           type="text"
+          aria-label="Search study materials"
           placeholder="Search all materials by title, subject or course code…"
           className="w-full bg-slate-900 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#FFC000]/20 focus:border-[#FFC000]/30 transition-all placeholder:text-slate-600"
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
         />
         {searchTerm && (
-          <button onClick={() => setSearchTerm('')} className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/5 rounded-full transition-colors">
+          <button aria-label="Clear study-material search" onClick={() => setSearchTerm('')} className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-white/5 rounded-full transition-colors">
             <X className="h-3.5 w-3.5 text-slate-500" />
           </button>
         )}

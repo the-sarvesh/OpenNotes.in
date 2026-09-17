@@ -44,6 +44,13 @@ export const ListingView: React.FC<ListingViewProps> = ({
     return () => { cancelled = true; };
   }, [listingId]);
 
+  useEffect(() => {
+    if (!note) return;
+    const previousTitle = document.title;
+    document.title = `${note.title} | OpenNotes.in`;
+    return () => { document.title = previousTitle; };
+  }, [note]);
+
   if (error) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center px-6">
@@ -68,14 +75,29 @@ export const ListingView: React.FC<ListingViewProps> = ({
   }
 
   return (
-    <ProductDetailsModal
-      note={note}
-      onClose={() => navigate('/browse')}
-      onAddToCart={onAddToCart}
-      onBuyNow={onBuyNow}
-      isInCart={cart.some((item) => item.note.id === note.id)}
-      cart={cart}
-      onContactSeller={onContactSeller}
-    />
+    <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <button
+          type="button"
+          onClick={() => navigate('/browse')}
+          className="text-xs font-black uppercase tracking-widest text-text-muted hover:text-primary transition-colors"
+        >
+          ← Back to marketplace
+        </button>
+        <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-widest text-text-muted">
+          Shareable listing
+        </span>
+      </div>
+      <ProductDetailsModal
+        standalone
+        note={note}
+        onClose={() => navigate('/browse')}
+        onAddToCart={onAddToCart}
+        onBuyNow={onBuyNow}
+        isInCart={cart.some((item) => item.note.id === note.id)}
+        cart={cart}
+        onContactSeller={onContactSeller}
+      />
+    </section>
   );
 };

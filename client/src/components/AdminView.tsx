@@ -524,6 +524,33 @@ export const AdminView: React.FC = () => {
               {/* ══ OVERVIEW ══════════════════════════════════════════════ */}
               {tab === 'overview' && stats && (
                 <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
+                  <div className="p-5 rounded-2xl border border-[#FFC000]/20 bg-[#FFC000]/5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#FFC000]">Action Centre</p>
+                        <h2 className="text-lg font-black text-white mt-1">What needs attention</h2>
+                      </div>
+                      <p className="text-xs text-slate-400">Start with operational work, then review totals.</p>
+                    </div>
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <button type="button" onClick={() => setAdminLocation('issues')} className="p-4 rounded-xl bg-slate-950/50 border border-white/10 text-left hover:border-[#FFC000]/40 hover:bg-white/5 transition-all">
+                        <p className="text-2xl font-black text-white">{stats.openIssues}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Open issues</p>
+                      </button>
+                      <button type="button" onClick={() => setAdminLocation('listings')} className="p-4 rounded-xl bg-slate-950/50 border border-white/10 text-left hover:border-[#FFC000]/40 hover:bg-white/5 transition-all">
+                        <p className="text-2xl font-black text-white">{stats.outOfStock}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Out of stock</p>
+                      </button>
+                      <button type="button" onClick={() => setAdminLocation('orders')} className="p-4 rounded-xl bg-slate-950/50 border border-white/10 text-left hover:border-[#FFC000]/40 hover:bg-white/5 transition-all">
+                        <p className="text-2xl font-black text-white">{stats.orders}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Review orders</p>
+                      </button>
+                      <button type="button" onClick={() => setAdminLocation('users')} className="p-4 rounded-xl bg-slate-950/50 border border-white/10 text-left hover:border-[#FFC000]/40 hover:bg-white/5 transition-all">
+                        <p className="text-2xl font-black text-white">{stats.users}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Find a user</p>
+                      </button>
+                    </div>
+                  </div>
                   <div className="grid sm:grid-cols-4 gap-4">
                     <StatChip label="Total Users" value={stats.users} />
                     <StatChip label="Active Listings" value={stats.activeListings} />
@@ -569,25 +596,6 @@ export const AdminView: React.FC = () => {
                     <StatChip label="Failed Notifications" value={stats.failedNotificationJobs} gold={stats.failedNotificationJobs > 0} />
                   </div>
 
-                  {/* Danger zone */}
-                  <div className="p-6 bg-red-500/5 border border-red-500/20 rounded-2xl">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <h3 className="font-black text-red-400 flex items-center gap-2 mb-1.5">
-                          <AlertTriangle className="h-4 w-4" /> Danger Zone
-                        </h3>
-                        <p className="text-sm text-slate-400 max-w-md leading-relaxed">
-                          Permanently deletes all listings, orders, messages, notifications, and reviews. User accounts are preserved.
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowPurgeModal(true)}
-                        className="shrink-0 flex items-center gap-2 px-5 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 rounded-xl font-bold text-sm transition-all"
-                      >
-                        <Trash2 className="h-4 w-4" /> Purge All Data
-                      </button>
-                    </div>
-                  </div>
                 </motion.div>
               )}
 
@@ -1596,20 +1604,9 @@ export const AdminView: React.FC = () => {
                           <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Total Amount" value={<span className="text-[#FFC000] font-black text-base">₹{selectedOrder.total_amount}</span>} />
                           <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="Platform Fee" value={selectedOrder.platform_fee === 0 ? '₹0 (Waived)' : `₹${selectedOrder.platform_fee}`} />
                           <InfoRow icon={<Tag className="h-3.5 w-3.5" />} label="Status" value={
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${statusColors[selectedOrder.status] || 'bg-white/10 text-white'}`}>
-                                {fmt(selectedOrder.status)}
-                              </span>
-                              <select
-                                value={selectedOrder.status}
-                                onChange={e => doAction(`/api/admin/orders/${selectedOrder.id}/status`, 'PATCH', { status: e.target.value })}
-                                className="text-xs bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-slate-300 focus:outline-none"
-                              >
-                                {['pending_payment', 'paid', 'shipped', 'delivered', 'buyer_confirmed', 'completed', 'cancelled'].map(s => (
-                                  <option key={s} value={s}>{fmt(s)}</option>
-                                ))}
-                              </select>
-                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${statusColors[selectedOrder.status] || 'bg-white/10 text-white'}`}>
+                              {fmt(selectedOrder.status)}
+                            </span>
                           } />
                           {selectedOrder.status === 'buyer_confirmed' && (
                             <div className="mt-4">
@@ -2284,6 +2281,25 @@ export const AdminView: React.FC = () => {
                     <p className="text-[11px] text-slate-400 leading-relaxed">
                       Settings are cached for 30 seconds to optimize performance. Changes may take up to half a minute to reflect across all users globally.
                     </p>
+                  </div>
+
+                  <div className="p-6 bg-red-500/5 border border-red-500/20 rounded-2xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-black text-red-400 flex items-center gap-2 mb-1.5">
+                          <AlertTriangle className="h-4 w-4" /> Danger Zone
+                        </h3>
+                        <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+                          Permanently deletes all listings, orders, messages, notifications, and reviews. User accounts are preserved.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowPurgeModal(true)}
+                        className="shrink-0 flex items-center gap-2 px-5 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 rounded-xl font-bold text-sm transition-all"
+                      >
+                        <Trash2 className="h-4 w-4" /> Purge All Data
+                      </button>
+                    </div>
                   </div>
 
                   {/* ── Telegram Broadcast ── */}
