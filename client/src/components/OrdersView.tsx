@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, Star, MessageCircle, MapPin, ChevronLeft, ChevronRight, Users, Package, Clock, Check, CheckCircle2, XCircle, Truck, Hash, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { statusColors, formatStatus } from '../utils/status.js';
 import { formatSemester, formatMaterialType } from '../utils/formatters';
@@ -22,6 +22,7 @@ const StatusIcon = ({ status }: { status: string }) => {
 
 export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: string, listingId: string, listingTitle: string) => void; key?: React.Key }) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
   const [submittingReview, setSubmittingReview] = useState(false);
   const [pinVisible, setPinVisible] = useState<Record<string, boolean>>({});
   const [telegramLinked, setTelegramLinked] = useState(true);
+  const requestedOrderId = searchParams.get('order');
 
   useEffect(() => {
     if (!user) return;
@@ -55,6 +57,25 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
       .then(data => setTelegramLinked(data.isLinked))
       .catch(console.error);
   }, [user?.id, retryKey]);
+
+  useEffect(() => {
+    if (!requestedOrderId) {
+      setSelectedOrder(null);
+      return;
+    }
+    const requestedOrder = orders.find((order) => order.id === requestedOrderId);
+    if (requestedOrder) setSelectedOrder(requestedOrder);
+  }, [orders, requestedOrderId]);
+
+  const openOrder = (order: Order) => {
+    setSelectedOrder(order);
+    setSearchParams({ order: order.id });
+  };
+
+  const closeOrder = () => {
+    setSelectedOrder(null);
+    setSearchParams({});
+  };
 
   const handleLeaveReview = async () => {
     if (!reviewOrder || !reviewItem || submittingReview || !user) return;
@@ -179,7 +200,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                 {/* Sticky detail header */}
                 <div className="sticky top-0 z-10 flex items-center gap-3 px-4 sm:px-6 py-3.5 bg-surface/90 backdrop-blur-md border-b border-border">
                   <button
-                    onClick={() => setSelectedOrder(null)}
+                    onClick={closeOrder}
                     className="p-2 rounded-xl border border-border bg-background hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-text-muted shrink-0"
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -376,7 +397,7 @@ export const OrdersView = ({ onContactSeller }: { onContactSeller?: (sellerId: s
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.04, duration: 0.2 }}
-                    onClick={() => setSelectedOrder(order)}
+                    onClick={() => openOrder(order)}
                     className="w-full text-left flex items-center gap-4 px-4 sm:px-6 py-4 hover:bg-background/60 transition-colors group"
                   >
                     {/* Image */}

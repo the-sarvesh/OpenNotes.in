@@ -40,6 +40,7 @@ const MessagesView = React.lazy(() => import("./components/MessagesView").then((
 const CartView = React.lazy(() => import("./views/CartView").then((module) => ({ default: module.CartView })));
 const CheckoutView = React.lazy(() => import("./views/CheckoutView").then((module) => ({ default: module.CheckoutView })));
 const OrderSuccessView = React.lazy(() => import("./views/OrderSuccessView").then((module) => ({ default: module.OrderSuccessView })));
+const ListingView = React.lazy(() => import("./views/ListingView").then((module) => ({ default: module.ListingView })));
 
 const RouteLoader = () => (
   <div className="min-h-[50vh] flex items-center justify-center" role="status" aria-label="Loading page">
@@ -455,6 +456,7 @@ const App: React.FC = () => {
   // No longer needed: Redirect logic handled by ProtectedRoute or similar if needed
   // For now, simple redirect in main Routes is better.
   const isProtected = (path: string) => {
+    if (path.startsWith('/listings/')) return false;
     const public_ = [
       "/",
       "/browse",
@@ -622,6 +624,14 @@ const App: React.FC = () => {
                 checkAuth={requireAuth}
                 cart={cart}
                 refreshKey={refreshKey}
+              />
+            } />
+            <Route path="/listings/:listingId" element={
+              <ListingView
+                cart={cart}
+                onAddToCart={handleAddToCart}
+                onBuyNow={handleBuyNow}
+                onContactSeller={handleContactSeller}
               />
             } />
             <Route path="/sell" element={<SellView onGoToBrowse={() => navigate("/browse")} />} />

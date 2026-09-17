@@ -8,7 +8,8 @@ import {
   TrendingUp, ChevronRight, ChevronLeft, MapPin,
   Hash, Calendar, Tag, Star, User as UserIcon,
   BookOpen, Layers, Clock, CheckCircle2, XCircle,
-  PackageOpen, Truck, Settings as SettingsIcon, Edit2, Send as SendIcon
+  PackageOpen, Truck, Settings as SettingsIcon, Edit2, Send as SendIcon,
+  Share2, Check
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.js';
 import { apiRequest } from '../utils/api.js';
@@ -18,6 +19,18 @@ import { ExternalLink, Link as LinkIcon, Save } from 'lucide-react';
 import { statusColors, formatStatus } from '../utils/status';
 
 type AdminTab = 'overview' | 'listings' | 'resources' | 'users' | 'orders' | 'chats' | 'issues' | 'settings' | 'feedback';
+
+const ADMIN_TABS = new Set<AdminTab>(['overview', 'listings', 'resources', 'users', 'orders', 'chats', 'issues', 'settings', 'feedback']);
+
+const getAdminTab = (value: string | null): AdminTab => (
+  value && ADMIN_TABS.has(value as AdminTab) ? value as AdminTab : 'overview'
+);
+
+const adminEntityPath = (tab: AdminTab, key?: string, id?: string) => {
+  const params = new URLSearchParams({ tab });
+  if (key && id) params.set(key, id);
+  return `/admin?${params.toString()}`;
+};
 
 interface Stats {
   users: number;
@@ -39,7 +52,41 @@ interface Stats {
 const fmt = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
 // ─── Detail Panel wrapper ───────────────────────────────────────────────────
-const DetailPanel: React.FC<{ title: string; subtitle?: string; onBack: () => void; children: React.ReactNode }> = ({ title, subtitle, onBack, children }) => (
+const CopyLinkButton: React.FC<{ path: string; label?: string }> = ({ path, label = 'Copy link' }) => {
+  const [copied, setCopied] = useState(false);
+
+  const copyLink = async () => {
+    const url = new URL(path, window.location.origin).toString();
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => { void copyLink(); }}
+      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-wider transition-colors"
+      title={label}
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Share2 className="h-3.5 w-3.5" />}
+      {copied ? 'Copied' : label}
+    </button>
+  );
+};
+
+const EntityLink: React.FC<{ onClick: () => void; children: React.ReactNode; title?: string }> = ({ onClick, children, title }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    className="text-left text-[#FFC000] hover:text-[#ffd24d] hover:underline underline-offset-2 font-semibold"
+  >
+    {children}
+  </button>
+);
+
+const DetailPanel: React.FC<{ title: string; subtitle?: string; onBack: () => void; actions?: React.ReactNode; children: React.ReactNode }> = ({ title, subtitle, onBack, actions, children }) => (
   <motion.div
     key="detail"
     initial={{ opacity: 0, x: 24 }}
@@ -47,17 +94,21 @@ const DetailPanel: React.FC<{ title: string; subtitle?: string; onBack: () => vo
     exit={{ opacity: 0, x: -24 }}
     transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
   >
-    <div className="flex items-center gap-3 mb-6">
-      <button
-        onClick={onBack}
-        className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </button>
-      <div>
-        <h2 className="font-black text-white text-lg leading-none">{title}</h2>
-        {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+    <div className="flex items-center justify-between gap-3 mb-6">
+      <div className="flex items-center gap-3 min-w-0">
+        <button
+          onClick={onBack}
+          className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+          aria-label="Back to list"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <div className="min-w-0">
+          <h2 className="font-black text-white text-lg leading-none truncate">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-400 mt-0.5 truncate">{subtitle}</p>}
+        </div>
       </div>
+      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </div>
     {children}
   </motion.div>
@@ -85,8 +136,8 @@ const StatChip: React.FC<{ label: string; value: string | number; gold?: boolean
 export const AdminView: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<AdminTab>(() => searchParams.get('tab') === 'issues' ? 'issues' : 'overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<AdminTab>(() => getAdminTab(searchParams.get('tab')));
   const [stats, setStats] = useState<Stats | null>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [resources, setResources] = useState<any[]>([]);
@@ -166,6 +217,13 @@ export const AdminView: React.FC = () => {
   const [broadcastLink, setBroadcastLink] = useState('');
   const [broadcastSending, setBroadcastSending] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
+  const adminQuery = searchParams.toString();
+
+  const setAdminLocation = (nextTab: AdminTab, key?: string, id?: string) => {
+    const nextParams = new URLSearchParams({ tab: nextTab });
+    if (key && id) nextParams.set(key, id);
+    setSearchParams(nextParams);
+  };
 
   // No manual headers with apiRequest
 
@@ -238,8 +296,89 @@ export const AdminView: React.FC = () => {
       fetchData();
     }
   }, [debouncedUserSearch]);
-  // Reset detail views on tab change
-  useEffect(() => { setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); setEditingListing(false); }, [tab]);
+  // URL-driven admin navigation: a refresh or shared admin link reopens the same record.
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams(adminQuery);
+    const requestedTab = getAdminTab(params.get('tab'));
+    setTab(requestedTab);
+    setEditingListing(false);
+
+    const loadDetail = async () => {
+      try {
+        if (requestedTab === 'listings') {
+          setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); setSelectedChatId(null);
+          const id = params.get('listing');
+          if (!id) { setSelectedListing(null); return; }
+          const response = await apiRequest(`/api/admin/listings/${encodeURIComponent(id)}`);
+          if (response.ok && !cancelled) setSelectedListing(await response.json());
+          return;
+        }
+        if (requestedTab === 'resources') {
+          setSelectedListing(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null); setSelectedChatId(null);
+          const id = params.get('resource');
+          if (!id) { setSelectedResource(null); return; }
+          const response = await apiRequest(`/api/admin/resources/${encodeURIComponent(id)}`);
+          if (response.ok && !cancelled) setSelectedResource(await response.json());
+          return;
+        }
+        if (requestedTab === 'users') {
+          setSelectedListing(null); setSelectedResource(null); setSelectedOrder(null); setSelectedChatId(null);
+          const id = params.get('user');
+          if (!id) { setSelectedUser(null); setUserActivity(null); return; }
+          setLoadingActivity(true);
+          const [userResponse, activityResponse] = await Promise.all([
+            apiRequest(`/api/admin/users/${encodeURIComponent(id)}`),
+            apiRequest(`/api/admin/users/${encodeURIComponent(id)}/activity`),
+          ]);
+          if (!cancelled && userResponse.ok) setSelectedUser(await userResponse.json());
+          if (!cancelled && activityResponse.ok) setUserActivity(await activityResponse.json());
+          if (!cancelled) setLoadingActivity(false);
+          return;
+        }
+        if (requestedTab === 'orders') {
+          setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setUserActivity(null); setSelectedChatId(null);
+          const id = params.get('order');
+          if (!id) { setSelectedOrder(null); return; }
+          const response = await apiRequest(`/api/admin/orders/${encodeURIComponent(id)}`);
+          if (response.ok && !cancelled) setSelectedOrder(await response.json());
+          return;
+        }
+        if (requestedTab === 'chats') {
+          setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null); setUserActivity(null);
+          const id = params.get('chat');
+          if (!id) { setSelectedChatId(null); setTranscript([]); return; }
+          setSelectedChatId(id);
+          setLoadingTranscript(true);
+          const response = await apiRequest(`/api/admin/chats/${encodeURIComponent(id)}/messages`);
+          if (response.ok && !cancelled) setTranscript(await response.json());
+          if (!cancelled) setLoadingTranscript(false);
+          return;
+        }
+
+        setSelectedListing(null); setSelectedResource(null); setSelectedUser(null); setSelectedOrder(null);
+        setUserActivity(null); setSelectedChatId(null);
+      } catch {
+        if (!cancelled) {
+          setLoadingActivity(false);
+          setLoadingTranscript(false);
+          setActionTone('error');
+          setActionMsg('Could not open that linked record');
+        }
+      }
+    };
+
+    void loadDetail();
+    return () => { cancelled = true; };
+  }, [adminQuery]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(adminQuery);
+    const issueId = params.get('issue');
+    const feedbackId = params.get('feedback');
+    const targetId = issueId ? `admin-issue-${issueId}` : feedbackId ? `admin-feedback-${feedbackId}` : '';
+    if (targetId) window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  }, [adminQuery, issueData, feedbackData]);
 
   // Sync selected details when main lists update (to keep views reactive after doAction)
   useEffect(() => {
@@ -291,28 +430,9 @@ export const AdminView: React.FC = () => {
     }
   };
 
-  const fetchTranscript = async (chatId: string) => {
-    setSelectedChatId(chatId);
-    setLoadingTranscript(true);
-    try {
-      const res = await apiRequest(`/api/admin/chats/${chatId}/messages`);
-      if (res.ok) setTranscript(await res.json());
-    } finally {
-      setLoadingTranscript(false);
-    }
-  };
+  const fetchTranscript = (chatId: string) => setAdminLocation('chats', 'chat', chatId);
 
-  const fetchUserActivity = async (user: any) => {
-    setSelectedUser(user);
-    setLoadingActivity(true);
-    setUserActivity(null);
-    try {
-      const res = await apiRequest(`/api/admin/users/${user.id}/activity`);
-      if (res.ok) setUserActivity(await res.json());
-    } finally {
-      setLoadingActivity(false);
-    }
-  };
+  const fetchUserActivity = (user: any) => setAdminLocation('users', 'user', user.id);
 
   const handlePurge = async () => {
     if (purgeConfirm !== 'PURGE') return;
@@ -376,7 +496,7 @@ export const AdminView: React.FC = () => {
         {TABS.map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => setAdminLocation(t.id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all border ${tab === t.id
                 ? 'bg-[#FFC000] text-slate-900 border-[#FFC000] shadow-lg shadow-[#FFC000]/20'
                 : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-white'
@@ -479,7 +599,13 @@ export const AdminView: React.FC = () => {
                       key="listing-detail"
                       title={selectedListing.title}
                       subtitle={`Listed by ${selectedListing.seller_name}`}
-                      onBack={() => { setSelectedListing(null); setEditingListing(false); }}
+                      onBack={() => setAdminLocation('listings')}
+                      actions={
+                        <>
+                          <CopyLinkButton path={adminEntityPath('listings', 'listing', selectedListing.id)} label="Admin link" />
+                          <CopyLinkButton path={`/listings/${encodeURIComponent(selectedListing.id)}`} label="User link" />
+                        </>
+                      }
                     >
                       {!editingListing ? (
                         <>
@@ -503,7 +629,11 @@ export const AdminView: React.FC = () => {
                               <InfoRow icon={<Star className="h-3.5 w-3.5" />} label="Condition" value={selectedListing.condition || '—'} />
                               <InfoRow icon={<Users className="h-3.5 w-3.5" />} label="Cohort" value={selectedListing.cohort || '—'} />
                               <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Location" value={selectedListing.location || '—'} />
-                              <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Seller" value={`${selectedListing.seller_name} (${selectedListing.seller_email || '—'})`} />
+                              <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Seller" value={
+                                <EntityLink onClick={() => setAdminLocation('users', 'user', selectedListing.seller_id)} title="Open seller profile">
+                                  {selectedListing.seller_name} ({selectedListing.seller_email || '—'})
+                                </EntityLink>
+                              } />
                               {selectedListing.meetup_location && (
                                 <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Meetup Notes" value={<em className="text-slate-300">"{selectedListing.meetup_location}"</em>} />
                               )}
@@ -876,7 +1006,7 @@ export const AdminView: React.FC = () => {
                           {listings.map(l => (
                             <div
                               key={l.id}
-                              onClick={() => setSelectedListing(l)}
+                              onClick={() => setAdminLocation('listings', 'listing', l.id)}
                               className="flex items-center gap-4 p-3.5 rounded-xl border border-white/10 hover:border-[#FFC000]/30 hover:bg-white/5 transition-all cursor-pointer group"
                             >
                               <img src={l.image_url} alt="" className="w-12 h-12 rounded-xl object-cover bg-white/5 shrink-0 group-hover:scale-105 transition-transform duration-300" />
@@ -920,7 +1050,13 @@ export const AdminView: React.FC = () => {
                       key="resource-detail"
                       title={selectedResource.title}
                       subtitle={`Uploaded by ${selectedResource.uploader_name}`}
-                      onBack={() => setSelectedResource(null)}
+                      onBack={() => setAdminLocation('resources')}
+                      actions={
+                        <>
+                          <CopyLinkButton path={adminEntityPath('resources', 'resource', selectedResource.id)} label="Admin link" />
+                          <CopyLinkButton path={`/api/resources/${encodeURIComponent(selectedResource.id)}/download`} label="Download link" />
+                        </>
+                      }
                     >
                       <div className="grid md:grid-cols-2 gap-5 mb-5">
                         <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
@@ -932,7 +1068,11 @@ export const AdminView: React.FC = () => {
                           <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Uploaded At" value={new Date(selectedResource.created_at).toLocaleString()} />
                         </div>
                         <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
-                          <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Uploader" value={`${selectedResource.uploader_name} (${selectedResource.uploader_email})`} />
+                          <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Uploader" value={
+                            <EntityLink onClick={() => setAdminLocation('users', 'user', selectedResource.uploader_id)} title="Open uploader profile">
+                              {selectedResource.uploader_name} ({selectedResource.uploader_email})
+                            </EntityLink>
+                          } />
                           <InfoRow icon={<TrendingUp className="h-3.5 w-3.5" />} label="Downloads" value={selectedResource.download_count} />
                           <InfoRow icon={<Shield className="h-3.5 w-3.5" />} label="Status" value={
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${statusColors[selectedResource.status] || 'bg-white/10 text-white'}`}>
@@ -1113,7 +1253,7 @@ export const AdminView: React.FC = () => {
                           {resources.map(r => (
                             <div
                               key={r.id}
-                              onClick={() => setSelectedResource(r)}
+                              onClick={() => setAdminLocation('resources', 'resource', r.id)}
                               className="flex items-center gap-4 p-3.5 rounded-xl border border-white/10 hover:border-[#FFC000]/30 hover:bg-white/5 transition-all cursor-pointer group"
                             >
                               <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 shrink-0">
@@ -1144,11 +1284,12 @@ export const AdminView: React.FC = () => {
                       key="user-detail"
                       title={selectedUser.name}
                       subtitle={selectedUser.email}
-                      onBack={() => { setSelectedUser(null); setUserActivity(null); }}
+                      onBack={() => setAdminLocation('users')}
+                      actions={<CopyLinkButton path={adminEntityPath('users', 'user', selectedUser.id)} label="Profile link" />}
                     >
                       <div className="grid sm:grid-cols-3 gap-4 mb-5">
                         <StatChip label="Earnings" value={`₹${selectedUser.total_earnings || 0}`} gold />
-                        <StatChip label="Items Sold" value={selectedUser.listings_count || 0} />
+                        <StatChip label="Items Sold" value={selectedUser.sold_count || 0} />
                         <StatChip label="Purchased" value={selectedUser.buy_count || 0} />
                       </div>
 
@@ -1167,6 +1308,18 @@ export const AdminView: React.FC = () => {
                               )}
                             </div>
                           </div>
+                          <InfoRow icon={<Hash className="h-3.5 w-3.5" />} label="User ID" value={<span className="font-mono text-xs break-all">{selectedUser.id}</span>} />
+                          <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Mobile" value={selectedUser.mobile_number || 'Not provided'} />
+                          <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Location" value={selectedUser.location || 'Not provided'} />
+                          <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="UPI ID" value={selectedUser.upi_id || 'Not provided'} />
+                          <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Joined" value={selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleString('en-IN') : 'Unknown'} />
+                          <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Last Active" value={selectedUser.last_seen_at ? new Date(selectedUser.last_seen_at).toLocaleString('en-IN') : 'No activity recorded'} />
+                          <InfoRow icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="Verification" value={Number(selectedUser.is_verified) === 1 ? 'Email verified' : 'Not verified'} />
+                          <InfoRow icon={<Shield className="h-3.5 w-3.5" />} label="Sign-in Methods" value={[
+                            Number(selectedUser.password_set) === 1 ? 'Email' : null,
+                            Number(selectedUser.google_connected) === 1 ? 'Google' : null,
+                          ].filter(Boolean).join(' + ') || 'Unknown'} />
+                          <InfoRow icon={<SendIcon className="h-3.5 w-3.5" />} label="Telegram" value={Number(selectedUser.telegram_connected) === 1 ? 'Connected' : 'Not connected'} />
                           <InfoRow icon={<Shield className="h-3.5 w-3.5" />} label="Role" value={
                             <select
                               value={selectedUser.role}
@@ -1242,13 +1395,19 @@ export const AdminView: React.FC = () => {
                             <div className="space-y-2">
                               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Recent Listings</p>
                               {userActivity.listings.slice(0, 3).map(l => (
-                                <div key={l.id} className="flex items-center gap-2 p-2 rounded-lg bg-white/5">
+                                <button
+                                  type="button"
+                                  key={l.id}
+                                  onClick={() => setAdminLocation('listings', 'listing', l.id)}
+                                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/5 hover:bg-white/10 text-left transition-colors"
+                                >
                                   <img src={l.image_url} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-white truncate">{l.title}</p>
                                     <p className="text-[10px] text-slate-500">₹{l.price} · {fmt(l.status)}</p>
                                   </div>
-                                </div>
+                                  <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
+                                </button>
                               ))}
                               {userActivity.listings.length === 0 && <p className="text-xs text-slate-500 italic">No listings yet.</p>}
                             </div>
@@ -1265,7 +1424,12 @@ export const AdminView: React.FC = () => {
                           ) : (
                             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
                               {userActivity.orders.map(o => (
-                                <div key={o.id} className="p-3 bg-white/5 rounded-xl border border-white/10">
+                                <button
+                                  type="button"
+                                  key={o.id}
+                                  onClick={() => setAdminLocation('orders', 'order', o.id)}
+                                  className="p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 text-left transition-colors"
+                                >
                                   <div className="flex justify-between items-center mb-1">
                                     <p className="text-[10px] font-mono text-slate-500">#{o.id.slice(0, 8)}</p>
                                     <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase ${statusColors[o.status] || 'bg-white/10 text-white'}`}>
@@ -1273,7 +1437,7 @@ export const AdminView: React.FC = () => {
                                     </span>
                                   </div>
                                   <p className="text-base font-black text-white">₹{o.total_amount}</p>
-                                </div>
+                                </button>
                               ))}
                             </div>
                           )}
@@ -1324,7 +1488,7 @@ export const AdminView: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-3 mt-1">
                                   <span className="text-[10px] text-slate-500 flex items-center gap-1"><DollarSign className="h-3 w-3" />₹{u.total_earnings || 0}</span>
-                                  <span className="text-[10px] text-slate-500 flex items-center gap-1"><Briefcase className="h-3 w-3" />{u.listings_count || 0} sold</span>
+                                  <span className="text-[10px] text-slate-500 flex items-center gap-1"><Briefcase className="h-3 w-3" />{u.sold_count || 0} sold</span>
                                   <span className="text-[10px] text-slate-500 flex items-center gap-1"><ShoppingCartIcon className="h-3 w-3" />{u.buy_count || 0} bought</span>
                                 </div>
                               </div>
@@ -1403,13 +1567,23 @@ export const AdminView: React.FC = () => {
                       key="order-detail"
                       title={`Order #${selectedOrder.id?.slice(0, 8).toUpperCase()}`}
                       subtitle={`Placed by ${selectedOrder.buyer_name}`}
-                      onBack={() => setSelectedOrder(null)}
+                      onBack={() => setAdminLocation('orders')}
+                      actions={
+                        <>
+                          <CopyLinkButton path={adminEntityPath('orders', 'order', selectedOrder.id)} label="Admin link" />
+                          <CopyLinkButton path={`/orders?order=${encodeURIComponent(selectedOrder.id)}`} label="Buyer link" />
+                        </>
+                      }
                     >
                       <div className="grid md:grid-cols-2 gap-5 mb-5">
                         {/* Buyer info */}
                         <div className="bg-white/5 rounded-2xl border border-white/10 p-5">
                           <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-4">Buyer Details</p>
-                          <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Name" value={selectedOrder.buyer_name} />
+                          <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Name" value={
+                            <EntityLink onClick={() => setAdminLocation('users', 'user', selectedOrder.buyer_id)} title="Open buyer profile">
+                              {selectedOrder.buyer_name}
+                            </EntityLink>
+                          } />
                           <InfoRow icon={<Hash className="h-3.5 w-3.5" />} label="Email" value={selectedOrder.buyer_email} />
                           <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Placed" value={new Date(selectedOrder.created_at).toLocaleDateString('en-IN', { dateStyle: 'medium' })} />
                           {selectedOrder.delivery_details && <InfoRow icon={<Truck className="h-3.5 w-3.5" />} label="Delivery" value={selectedOrder.delivery_details} />}
@@ -1473,9 +1647,14 @@ export const AdminView: React.FC = () => {
                                 <div className="flex items-center gap-3">
                                   <img src={item.image_url} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0" />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-bold text-white truncate">{item.title}</p>
+                                    <EntityLink onClick={() => setAdminLocation('listings', 'listing', item.listing_id)} title="Open listing">
+                                      {item.title}
+                                    </EntityLink>
                                     <p className="text-xs text-slate-500 mt-0.5">
-                                      {item.course_code} · Seller: <span className="text-slate-300 font-medium">{item.seller_name}</span> · Qty {item.quantity}
+                                      {item.course_code} · Seller:{' '}
+                                      <EntityLink onClick={() => setAdminLocation('users', 'user', item.seller_id)} title="Open seller profile">
+                                        {item.seller_name}
+                                      </EntityLink>{' '}· Qty {item.quantity}
                                     </p>
                                   </div>
                                   <p className="text-sm font-black text-[#FFC000] shrink-0">₹{item.price_at_purchase * item.quantity}</p>
@@ -1507,6 +1686,14 @@ export const AdminView: React.FC = () => {
 
                                   {/* Spacer */}
                                   <div className="flex-1" />
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setAdminLocation('chats', 'chat', [selectedOrder.buyer_id, item.seller_id].sort().join('_'))}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg text-xs font-bold transition-colors"
+                                  >
+                                    <MessageCircle className="h-3.5 w-3.5" /> Open Chat
+                                  </button>
 
                                   {/* Force Complete & Poke buttons */}
                                   {isStuck && (
@@ -1615,7 +1802,7 @@ export const AdminView: React.FC = () => {
                           {orders.map(o => (
                             <div
                               key={o.id}
-                              onClick={() => setSelectedOrder(o)}
+                              onClick={() => setAdminLocation('orders', 'order', o.id)}
                               className="flex items-center gap-4 p-3.5 rounded-xl border border-white/10 hover:border-[#FFC000]/30 hover:bg-white/5 transition-all cursor-pointer group"
                             >
                               {/* Item thumbnails */}
@@ -1664,21 +1851,30 @@ export const AdminView: React.FC = () => {
                         <div key={c.conversation_id} className="flex items-center gap-4 p-3.5 rounded-xl border border-white/10 hover:bg-white/5 transition-colors">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 text-sm font-bold text-white mb-1">
-                              <span>{c.sender_name}</span>
+                              <EntityLink onClick={() => setAdminLocation('users', 'user', c.sender_id)} title="Open first user profile">{c.sender_name}</EntityLink>
                               <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
-                              <span>{c.receiver_name}</span>
+                              <EntityLink onClick={() => setAdminLocation('users', 'user', c.receiver_id)} title="Open second user profile">{c.receiver_name}</EntityLink>
                             </div>
-                            <p className="text-xs text-[#FFC000]/80 font-medium truncate">{c.listing_title || 'General Chat'}</p>
+                            {c.listing_id ? (
+                              <EntityLink onClick={() => setAdminLocation('listings', 'listing', c.listing_id)} title="Open linked listing">
+                                {c.listing_title || 'Linked Listing'}
+                              </EntityLink>
+                            ) : (
+                              <p className="text-xs text-slate-500 font-medium truncate">General Chat</p>
+                            )}
                             <p className="text-[10px] text-slate-500 mt-0.5">
                               {new Date(c.last_message_at).toLocaleString()}
                             </p>
                           </div>
-                          <button
-                            onClick={() => fetchTranscript(c.conversation_id)}
-                            className="shrink-0 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-bold transition-all"
-                          >
-                            View Transcript
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <CopyLinkButton path={adminEntityPath('chats', 'chat', c.conversation_id)} />
+                            <button
+                              onClick={() => fetchTranscript(c.conversation_id)}
+                              className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-bold transition-all"
+                            >
+                              View Transcript
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1718,7 +1914,11 @@ export const AdminView: React.FC = () => {
                   ) : (
                     <div className="space-y-3">
                       {issueData.issues.map((issue: any) => (
-                        <div key={issue.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/[0.07] transition-colors">
+                        <div
+                          id={`admin-issue-${issue.id}`}
+                          key={issue.id}
+                          className={`bg-white/5 border rounded-2xl p-4 hover:bg-white/[0.07] transition-colors ${searchParams.get('issue') === issue.id ? 'border-[#FFC000]/70 ring-2 ring-[#FFC000]/15' : 'border-white/10'}`}
+                        >
                           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -1730,9 +1930,13 @@ export const AdminView: React.FC = () => {
                                 </span>
                               </div>
                               <p className="font-black text-white text-sm break-words">{issue.subject}</p>
-                              <p className="text-[10px] text-slate-500 mt-1">
-                                {issue.user_name || 'Guest user'} · <a className="hover:text-[#FFC000]" href={`mailto:${encodeURIComponent(issue.email)}`}>{issue.email}</a>
-                              </p>
+                              <div className="text-[10px] text-slate-500 mt-1">
+                                {issue.user_id ? (
+                                  <EntityLink onClick={() => setAdminLocation('users', 'user', issue.user_id)} title="Open reporting user profile">
+                                    {issue.user_name || 'User'}
+                                  </EntityLink>
+                                ) : 'Guest user'}{' '}· <a className="hover:text-[#FFC000]" href={`mailto:${encodeURIComponent(issue.email)}`}>{issue.email}</a>
+                              </div>
                             </div>
                             <div className="text-left sm:text-right shrink-0">
                               <p className="text-[9px] text-slate-600">Ref: {String(issue.id).split('-')[0].toUpperCase()}</p>
@@ -1764,6 +1968,7 @@ export const AdminView: React.FC = () => {
                           )}
 
                           <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-white/5">
+                            <CopyLinkButton path={adminEntityPath('issues', 'issue', issue.id)} />
                             {issue.status !== 'open' && (
                               <button onClick={() => doAction(`/api/admin/issues/${issue.id}`, 'PATCH', { status: 'open' })} className="px-3 py-1.5 rounded-xl text-xs font-bold border border-white/10 text-slate-300 hover:bg-white/10 transition-colors">
                                 Reopen
@@ -1841,10 +2046,14 @@ export const AdminView: React.FC = () => {
                   ) : (
                     <div className="space-y-3">
                       {feedbackData.feedback.map((fb: any) => (
-                        <div key={fb.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/[0.07] transition-colors">
+                        <div
+                          id={`admin-feedback-${fb.id}`}
+                          key={fb.id}
+                          className={`bg-white/5 border rounded-2xl p-4 hover:bg-white/[0.07] transition-colors ${searchParams.get('feedback') === fb.id ? 'border-[#FFC000]/70 ring-2 ring-[#FFC000]/15' : 'border-white/10'}`}
+                        >
                           <div className="flex items-start justify-between gap-3 mb-2">
                             <div>
-                              <p className="font-bold text-white text-sm">{fb.user_name}</p>
+                              <EntityLink onClick={() => setAdminLocation('users', 'user', fb.user_id)} title="Open user profile">{fb.user_name}</EntityLink>
                               <p className="text-[10px] text-slate-500">{fb.user_email}</p>
                             </div>
                             <div className="flex flex-col items-end gap-1 shrink-0">
@@ -1872,6 +2081,9 @@ export const AdminView: React.FC = () => {
                           {!fb.rating && !fb.message && (
                             <p className="text-xs text-slate-600 italic">No rating or message submitted</p>
                           )}
+                          <div className="mt-3 pt-3 border-t border-white/5">
+                            <CopyLinkButton path={adminEntityPath('feedback', 'feedback', fb.id)} />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -2176,7 +2388,7 @@ export const AdminView: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
-            onClick={() => setSelectedChatId(null)}
+            onClick={() => setAdminLocation('chats')}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -2188,9 +2400,12 @@ export const AdminView: React.FC = () => {
             >
               <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
                 <h3 className="font-black text-white">Chat Transcript</h3>
-                <button onClick={() => setSelectedChatId(null)} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <CopyLinkButton path={adminEntityPath('chats', 'chat', selectedChatId)} />
+                  <button onClick={() => setAdminLocation('chats')} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
               <div className="p-6 h-[420px] overflow-y-auto space-y-4">
                 {loadingTranscript ? (
@@ -2203,7 +2418,7 @@ export const AdminView: React.FC = () => {
                   transcript.map(m => (
                     <div key={m.id}>
                       <div className="flex justify-between items-baseline mb-1">
-                        <span className="text-xs font-bold text-[#FFC000]">{m.sender_name}</span>
+                        <EntityLink onClick={() => setAdminLocation('users', 'user', m.sender_id)} title="Open sender profile">{m.sender_name}</EntityLink>
                         <span className="text-[10px] text-slate-500">{new Date(m.created_at).toLocaleString()}</span>
                       </div>
                       <div className="bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-sm text-slate-300">
@@ -2214,7 +2429,7 @@ export const AdminView: React.FC = () => {
                 )}
               </div>
               <div className="px-6 py-4 bg-white/5 border-t border-white/10 flex justify-end">
-                <button onClick={() => setSelectedChatId(null)} className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold transition-colors">
+                <button onClick={() => setAdminLocation('chats')} className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold transition-colors">
                   Close
                 </button>
               </div>

@@ -192,6 +192,22 @@ router.get("/listings", async (req, res, next) => {
   }
 });
 
+// GET /api/admin/listings/:id — one listing for direct admin links
+router.get("/listings/:id", async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: `SELECT l.*, u.name AS seller_name, u.email AS seller_email
+            FROM listings l JOIN users u ON u.id = l.seller_id
+            WHERE l.id = ?`,
+      args: [req.params.id],
+    });
+    if (!result.rows[0]) return res.status(404).json({ error: "Listing not found" });
+    res.json(result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // PATCH /api/admin/listings/:id/archive — archive a listing
 router.patch("/listings/:id/archive", async (req, res, next) => {
   try {
@@ -466,7 +482,10 @@ router.get("/users", async (req, res, next) => {
           u.id, u.email, u.name, u.upi_id, u.role, u.status, u.created_at, u.monthly_upload_limit,
           (SELECT COUNT(*) FROM listings WHERE seller_id = u.id) as listings_count,
           (SELECT COUNT(*) FROM orders WHERE buyer_id = u.id) as buy_count,
-          (SELECT COALESCE(SUM(price_at_purchase * quantity), 0) FROM order_items WHERE seller_id = u.id) as total_earnings
+          (SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE seller_id = u.id AND status = 'completed') as sold_count,
+          (SELECT COALESCE(SUM(oi.price_at_purchase * oi.quantity), 0)
+             FROM order_items oi JOIN orders o ON o.id = oi.order_id
+            WHERE oi.seller_id = u.id AND oi.status = 'completed' AND o.status = 'completed') as total_earnings
         FROM users u
         ${whereClause}
         ORDER BY u.created_at DESC
@@ -481,6 +500,34 @@ router.get("/users", async (req, res, next) => {
       page,
       limit
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/admin/users/:id — safe account and marketplace detail for direct links
+router.get("/users/:id", async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: `SELECT
+              u.id, u.email, u.name, u.upi_id, u.mobile_number, u.location,
+              u.profile_image_url, u.role, u.status, u.is_verified,
+              u.rating_avg, u.rating_count, u.monthly_upload_limit,
+              u.last_seen_at, u.created_at,
+              CASE WHEN u.google_id IS NOT NULL THEN 1 ELSE 0 END AS google_connected,
+              CASE WHEN u.password_hash IS NOT NULL THEN 1 ELSE 0 END AS password_set,
+              CASE WHEN u.telegram_chat_id IS NOT NULL AND u.telegram_chat_id != '' THEN 1 ELSE 0 END AS telegram_connected,
+              (SELECT COUNT(*) FROM listings WHERE seller_id = u.id) AS listings_count,
+              (SELECT COUNT(*) FROM orders WHERE buyer_id = u.id) AS buy_count,
+              (SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE seller_id = u.id AND status = 'completed') AS sold_count,
+              (SELECT COALESCE(SUM(oi.price_at_purchase * oi.quantity), 0)
+                 FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                WHERE oi.seller_id = u.id AND oi.status = 'completed' AND o.status = 'completed') AS total_earnings
+            FROM users u WHERE u.id = ?`,
+      args: [req.params.id],
+    });
+    if (!result.rows[0]) return res.status(404).json({ error: "User not found" });
+    res.json(result.rows[0]);
   } catch (error) {
     next(error);
   }
@@ -596,6 +643,22 @@ router.get("/resources", async (req, res, next) => {
   }
 });
 
+// GET /api/admin/resources/:id — one resource for direct admin links
+router.get("/resources/:id", async (req, res, next) => {
+  try {
+    const result = await db.execute({
+      sql: `SELECT r.*, u.name AS uploader_name, u.email AS uploader_email
+            FROM resources r JOIN users u ON u.id = r.uploader_id
+            WHERE r.id = ?`,
+      args: [req.params.id],
+    });
+    if (!result.rows[0]) return res.status(404).json({ error: "Resource not found" });
+    res.json(result.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // PATCH /api/admin/resources/:id — update resource details
 router.patch("/resources/:id", async (req, res, next) => {
   try {
@@ -678,6 +741,38 @@ router.get("/orders", async (req, res, next) => {
     }));
 
     res.json(enrichedOrders);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/admin/orders/:id — one fully enriched order for direct admin links
+router.get("/orders/:id", async (req, res, next) => {
+  try {
+    const orderResult = await db.execute({
+      sql: `SELECT o.*, u.name AS buyer_name, u.email AS buyer_email
+            FROM orders o JOIN users u ON u.id = o.buyer_id
+            WHERE o.id = ?`,
+      args: [req.params.id],
+    });
+    const order = orderResult.rows[0] as any;
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    const itemsResult = await db.execute({
+      sql: `SELECT oi.*, oi.meetup_pin, oi.pin_attempts,
+                   l.title, l.course_code, l.image_url,
+                   us.name AS seller_name, us.email AS seller_email,
+                   ub.name AS buyer_name, ub.email AS buyer_email
+            FROM order_items oi
+            JOIN listings l ON oi.listing_id = l.id
+            JOIN users us ON oi.seller_id = us.id
+            JOIN orders o ON oi.order_id = o.id
+            JOIN users ub ON o.buyer_id = ub.id
+            WHERE oi.order_id = ?`,
+      args: [req.params.id],
+    });
+
+    res.json({ ...order, items: itemsResult.rows });
   } catch (error) {
     next(error);
   }
@@ -1297,9 +1392,9 @@ router.get("/chats", async (req, res, next) => {
   try {
     const chats = await db.execute(`
       SELECT DISTINCT m.conversation_id,
-             u1.name as sender_name, u1.email as sender_email,
-             u2.name as receiver_name, u2.email as receiver_email,
-             l.title as listing_title,
+             u1.id as sender_id, u1.name as sender_name, u1.email as sender_email,
+             u2.id as receiver_id, u2.name as receiver_name, u2.email as receiver_email,
+             l.id as listing_id, l.title as listing_title,
              MAX(m.created_at) as last_message_at
       FROM messages m
       JOIN users u1 ON m.sender_id = u1.id
@@ -1653,7 +1748,7 @@ router.get("/feedback", async (req, res, next) => {
     const feedbackRows = await db.execute({
       sql: `
         SELECT
-          f.id, f.trigger_type, f.reference_id, f.rating, f.message, f.created_at,
+          f.id, f.user_id, f.trigger_type, f.reference_id, f.rating, f.message, f.created_at,
           u.name as user_name, u.email as user_email
         FROM app_feedback f
         JOIN users u ON u.id = f.user_id

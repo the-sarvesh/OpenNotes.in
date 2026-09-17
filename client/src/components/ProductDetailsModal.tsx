@@ -61,7 +61,8 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   const images = note.images && note.images.length > 0 ? note.images : [note.image];
 
   const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
+    const shareUrl = new URL(`/listings/${encodeURIComponent(note.id)}`, window.location.origin).toString();
+    navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     toast.success('Link copied!');
     setTimeout(() => setCopied(false), 2000);

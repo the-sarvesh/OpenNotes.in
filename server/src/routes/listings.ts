@@ -427,6 +427,45 @@ router.get("/me", authenticate, async (req: AuthRequest, res, next) => {
   }
 });
 
+// GET /api/listings/:id — public, shareable listing detail
+router.get("/:id", async (req, res, next) => {
+  try {
+    const listingResult = await db.execute({
+      sql: `SELECT l.*, u.name AS seller_name,
+                   COALESCE(u.rating_avg, 0) AS seller_rating
+            FROM listings l
+            JOIN users u ON u.id = l.seller_id
+            WHERE l.id = ? AND l.status = 'active'`,
+      args: [req.params.id],
+    });
+
+    const listing = listingResult.rows[0] as any;
+    if (!listing) {
+      return res.status(404).json({ error: "Listing not found or no longer available" });
+    }
+
+    const [imagesResult, subjectsResult] = await Promise.all([
+      db.execute({
+        sql: "SELECT url FROM listing_images WHERE listing_id = ? ORDER BY is_main DESC, created_at ASC",
+        args: [req.params.id],
+      }),
+      db.execute({
+        sql: "SELECT subject_name FROM listing_subjects WHERE listing_id = ? ORDER BY subject_name COLLATE NOCASE",
+        args: [req.params.id],
+      }),
+    ]);
+
+    listing.images = imagesResult.rows.map((row: any) => row.url);
+    if (listing.images.length === 0 && listing.image_url) listing.images = [listing.image_url];
+    listing.image = listing.images[0] || listing.image_url;
+    listing.subjects = subjectsResult.rows.map((row: any) => row.subject_name);
+
+    res.json(listing);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Increment view count for a listing
 router.post("/:id/view", async (req, res, next) => {
   try {
