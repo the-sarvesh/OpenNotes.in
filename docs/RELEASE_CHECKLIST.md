@@ -29,9 +29,10 @@ Use this checklist for every production update.
 
 1. Confirm `/api/health` returns HTTP 200 with `status: ok`.
 2. Run one real-domain OTP delivery test and confirm its Resend status becomes delivered.
-3. Check the admin dashboard for open issues, email failures, and failed notification jobs.
-4. Watch server error logs and request IDs during the first 15 minutes.
-5. If a critical flow fails, roll back to the previous successful deployment before investigating.
+3. Check the admin dashboard for open issues, email failures, failed order-email jobs, and failed notification jobs.
+4. Place a test order between disposable buyer and seller accounts; confirm both receive the branded order email and only the buyer email contains the exchange PIN.
+5. Watch server error logs and request IDs during the first 15 minutes.
+6. If a critical flow fails, roll back to the previous successful deployment before investigating.
 
 ## Database safety
 

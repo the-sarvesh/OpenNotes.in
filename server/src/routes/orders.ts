@@ -9,6 +9,7 @@ import { io } from "../socket.js";
 import { sendTelegramMessage, telegramTemplates } from "../utils/telegram.js";
 import { getSetting } from "../utils/settings.js";
 import { normalizeOrderItems } from "../utils/validation.js";
+import { queueOrderEmail } from "../utils/order-email.js";
 
 
 const router = express.Router();
@@ -340,6 +341,39 @@ router.post("/", authenticate, async (req: AuthRequest, res, next) => {
           tx,
           { skipTelegram: true },
         );
+
+        const meetupLocation = [cleanBuyerLocation, cleanPreferredSpot].filter(Boolean).join(" · ");
+        await queueOrderEmail({
+          event: "placed",
+          eventKey: `placed:${orderId}:buyer:${buyerId}:item:${orderItem.id}`,
+          recipientUserId: buyerId,
+          role: "buyer",
+          orderId,
+          orderItemId: orderItem.id,
+          listingTitle: orderItem.title,
+          quantity: orderItem.quantity,
+          amount: itemSubtotal,
+          counterpartUserId: orderItem.seller_id,
+          meetupPin: orderItem.meetup_pin,
+          meetupLocation: meetupLocation || undefined,
+          actionPath: "/orders",
+          note: cleanAvailability ? `Your availability: ${cleanAvailability}` : undefined,
+        }, tx);
+        await queueOrderEmail({
+          event: "placed",
+          eventKey: `placed:${orderId}:seller:${orderItem.seller_id}:item:${orderItem.id}`,
+          recipientUserId: orderItem.seller_id,
+          role: "seller",
+          orderId,
+          orderItemId: orderItem.id,
+          listingTitle: orderItem.title,
+          quantity: orderItem.quantity,
+          amount: totalToCollect,
+          counterpartUserId: buyerId,
+          meetupLocation: meetupLocation || undefined,
+          actionPath: "/orders",
+          note: cleanAvailability ? `Buyer availability: ${cleanAvailability}` : undefined,
+        }, tx);
 
         // Notify seller — message
         const buyerRes = await tx.execute({
@@ -714,6 +748,40 @@ router.post(
         { skipTelegram: true },
       );
 
+      const meetupLocation = [item.buyer_location, item.buyer_preferred_spot].filter(Boolean).join(" · ");
+      const itemAmount = Number(item.price_at_purchase) * Number(item.quantity);
+      await Promise.all([
+        queueOrderEmail({
+          event: "acknowledged",
+          eventKey: `acknowledged:${item.order_id}:buyer:${item.buyer_id}:item:${itemId}`,
+          recipientUserId: item.buyer_id as string,
+          role: "buyer",
+          orderId: item.order_id as string,
+          orderItemId: itemId,
+          listingTitle: item.title as string,
+          quantity: Number(item.quantity),
+          amount: itemAmount,
+          counterpartUserId: sellerId,
+          meetupPin: item.meetup_pin as string,
+          meetupLocation: meetupLocation || undefined,
+          actionPath: "/messages",
+        }),
+        queueOrderEmail({
+          event: "acknowledged",
+          eventKey: `acknowledged:${item.order_id}:seller:${sellerId}:item:${itemId}`,
+          recipientUserId: sellerId,
+          role: "seller",
+          orderId: item.order_id as string,
+          orderItemId: itemId,
+          listingTitle: item.title as string,
+          quantity: Number(item.quantity),
+          amount: itemAmount,
+          counterpartUserId: item.buyer_id as string,
+          meetupLocation: meetupLocation || undefined,
+          actionPath: "/messages",
+        }),
+      ]);
+
       // Telegram Notifications (Acknowledge)
       try {
         const [buyerRow, sellerRow] = await Promise.all([
@@ -903,6 +971,36 @@ router.post(
         undefined,
         { skipTelegram: true },
       );
+
+      const completedAmount = Number(item.price_at_purchase) * Number(item.quantity);
+      await Promise.all([
+        queueOrderEmail({
+          event: "completed",
+          eventKey: `completed:${item.order_id}:buyer:${item.buyer_id}:item:${itemId}`,
+          recipientUserId: item.buyer_id as string,
+          role: "buyer",
+          orderId: item.order_id as string,
+          orderItemId: itemId,
+          listingTitle: item.title as string,
+          quantity: Number(item.quantity),
+          amount: completedAmount,
+          counterpartUserId: sellerId,
+          actionPath: "/orders",
+        }),
+        queueOrderEmail({
+          event: "completed",
+          eventKey: `completed:${item.order_id}:seller:${sellerId}:item:${itemId}`,
+          recipientUserId: sellerId,
+          role: "seller",
+          orderId: item.order_id as string,
+          orderItemId: itemId,
+          listingTitle: item.title as string,
+          quantity: Number(item.quantity),
+          amount: completedAmount,
+          counterpartUserId: item.buyer_id as string,
+          actionPath: "/orders",
+        }),
+      ]);
 
       // ── Telegram Notifications ──────────────────────────────────────────────
       try {

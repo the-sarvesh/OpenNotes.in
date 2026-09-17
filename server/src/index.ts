@@ -39,6 +39,7 @@ import feedbackRoutes from "./routes/feedback.js";
 import issuesRoutes from "./routes/issues.js";
 import resendWebhookRoutes from "./routes/resend-webhook.js";
 import { processNotificationDeliveryJobs } from "./utils/notifications.js";
+import { processOrderEmailJobs, queueOrderEmail } from "./utils/order-email.js";
 
 
 // NOTE: Coupon routes are handled under /api/admin/coupons (admin.ts)
@@ -269,6 +270,7 @@ const startServer = async () => {
       console.log('[Telegram] Skipping bot polling (Set USE_POLLING=true if testing locally)');
     }
     void processNotificationDeliveryJobs();
+    void processOrderEmailJobs();
   });
 };
 
@@ -279,6 +281,7 @@ void startServer().catch((error) => {
 
 setInterval(() => {
   void processNotificationDeliveryJobs();
+  void processOrderEmailJobs();
 }, 30 * 1000);
 
 // ── Auto-archive out-of-stock listings every 1 hour ─────────────────────────
@@ -325,6 +328,50 @@ setInterval(
 
           await createNotification(proposal.sender_id, 'meetup_reminder', 'Meetup Soon! ⏰', message, '/messages');
           await createNotification(proposal.receiver_id, 'meetup_reminder', 'Meetup Soon! ⏰', message, '/messages');
+
+          const orderContextRes = await db.execute({
+            sql: `SELECT oi.id AS order_item_id, oi.order_id, oi.quantity,
+                         oi.price_at_purchase, oi.meetup_pin, o.buyer_id, l.title
+                  FROM order_items oi
+                  JOIN orders o ON o.id = oi.order_id
+                  JOIN listings l ON l.id = oi.listing_id
+                  WHERE oi.listing_id = ?
+                    AND ((o.buyer_id = ? AND oi.seller_id = ?)
+                      OR (o.buyer_id = ? AND oi.seller_id = ?))
+                    AND oi.status NOT IN ('completed', 'cancelled')
+                  LIMIT 1`,
+            args: [
+              proposal.listing_id,
+              proposal.sender_id,
+              proposal.receiver_id,
+              proposal.receiver_id,
+              proposal.sender_id,
+            ],
+          });
+          const context = orderContextRes.rows[0] as any;
+          if (context) {
+            for (const recipientUserId of [String(proposal.sender_id), String(proposal.receiver_id)]) {
+              const isBuyer = recipientUserId === String(context.buyer_id);
+              await queueOrderEmail({
+                event: "meetup_reminder",
+                eventKey: `meetup_reminder:${proposal.id}:${recipientUserId}`,
+                recipientUserId,
+                role: isBuyer ? "buyer" : "seller",
+                orderId: String(context.order_id),
+                orderItemId: String(context.order_item_id),
+                listingTitle: String(context.title),
+                quantity: Number(context.quantity),
+                amount: Number(context.price_at_purchase) * Number(context.quantity),
+                counterpartUserId: recipientUserId === String(proposal.sender_id)
+                  ? String(proposal.receiver_id)
+                  : String(proposal.sender_id),
+                meetupPin: isBuyer ? String(context.meetup_pin || "") || undefined : undefined,
+                meetupLocation: String(proposal.location),
+                meetupTime: String(proposal.proposed_time),
+                actionPath: "/messages",
+              });
+            }
+          }
 
           // Mark as sent
           await db.execute({

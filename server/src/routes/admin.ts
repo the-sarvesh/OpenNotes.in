@@ -3,16 +3,10 @@ import db from "../db/database.js";
 import { authenticate, AuthRequest } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/admin.js";
 import { createNotification } from "../utils/notifications.js";
+import { orderActivityEmail, queueOrderEmail } from "../utils/order-email.js";
 import { v4 as uuidv4 } from "uuid";
 
 let isProcessingBroadcast = false;
-
-const escapeEmailHtml = (value: unknown) => String(value ?? "")
-  .replace(/&/g, "&amp;")
-  .replace(/</g, "&lt;")
-  .replace(/>/g, "&gt;")
-  .replace(/"/g, "&quot;")
-  .replace(/'/g, "&#039;");
 
 /**
  * Background worker to process pending Telegram broadcast jobs.
@@ -149,7 +143,8 @@ router.get("/stats", async (_req, res, next) => {
         (SELECT COUNT(*) FROM orders WHERE created_at >= datetime('now', '-30 days')) as new_orders_30d,
         (SELECT COUNT(*) FROM issue_reports WHERE status != 'resolved') as open_issues,
         (SELECT COUNT(*) FROM email_delivery_logs WHERE status = 'failed' AND created_at >= datetime('now', '-24 hours')) as failed_emails_24h,
-        (SELECT COUNT(*) FROM notification_delivery_jobs WHERE status = 'failed') as failed_notification_jobs
+        (SELECT COUNT(*) FROM notification_delivery_jobs WHERE status = 'failed') as failed_notification_jobs,
+        (SELECT COUNT(*) FROM order_email_jobs WHERE status = 'failed') as failed_order_email_jobs
     `);
 
     const row = stats.rows[0];
@@ -168,6 +163,7 @@ router.get("/stats", async (_req, res, next) => {
       openIssues: Number(row.open_issues),
       failedEmails24h: Number(row.failed_emails_24h),
       failedNotificationJobs: Number(row.failed_notification_jobs),
+      failedOrderEmailJobs: Number(row.failed_order_email_jobs),
     });
   } catch (error) {
     next(error);
@@ -813,6 +809,28 @@ router.post("/orders/:id/cancel", async (req: AuthRequest, res, next) => {
     const uniqueSellers = Array.from(new Set(items.map(i => i.seller_id)));
     const { io } = await import("../socket.js");
 
+    const buyerListingSummary = items.length === 1
+      ? String(items[0].title)
+      : `${items.length} order items`;
+    await createNotification(
+      order.buyer_id,
+      "order_cancelled",
+      "Order Cancelled 🚫",
+      "An administrator has cancelled your order. Please see chat for details.",
+      "/orders",
+      tx,
+    );
+    await queueOrderEmail({
+      event: "cancelled",
+      eventKey: `cancelled:${orderId}:buyer:${order.buyer_id}`,
+      recipientUserId: order.buyer_id,
+      role: "buyer",
+      orderId,
+      listingTitle: buyerListingSummary,
+      amount: Number(order.total_amount),
+      actionPath: "/orders",
+    }, tx);
+
     for (const sellerId of uniqueSellers) {
       const convoId = getConversationId(order.buyer_id, sellerId as string);
       const systemMessage = "⚠️ ADMINISTRATOR UPDATE: This transaction has been cancelled. This conversation is now closed and contact details have been hidden.";
@@ -841,15 +859,6 @@ router.post("/orders/:id/cancel", async (req: AuthRequest, res, next) => {
 
       // 6. Notifications
       await createNotification(
-        order.buyer_id,
-        "order_cancelled",
-        "Order Cancelled 🚫",
-        "An administrator has cancelled your order. Please see chat for details.",
-        "/orders",
-        tx
-      );
-
-      await createNotification(
         sellerId as string,
         "order_cancelled",
         "Order Cancelled 🚫",
@@ -857,6 +866,25 @@ router.post("/orders/:id/cancel", async (req: AuthRequest, res, next) => {
         "/orders",
         tx
       );
+      const sellerItems = items.filter((item) => item.seller_id === sellerId);
+      const sellerListingSummary = sellerItems.length === 1
+        ? String(sellerItems[0].title)
+        : `${sellerItems.length} order items`;
+      const sellerAmount = sellerItems.reduce(
+        (sum, item) => sum + Number(item.price_at_purchase) * Number(item.quantity),
+        0,
+      );
+      await queueOrderEmail({
+        event: "cancelled",
+        eventKey: `cancelled:${orderId}:seller:${sellerId}`,
+        recipientUserId: sellerId as string,
+        role: "seller",
+        orderId,
+        listingTitle: sellerListingSummary,
+        amount: sellerAmount,
+        counterpartUserId: order.buyer_id,
+        actionPath: "/orders",
+      }, tx);
     }
 
     await tx.commit();
@@ -997,6 +1025,37 @@ router.post("/orders/items/:itemId/force-complete", async (req: AuthRequest, res
       }`,
       "/orders",
     );
+    const forceCompletedAmount = Number(item.price_at_purchase) * Number(item.quantity);
+    await Promise.all([
+      queueOrderEmail({
+        event: "completed",
+        eventKey: `completed:${item.order_id}:buyer:${item.buyer_id}:item:${itemId}`,
+        recipientUserId: item.buyer_id as string,
+        role: "buyer",
+        orderId: item.order_id as string,
+        orderItemId: itemId,
+        listingTitle: item.title,
+        quantity: Number(item.quantity),
+        amount: forceCompletedAmount,
+        counterpartUserId: item.seller_id as string,
+        actionPath: "/orders",
+        note: "This exchange was marked complete by an OpenNotes administrator.",
+      }),
+      queueOrderEmail({
+        event: "completed",
+        eventKey: `completed:${item.order_id}:seller:${item.seller_id}:item:${itemId}`,
+        recipientUserId: item.seller_id as string,
+        role: "seller",
+        orderId: item.order_id as string,
+        orderItemId: itemId,
+        listingTitle: item.title,
+        quantity: Number(item.quantity),
+        amount: forceCompletedAmount,
+        counterpartUserId: item.buyer_id as string,
+        actionPath: "/orders",
+        note: "This exchange was marked complete by an OpenNotes administrator.",
+      }),
+    ]);
     await createNotification(
       item.seller_id as string,
       "order_update",
@@ -1087,53 +1146,48 @@ router.post("/orders/items/:itemId/poke", async (req: AuthRequest, res, next) =>
     // 3. Send Emails via Resend HTTP API
     const { sendMail } = await import("../utils/email.js");
     
-    // Email templates
-    const safeBuyerName = escapeEmailHtml(buyer.name);
-    const safeSellerName = escapeEmailHtml(seller.name);
-    const safeItemTitle = escapeEmailHtml(item.title);
     const reminderWindow = Math.floor(Date.now() / (5 * 60 * 1000));
-    const buyerEmailHtml = `
-      <div style="font-family: sans-serif; padding: 20px; color: #333;">
-        <h2 style="color: #0f172a;">Exchange Pending ⚠️</h2>
-        <p>Hi <strong>${safeBuyerName}</strong>,</p>
-        <p>Your exchange for '<strong>${safeItemTitle}</strong>' is still pending.</p>
-        <p style="font-size: 15px; line-height: 1.6; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
-          Have you met up yet? Please exchange the note and enter the OTP to complete your order.
-        </p>
-        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
-          This is an automated reminder from OpenNotes.in.
-        </p>
-      </div>
-    `;
-
-    const sellerEmailHtml = `
-      <div style="font-family: sans-serif; padding: 20px; color: #333;">
-        <h2 style="color: #0f172a;">Exchange Pending ⚠️</h2>
-        <p>Hi <strong>${safeSellerName}</strong>,</p>
-        <p>Your exchange for '<strong>${safeItemTitle}</strong>' is still pending.</p>
-        <p style="font-size: 15px; line-height: 1.6; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;">
-          Have you met up yet? Please exchange the note and enter the OTP to complete your order.
-        </p>
-        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
-          This is an automated reminder from OpenNotes.in.
-        </p>
-      </div>
-    `;
+    const amount = Number(item.price_at_purchase) * Number(item.quantity);
+    const buyerEmail = orderActivityEmail({
+      event: "meetup_reminder",
+      eventKey: `admin-reminder:${item.id}:buyer:${reminderWindow}`,
+      recipientUserId: item.buyer_id,
+      role: "buyer",
+      orderId: item.order_id,
+      orderItemId: item.id,
+      listingTitle: item.title,
+      quantity: Number(item.quantity),
+      amount,
+      counterpartUserId: item.seller_id,
+      meetupPin: item.meetup_pin,
+      actionPath: "/orders",
+      note: "This exchange is still pending. If you have already met, ask the seller to verify your exchange PIN.",
+    }, buyer.name, seller.name);
+    const sellerEmail = orderActivityEmail({
+      event: "meetup_reminder",
+      eventKey: `admin-reminder:${item.id}:seller:${reminderWindow}`,
+      recipientUserId: item.seller_id,
+      role: "seller",
+      orderId: item.order_id,
+      orderItemId: item.id,
+      listingTitle: item.title,
+      quantity: Number(item.quantity),
+      amount,
+      counterpartUserId: item.buyer_id,
+      actionPath: "/orders",
+      note: "This exchange is still pending. If handover is complete, verify the buyer's exchange PIN.",
+    }, seller.name, buyer.name);
 
     const emailResults = await Promise.allSettled([
       sendMail({
         to: buyer.email,
-        subject: `Pending Exchange: ${item.title} ⚠️`,
-        html: buyerEmailHtml,
-        text: `Hi ${buyer.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`,
+        ...buyerEmail,
         purpose: "order_reminder",
         idempotencyKey: `order-reminder-${item.id}-buyer-${reminderWindow}`,
       }),
       sendMail({
         to: seller.email,
-        subject: `Pending Exchange: ${item.title} ⚠️`,
-        html: sellerEmailHtml,
-        text: `Hi ${seller.name}, your exchange for '${item.title}' is still pending. Have you met up yet? Please exchange the note and enter the OTP to complete your order.`,
+        ...sellerEmail,
         purpose: "order_reminder",
         idempotencyKey: `order-reminder-${item.id}-seller-${reminderWindow}`,
       }),

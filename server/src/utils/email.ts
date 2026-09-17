@@ -13,7 +13,7 @@ export interface MailOptions {
   attachments?: any[];
   /** Stable business identifier used by Resend to deduplicate retries for 24 hours. */
   idempotencyKey?: string;
-  purpose?: "verification" | "password_reset" | "order_reminder" | "other";
+  purpose?: "verification" | "password_reset" | "order_reminder" | "order_update" | "other";
 }
 
 export interface MailDeliveryResult {

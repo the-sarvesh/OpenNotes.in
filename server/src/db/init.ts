@@ -250,6 +250,23 @@ export const initDb = async () => {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_email_delivery_provider
         ON email_delivery_logs(provider_id) WHERE provider_id IS NOT NULL;
 
+      CREATE TABLE IF NOT EXISTS order_email_jobs (
+        id TEXT PRIMARY KEY,
+        event_key TEXT UNIQUE NOT NULL,
+        recipient_user_id TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_order_email_jobs_pending
+        ON order_email_jobs(status, next_attempt_at);
+
       CREATE TABLE IF NOT EXISTS notification_delivery_jobs (
         id TEXT PRIMARY KEY,
         notification_id TEXT UNIQUE NOT NULL,
@@ -361,6 +378,8 @@ export const initDb = async () => {
       "CREATE TABLE IF NOT EXISTS email_delivery_logs (id TEXT PRIMARY KEY, recipient TEXT NOT NULL, purpose TEXT NOT NULL, provider_id TEXT, status TEXT NOT NULL, error_message TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
       "CREATE INDEX IF NOT EXISTS idx_email_delivery_recipient ON email_delivery_logs(recipient, created_at)",
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_email_delivery_provider ON email_delivery_logs(provider_id) WHERE provider_id IS NOT NULL",
+      "CREATE TABLE IF NOT EXISTS order_email_jobs (id TEXT PRIMARY KEY, event_key TEXT UNIQUE NOT NULL, recipient_user_id TEXT NOT NULL, payload_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP, last_error TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE)",
+      "CREATE INDEX IF NOT EXISTS idx_order_email_jobs_pending ON order_email_jobs(status, next_attempt_at)",
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_duplicate_prevent ON reviews(reviewer_id, order_id, listing_id)",
       "CREATE INDEX IF NOT EXISTS idx_push_subs_user_id ON push_subscriptions(user_id)",
       "ALTER TABLE messages ADD COLUMN type TEXT NOT NULL DEFAULT 'text'",

@@ -2,6 +2,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { Server as HttpServer } from "http";
 import jwt from "jsonwebtoken";
 import db from "./db/database.js";
+import { queueOrderEmail, type OrderEmailEvent } from "./utils/order-email.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "opennotes-dev-secret-change-in-prod";
 
@@ -9,6 +10,60 @@ const JWT_SECRET = process.env.JWT_SECRET || "opennotes-dev-secret-change-in-pro
 const userConnectionCount = new Map<string, number>();
 
 export let io: SocketIOServer;
+
+const getMeetupEmailContext = async (proposalId: string) => {
+  const result = await db.execute({
+    sql: `SELECT mp.*, l.title,
+                 oi.id AS order_item_id, oi.order_id, oi.seller_id,
+                 oi.quantity, oi.price_at_purchase, o.buyer_id
+          FROM meetup_proposals mp
+          JOIN listings l ON l.id = mp.listing_id
+          LEFT JOIN order_items oi
+            ON oi.listing_id = mp.listing_id
+           AND oi.status NOT IN ('completed', 'cancelled')
+          LEFT JOIN orders o
+            ON o.id = oi.order_id
+           AND ((o.buyer_id = mp.sender_id AND oi.seller_id = mp.receiver_id)
+             OR (o.buyer_id = mp.receiver_id AND oi.seller_id = mp.sender_id))
+          WHERE mp.id = ?
+          ORDER BY o.created_at DESC
+          LIMIT 1`,
+    args: [proposalId],
+  });
+  return result.rows[0] as any;
+};
+
+const queueMeetupActivityEmails = async (event: OrderEmailEvent, proposalId: string) => {
+  try {
+    const proposal = await getMeetupEmailContext(proposalId);
+    if (!proposal) return;
+    for (const recipientUserId of [String(proposal.sender_id), String(proposal.receiver_id)]) {
+      const isBuyer = recipientUserId === String(proposal.buyer_id);
+      const counterpartUserId = recipientUserId === String(proposal.sender_id)
+        ? String(proposal.receiver_id)
+        : String(proposal.sender_id);
+      await queueOrderEmail({
+        event,
+        eventKey: `${event}:${proposalId}:${recipientUserId}`,
+        recipientUserId,
+        role: isBuyer ? "buyer" : "seller",
+        orderId: proposal.order_id ? String(proposal.order_id) : undefined,
+        orderItemId: proposal.order_item_id ? String(proposal.order_item_id) : undefined,
+        listingTitle: String(proposal.title || "your OpenNotes order"),
+        quantity: proposal.quantity == null ? undefined : Number(proposal.quantity),
+        amount: proposal.price_at_purchase == null || proposal.quantity == null
+          ? undefined
+          : Number(proposal.price_at_purchase) * Number(proposal.quantity),
+        counterpartUserId,
+        meetupLocation: String(proposal.location || "") || undefined,
+        meetupTime: String(proposal.proposed_time || "") || undefined,
+        actionPath: "/messages",
+      });
+    }
+  } catch (error) {
+    console.error(`[Order Email] Could not queue ${event} emails for meetup ${proposalId}:`, error);
+  }
+};
 
 export const initSocket = (httpServer: HttpServer) => {
   io = new SocketIOServer(httpServer, {
@@ -426,6 +481,8 @@ export const initSocket = (httpServer: HttpServer) => {
 
         io.to(`user:${receiverId}`).emit("unread_count_changed");
 
+        await queueMeetupActivityEmails("meetup_proposed", proposalId);
+
         // Web Push
         import('./utils/notifications.js').then(({ sendPushNotification }) => {
           sendPushNotification(receiverId, {
@@ -444,11 +501,17 @@ export const initSocket = (httpServer: HttpServer) => {
 
     socket.on("accept_meetup", async ({ conversationId, proposalId, messageId }) => {
       try {
+        const proposal = await getMeetupEmailContext(proposalId);
+        if (!proposal || String(proposal.receiver_id) !== userId || String(proposal.conversation_id) !== conversationId) {
+          socket.emit("message_error", { message: "You cannot accept this meetup proposal." });
+          return;
+        }
         // Update proposal
-        await db.execute({
-          sql: "UPDATE meetup_proposals SET status = 'accepted' WHERE id = ?",
-          args: [proposalId]
+        const accepted = await db.execute({
+          sql: "UPDATE meetup_proposals SET status = 'accepted' WHERE id = ? AND receiver_id = ? AND status = 'pending'",
+          args: [proposalId, userId]
         });
+        if (!accepted.rowsAffected) return;
 
         // Update message metadata to reflect acceptance
         const msgRes = await db.execute({ sql: "SELECT metadata FROM messages WHERE id = ?", args: [messageId] });
@@ -462,6 +525,7 @@ export const initSocket = (httpServer: HttpServer) => {
         }
 
         io.to(`conv:${conversationId}`).emit("meetup_status_changed", { proposalId, status: 'accepted', messageId });
+        await queueMeetupActivityEmails("meetup_accepted", proposalId);
 
         // Notify proposer
         const proposalRes = await db.execute({ sql: "SELECT sender_id FROM meetup_proposals WHERE id = ?", args: [proposalId] });
@@ -478,10 +542,16 @@ export const initSocket = (httpServer: HttpServer) => {
 
     socket.on("decline_meetup", async ({ conversationId, proposalId, messageId }) => {
       try {
-        await db.execute({
-          sql: "UPDATE meetup_proposals SET status = 'declined' WHERE id = ?",
-          args: [proposalId]
+        const proposal = await getMeetupEmailContext(proposalId);
+        if (!proposal || String(proposal.receiver_id) !== userId || String(proposal.conversation_id) !== conversationId) {
+          socket.emit("message_error", { message: "You cannot decline this meetup proposal." });
+          return;
+        }
+        const declined = await db.execute({
+          sql: "UPDATE meetup_proposals SET status = 'declined' WHERE id = ? AND receiver_id = ? AND status = 'pending'",
+          args: [proposalId, userId]
         });
+        if (!declined.rowsAffected) return;
 
         // Update message metadata
         const msgRes = await db.execute({ sql: "SELECT metadata FROM messages WHERE id = ?", args: [messageId] });
@@ -495,6 +565,7 @@ export const initSocket = (httpServer: HttpServer) => {
         }
 
         io.to(`conv:${conversationId}`).emit("meetup_status_changed", { proposalId, status: 'declined', messageId });
+        await queueMeetupActivityEmails("meetup_declined", proposalId);
       } catch (err) {
         console.error("[Socket] decline_meetup error:", err);
       }
@@ -502,10 +573,16 @@ export const initSocket = (httpServer: HttpServer) => {
 
     socket.on("cancel_meetup", async ({ conversationId, proposalId, messageId }) => {
       try {
-        await db.execute({
-          sql: "UPDATE meetup_proposals SET status = 'cancelled' WHERE id = ? AND sender_id = ?",
+        const proposal = await getMeetupEmailContext(proposalId);
+        if (!proposal || String(proposal.sender_id) !== userId || String(proposal.conversation_id) !== conversationId) {
+          socket.emit("message_error", { message: "You cannot cancel this meetup proposal." });
+          return;
+        }
+        const cancelled = await db.execute({
+          sql: "UPDATE meetup_proposals SET status = 'cancelled' WHERE id = ? AND sender_id = ? AND status = 'pending'",
           args: [proposalId, userId]
         });
+        if (!cancelled.rowsAffected) return;
 
         // Update message metadata
         const msgRes = await db.execute({ sql: "SELECT metadata FROM messages WHERE id = ?", args: [messageId] });
@@ -519,6 +596,7 @@ export const initSocket = (httpServer: HttpServer) => {
         }
 
         io.to(`conv:${conversationId}`).emit("meetup_status_changed", { proposalId, status: 'cancelled', messageId });
+        await queueMeetupActivityEmails("meetup_cancelled", proposalId);
       } catch (err) {
         console.error("[Socket] cancel_meetup error:", err);
       }

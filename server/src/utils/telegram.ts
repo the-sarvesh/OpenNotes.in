@@ -1,6 +1,7 @@
 import { Telegraf } from 'telegraf';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../db/database.js';
+import { queueOrderEmail } from './order-email.js';
 
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -123,13 +124,14 @@ export const initTelegramBot = () => {
       else if (action === 'ack_ord') {
         await ctx.answerCbQuery('Acknowledging Order...');
         const itemRes = await db.execute({
-          sql: `SELECT oi.*, 
+          sql: `SELECT oi.*, l.title,
                        o.total_amount, o.platform_fee,
                        o.buyer_id, o.buyer_location, o.buyer_preferred_spot, o.buyer_availability, o.buyer_note, o.buyer_meetup_details,
                        u.name as buyer_name, u.telegram_chat_id as buyer_chat,
                        s.id as seller_id, s.name as seller_name, s.telegram_chat_id as seller_chat
-                FROM order_items oi 
-                JOIN orders o ON oi.order_id = o.id 
+                 FROM order_items oi
+                 JOIN orders o ON oi.order_id = o.id
+                 JOIN listings l ON oi.listing_id = l.id
                 JOIN users u ON o.buyer_id = u.id 
                 JOIN users s ON oi.seller_id = s.id 
                 WHERE oi.id = ?`,
@@ -185,6 +187,39 @@ export const initTelegramBot = () => {
           `${item.seller_name} has acknowledged your purchase of "${item.title}".`,
           "/orders"
         );
+        const meetupLocation = [item.buyer_location, item.buyer_preferred_spot].filter(Boolean).join(" · ");
+        const acknowledgedAmount = Number(item.price_at_purchase) * Number(item.quantity);
+        await Promise.all([
+          queueOrderEmail({
+            event: "acknowledged",
+            eventKey: `acknowledged:${item.order_id}:buyer:${item.buyer_id}:item:${id}`,
+            recipientUserId: String(item.buyer_id),
+            role: "buyer",
+            orderId: String(item.order_id),
+            orderItemId: id,
+            listingTitle: String(item.title),
+            quantity: Number(item.quantity),
+            amount: acknowledgedAmount,
+            counterpartUserId: String(item.seller_id),
+            meetupPin: String(item.meetup_pin),
+            meetupLocation: meetupLocation || undefined,
+            actionPath: "/messages",
+          }),
+          queueOrderEmail({
+            event: "acknowledged",
+            eventKey: `acknowledged:${item.order_id}:seller:${item.seller_id}:item:${id}`,
+            recipientUserId: String(item.seller_id),
+            role: "seller",
+            orderId: String(item.order_id),
+            orderItemId: id,
+            listingTitle: String(item.title),
+            quantity: Number(item.quantity),
+            amount: acknowledgedAmount,
+            counterpartUserId: String(item.buyer_id),
+            meetupLocation: meetupLocation || undefined,
+            actionPath: "/messages",
+          }),
+        ]);
 
         // Notify via Telegram (Buyer & Seller)
         try {
@@ -464,6 +499,35 @@ export const initTelegramBot = () => {
           `"${item.title}" has been handed over. ${allCompleted ? "Your full order is now complete!" : "Waiting for remaining items."}`,
           "/orders"
         );
+        const completedAmount = Number(item.price_at_purchase) * Number(item.quantity);
+        await Promise.all([
+          queueOrderEmail({
+            event: "completed",
+            eventKey: `completed:${item.order_id}:buyer:${item.buyer_id}:item:${state.itemId}`,
+            recipientUserId: String(item.buyer_id),
+            role: "buyer",
+            orderId: String(item.order_id),
+            orderItemId: state.itemId,
+            listingTitle: String(item.title),
+            quantity: Number(item.quantity),
+            amount: completedAmount,
+            counterpartUserId: String(item.seller_id),
+            actionPath: "/orders",
+          }),
+          queueOrderEmail({
+            event: "completed",
+            eventKey: `completed:${item.order_id}:seller:${item.seller_id}:item:${state.itemId}`,
+            recipientUserId: String(item.seller_id),
+            role: "seller",
+            orderId: String(item.order_id),
+            orderItemId: state.itemId,
+            listingTitle: String(item.title),
+            quantity: Number(item.quantity),
+            amount: completedAmount,
+            counterpartUserId: String(item.buyer_id),
+            actionPath: "/orders",
+          }),
+        ]);
 
         botState.delete(chatId);
         return ctx.reply(`✅ PIN Verified! Order completed successfully. ${allCompleted ? 'The entire order is now complete.' : ''}`);
