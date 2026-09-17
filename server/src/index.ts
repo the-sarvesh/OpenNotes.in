@@ -184,6 +184,7 @@ app.get("/api/health", async (_req, res) => {
       status: "ok",
       database: "connected",
       emailConfigured: Boolean(process.env.RESEND_API_KEY || process.env.SMTP_PASS),
+      release: process.env.RENDER_GIT_COMMIT?.slice(0, 12) || "local",
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
