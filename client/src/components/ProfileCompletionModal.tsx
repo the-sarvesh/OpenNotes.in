@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Phone, CreditCard, User, Camera, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { X, Phone, MapPin, User, Camera, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
 import { apiRequest } from "../utils/api.js";
 
@@ -15,7 +15,7 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
 }) => {
   const { user, refreshUser } = useAuth();
   const [mobileNumber, setMobileNumber] = useState("");
-  const [upiId, setUpiId] = useState("");
+  const [location, setLocation] = useState("");
   const [avatar, setAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   
@@ -26,7 +26,7 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
   useEffect(() => {
     if (user) {
       setMobileNumber(user.mobile_number || "");
-      setUpiId(user.upi_id || "");
+      setLocation(user.location || "");
       setAvatarPreview(user.profile_image_url || null);
     }
   }, [user, isOpen]);
@@ -52,8 +52,8 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
       return;
     }
     
-    if (!upiId.trim()) {
-      setError("UPI ID is required");
+    if (!location.trim()) {
+      setError("City is required");
       return;
     }
 
@@ -61,7 +61,7 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
     try {
       const formData = new FormData();
       formData.append("mobile_number", mobileNumber);
-      formData.append("upi_id", upiId);
+      formData.append("location", location.trim());
       if (avatar) {
         formData.append("profile_image", avatar);
       }
@@ -132,7 +132,7 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
               <p className="text-sm text-text-muted leading-relaxed">
-                Please provide your contact and payment details to continue. This helps other users contact you for trades.
+                Please provide your contact details and city to help other users arrange trades.
               </p>
 
               {error && (
@@ -182,22 +182,20 @@ export const ProfileCompletionModal: React.FC<ProfileCompletionModalProps> = ({
 
                 <div>
                   <label className="block text-sm font-medium text-text-muted mb-1.5">
-                    UPI ID <span className="text-red-500">*</span>
+                    City <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted pointer-events-none" />
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-text-muted pointer-events-none" />
                     <input
                       type="text"
-                      value={upiId}
-                      onChange={(e) => setUpiId(e.target.value)}
-                      placeholder="e.g. name@upi"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="e.g. Hyderabad"
                       required
+                      maxLength={120}
                       className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all text-text-main"
                     />
                   </div>
-                  <p className="text-[10px] text-text-muted mt-1 ml-1">
-                    Used for payments when someone buys your notes.
-                  </p>
                 </div>
               </div>
 

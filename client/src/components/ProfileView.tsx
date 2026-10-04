@@ -149,7 +149,6 @@ export const ProfileView = ({
   const [loading, setLoading] = useState(true);
 
   const [editName, setEditName] = useState(user?.name || '');
-  const [editUpi, setEditUpi] = useState(user?.upi_id || '');
   const [editMobile, setEditMobile] = useState(user?.mobile_number || '');
   const [editLocation, setEditLocation] = useState(user?.location || '');
   const [profileImage, setProfileImage] = useState<File | null>(null);
@@ -178,7 +177,6 @@ export const ProfileView = ({
   useEffect(() => {
     if (user) {
       setEditName(user.name || '');
-      setEditUpi(user.upi_id || '');
       setEditMobile(user.mobile_number || '');
       setEditLocation(user.location || '');
       setProfileImagePreview(user.profile_image_url || '');
@@ -215,7 +213,6 @@ export const ProfileView = ({
     try {
       const formData = new FormData();
       formData.append('name', editName);
-      formData.append('upi_id', editUpi);
       formData.append('mobile_number', editMobile);
       formData.append('location', editLocation);
       if (profileImage) formData.append('profile_image', profileImage);
@@ -624,20 +621,10 @@ export const ProfileView = ({
                       <input type="tel" value={editMobile} onChange={e => setEditMobile(e.target.value)} placeholder="+91 ..." className={inputClass} />
                     </div>
                     <div>
-                      <Label>Hostel / Campus Location</Label>
-                      <input type="text" value={editLocation} onChange={e => setEditLocation(e.target.value)} placeholder="e.g. SR Bhavan, Room 123" className={inputClass} />
+                      <Label>City</Label>
+                      <input type="text" value={editLocation} onChange={e => setEditLocation(e.target.value)} placeholder="e.g. Hyderabad" maxLength={120} className={inputClass} />
                     </div>
                   </div>
-                </div>
-              </SectionCard>
-
-              <SectionCard icon={<DollarSign className="h-5 w-5 text-emerald-600" />} iconBg="bg-emerald-500/10" title="Payout Details" subtitle="Where you get paid">
-                <div>
-                  <Label>UPI ID for Payouts</Label>
-                  <input type="text" value={editUpi} onChange={e => setEditUpi(e.target.value)} placeholder="username@upi" className={inputClass} />
-                  <p className="text-[9px] text-text-muted mt-2 flex items-center gap-1.5 px-1">
-                    <ShieldAlert className="h-3 w-3 shrink-0" /> Encrypted and only used for legitimate earnings transfer.
-                  </p>
                 </div>
               </SectionCard>
 

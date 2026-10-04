@@ -272,7 +272,7 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
     const email = normalizeEmail(req.body?.email);
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-    const upi_id = typeof req.body?.upi_id === "string" ? req.body.upi_id.trim() : "";
+    const location = typeof req.body?.location === "string" ? req.body.location.trim().replace(/\s+/g, " ") : "";
 
     if (!isValidEmail(email) || !password || !name) {
       return res
@@ -282,6 +282,14 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
 
     if (name.length < 2 || name.length > 80) {
       return res.status(400).json({ error: "Name must be between 2 and 80 characters" });
+    }
+
+    if (!location) {
+      return res.status(400).json({ error: "City is required" });
+    }
+
+    if (location.length > 120) {
+      return res.status(400).json({ error: "City must be 120 characters or fewer" });
     }
 
     // ── Domain enforcement ───────────────────────────────────────────────────
@@ -317,14 +325,14 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
     if (existingUser) {
       // Update existing unverified user
       await db.execute({
-        sql: "UPDATE users SET name = ?, password_hash = ?, upi_id = ?, verification_token = ?, verification_token_expires_at = ? WHERE id = ?",
-        args: [name, hashedPassword, upi_id || null, otp, verificationTokenExpiresAt, userId],
+        sql: "UPDATE users SET name = ?, password_hash = ?, location = ?, verification_token = ?, verification_token_expires_at = ? WHERE id = ?",
+        args: [name, hashedPassword, location || null, otp, verificationTokenExpiresAt, userId],
       });
     } else {
       // Create new user
       await db.execute({
-        sql: "INSERT INTO users (id, email, name, password_hash, upi_id, verification_token, verification_token_expires_at, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-        args: [userId, email, name, hashedPassword, upi_id || null, otp, verificationTokenExpiresAt],
+        sql: "INSERT INTO users (id, email, name, password_hash, location, verification_token, verification_token_expires_at, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+        args: [userId, email, name, hashedPassword, location || null, otp, verificationTokenExpiresAt],
       });
     }
 
@@ -372,7 +380,7 @@ router.post("/register", authLimiter as any, async (req, res, next) => {
         id: userId,
         email,
         name,
-        upi_id,
+        location,
         role: "user",
         is_verified: 0
       },

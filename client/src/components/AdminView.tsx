@@ -1310,8 +1310,7 @@ export const AdminView: React.FC = () => {
                           </div>
                           <InfoRow icon={<Hash className="h-3.5 w-3.5" />} label="User ID" value={<span className="font-mono text-xs break-all">{selectedUser.id}</span>} />
                           <InfoRow icon={<UserIcon className="h-3.5 w-3.5" />} label="Mobile" value={selectedUser.mobile_number || 'Not provided'} />
-                          <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="Location" value={selectedUser.location || 'Not provided'} />
-                          <InfoRow icon={<DollarSign className="h-3.5 w-3.5" />} label="UPI ID" value={selectedUser.upi_id || 'Not provided'} />
+                          <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="City" value={selectedUser.location || 'Not provided'} />
                           <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Joined" value={selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleString('en-IN') : 'Unknown'} />
                           <InfoRow icon={<Clock className="h-3.5 w-3.5" />} label="Last Active" value={selectedUser.last_seen_at ? new Date(selectedUser.last_seen_at).toLocaleString('en-IN') : 'No activity recorded'} />
                           <InfoRow icon={<CheckCircle2 className="h-3.5 w-3.5" />} label="Verification" value={Number(selectedUser.is_verified) === 1 ? 'Email verified' : 'Not verified'} />

@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   Sparkles,
+  MapPin,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.js";
 import { useSettings } from "../contexts/SettingsContext.js";
@@ -70,6 +71,7 @@ const InputField = ({
   placeholder,
   required = false,
   minLength,
+  maxLength,
   rightSlot,
   error,
 }: {
@@ -81,6 +83,7 @@ const InputField = ({
   placeholder?: string;
   required?: boolean;
   minLength?: number;
+  maxLength?: number;
   rightSlot?: React.ReactNode;
   error?: boolean;
 }) => (
@@ -99,6 +102,7 @@ const InputField = ({
         placeholder={placeholder}
         required={required}
         minLength={minLength}
+        maxLength={maxLength}
         className={`w-full pl-10 ${rightSlot ? "pr-10" : "pr-4"} py-3 bg-background border rounded-2xl text-sm
                    focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
                    transition-all text-text-main placeholder:text-text-muted/50
@@ -162,7 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [upiId, setUpiId] = useState("");
+  const [location, setLocation] = useState("");
 
   const [forgotSent, setForgotSent] = useState(false);
   const [resendSent, setResendSent] = useState(false);
@@ -212,7 +216,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const switchMode = (next: AuthMode) => { setError(""); setSuccess(""); setMode(next); };
 
   const handleClose = () => {
-    setError(""); setSuccess(""); setEmail(""); setPassword(""); setName(""); setUpiId("");
+    setError(""); setSuccess(""); setEmail(""); setPassword(""); setName(""); setLocation("");
     setForgotSent(false); setResendSent(false); setNewPassword(""); setConfirmPw(""); setResetDone(false);
     setOtp(""); setResendCooldown(0);
     setMode(defaultMode);
@@ -230,7 +234,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const body = mode === "login"
         ? { email, password }
-        : { email, password, name, upi_id: upiId };
+        : { email, password, name, location: location.trim() };
       const res = await apiRequest(endpoint, { method: "POST", body: JSON.stringify(body) });
       const data = await res.json();
 
@@ -498,16 +502,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
 
                   {mode === "register" && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-                        UPI ID <span className="font-normal normal-case tracking-normal opacity-60">(optional, for payouts)</span>
-                      </label>
-                      <input type="text" value={upiId} onChange={(e) => setUpiId(e.target.value)}
-                        placeholder="name@upi"
-                        className="w-full px-4 py-3 bg-background border border-border rounded-2xl text-sm
-                                   focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
-                                   transition-all text-text-main" />
-                    </div>
+                    <InputField label="City"
+                      icon={<MapPin className="h-4 w-4" />}
+                      value={location} onChange={setLocation}
+                      placeholder="e.g. Hyderabad" required maxLength={120} />
                   )}
 
                   <button type="submit" disabled={isLoading}
