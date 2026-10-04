@@ -172,6 +172,10 @@ export const ResultsView: React.FC = () => {
   const [confidence, setConfidence] = useState('');
   const [repeatCount, setRepeatCount] = useState(0);
   const [skipPending, setSkipPending] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
   const pending = useRef<MarksResponse | null>(null);
   const elapsed = useRef(false);
   const skip = useRef(false);
@@ -250,6 +254,49 @@ export const ResultsView: React.FC = () => {
     else setSkipPending(true);
   };
 
+  const sendVerification = async () => {
+    if (!user?.email || verificationBusy) return;
+    setVerificationBusy(true);
+    setVerificationMessage('');
+    try {
+      const response = await apiRequest('/api/auth/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ email: user.email }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Could not send a verification code.');
+      setVerificationSent(true);
+      setVerificationMessage(`A code was sent to ${user.email}. Check your inbox and spam folder.`);
+    } catch (cause) {
+      setVerificationMessage(cause instanceof Error ? cause.message : 'Could not send a verification code.');
+    } finally {
+      setVerificationBusy(false);
+    }
+  };
+
+  const confirmVerification = async () => {
+    if (!user?.email || verificationBusy || !/^\d{6}$/.test(verificationCode.trim())) return;
+    setVerificationBusy(true);
+    setVerificationMessage('');
+    try {
+      const response = await apiRequest('/api/auth/verify-otp', {
+        method: 'POST',
+        body: JSON.stringify({ email: user.email, otp: verificationCode.trim() }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Could not verify the code.');
+      setVerificationCode('');
+      setVerificationSent(false);
+      setPhase('idle');
+      setError('');
+      setVerificationMessage('Email verified. You can show your marks now.');
+    } catch (cause) {
+      setVerificationMessage(cause instanceof Error ? cause.message : 'Could not verify the code.');
+    } finally {
+      setVerificationBusy(false);
+    }
+  };
+
   const jokes = repeatCount > 0 ? repeatJokes : firstLookJokes;
   const isDialogOpen = phase === 'loading' || phase === 'ready';
 
@@ -290,8 +337,31 @@ export const ResultsView: React.FC = () => {
         </header>
 
         {phase === 'error' && (
-          <p role="alert" className="rounded-2xl border border-rose-300/25 bg-rose-400/10 p-5 text-sm text-rose-100">{error}</p>
+          <div role="alert" className="rounded-2xl border border-rose-300/25 bg-rose-400/10 p-5 text-sm text-rose-100">
+            <p>{error}</p>
+            {error.includes('Verify your WILP email') && (
+              <div className="mt-4 space-y-3">
+                <button type="button" onClick={sendVerification} disabled={verificationBusy}
+                  className="rounded-lg bg-amber-300 px-4 py-2 font-bold text-[#102b4d] disabled:opacity-60">
+                  Send verification code
+                </button>
+                {verificationSent && (
+                  <div className="flex flex-wrap gap-2">
+                    <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+                      value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ''))}
+                      aria-label="Six-digit verification code" placeholder="6-digit code"
+                      className="min-h-10 w-40 rounded-lg border border-white/20 bg-white/10 px-3 text-white placeholder:text-slate-400" />
+                    <button type="button" onClick={confirmVerification} disabled={verificationBusy || verificationCode.length !== 6}
+                      className="rounded-lg border border-amber-300/40 px-4 py-2 font-bold text-amber-200 disabled:opacity-50">
+                      Verify email
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
+        {verificationMessage && <p role="status" className="rounded-2xl border border-white/15 bg-white/[0.08] p-4 text-sm text-white">{verificationMessage}</p>}
         {phase === 'results' && data && (
           <div className="space-y-6" aria-live="polite">
             {data.rows.length > 0 ? (
