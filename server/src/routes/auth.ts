@@ -168,9 +168,9 @@ passport.use(
             });
           }
 
-          // Link Google ID to existing email/password account
-          if (!user.google_id) {
-            console.log("Linking Google ID to existing user:", email);
+          // A matching Google sign-in also verifies accounts linked before email verification.
+          if (!user.google_id || (Number(user.is_verified) !== 1 && normalizeEmail(user.email) === email)) {
+            console.log("Updating Google account verification:", email);
             await db.execute({
               sql: "UPDATE users SET google_id = ?, is_verified = 1 WHERE id = ?",
               args: [profile.id, user.id],
