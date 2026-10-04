@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, PlusCircle, ShoppingBag, Sun, Moon,
   ShoppingCart, MessageCircle, Menu, User as UserIcon, Bell,
-  ChevronDown, LogOut, X, HelpCircle, FileText, Send, Settings
+  ChevronDown, LogOut, X, HelpCircle, FileText, Send, Settings, ChartNoAxesColumn
 } from 'lucide-react';
 import { useNavigate, NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -72,7 +72,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   }, [user]);
 
-  const isMobile = () => typeof window !== 'undefined' && window.innerWidth < 768;
+  const isMobile = () => typeof window !== 'undefined' && window.innerWidth < 1024;
 
   // Desktop only: close dropdown on outside click
   const notifRef = useRef<HTMLDivElement>(null);
@@ -88,7 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   useEffect(() => {
-    const handler = () => { if (window.innerWidth >= 768) setIsMenuOpen(false); };
+    const handler = () => { if (window.innerWidth >= 1024) setIsMenuOpen(false); };
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
@@ -250,7 +250,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             {/* Desktop Nav Links */}
-            <div className="hidden md:flex items-center gap-7 border-b border-transparent">
+            <div className="hidden lg:flex items-center gap-7 border-b border-transparent">
               {navLink('/browse', 'Browse Notes')}
               {navLink('/resources', 'Study Material')}
               <button
@@ -291,7 +291,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="flex items-center gap-1.5 sm:gap-1">
 
               {/* Desktop-only icons */}
-              <div className="hidden md:flex items-center gap-1">
+              <div className="hidden lg:flex items-center gap-1">
                 {iconBtn(onShowGuide || (() => { }), <HelpCircle className="h-4 w-4" />, undefined, 'How it works')}
                 {iconBtn(toggleDark, isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />, undefined, 'Toggle theme')}
                 {user && !telegramLinked && iconBtn(onTelegramClick || (() => { }), <Send className="h-3.5 w-3.5 text-[#229ED9]" />, undefined, 'Connect Telegram')}
@@ -335,7 +335,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.96 }}
                         transition={{ duration: 0.15 }}
-                        className="hidden md:block absolute right-0 top-full mt-2 w-80 bg-slate-900 rounded-2xl shadow-2xl shadow-black/40 border border-white/10 z-50 overflow-hidden"
+                        className="hidden lg:block absolute right-0 top-full mt-2 w-80 bg-slate-900 rounded-2xl shadow-2xl shadow-black/40 border border-white/10 z-50 overflow-hidden"
                       >
                         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                           <div className="flex items-center gap-2">
@@ -363,13 +363,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* Desktop cart + user menu */}
               {user && (
-                <div className="hidden md:block">
+                <div className="hidden lg:block">
                   {iconBtn(() => navigate('/cart'), <ShoppingCart className="h-4 w-4" />, cartCount, 'Cart')}
                 </div>
               )}
 
               {user ? (
-                <div className="hidden md:flex items-center gap-3 ml-2 pl-3 border-l border-white/10">
+                <div className="hidden lg:flex items-center gap-3 ml-2 pl-3 border-l border-white/10">
                   <div className="relative">
                     <button
                       onClick={() => setShowUserMenu(!showUserMenu)}
@@ -398,6 +398,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             <div className="p-1.5 space-y-0.5">
                               {[
                                 { icon: UserIcon, label: 'Dashboard', path: '/profile', state: { tab: 'overview' } },
+                                { icon: ChartNoAxesColumn, label: 'My Results', path: '/results' },
                                 { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
                                 { icon: Settings, label: 'Settings', path: '/profile', state: { tab: 'settings' } },
                               ].map(({ icon: Icon, label, path, state }) => (
@@ -423,7 +424,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="hidden md:flex items-center gap-2 ml-2">
+                <div className="hidden lg:flex items-center gap-2 ml-2">
                   <button
                     onClick={() => setShowAuth(true)}
                     className="text-sm font-semibold text-slate-400 hover:text-white px-3 py-2 rounded-xl hover:bg-white/10 transition-all"
@@ -443,7 +444,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {user && (
                 <button
                   onClick={() => navigate('/sell')}
-                  className="hidden md:flex items-center gap-1.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#FFC000]/20 ml-2"
+                  className="hidden lg:flex items-center gap-1.5 bg-[#FFC000] hover:bg-[#e6ac00] text-slate-900 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#FFC000]/20 ml-2"
                 >
                   <PlusCircle className="h-3.5 w-3.5" />
                   List Notes
@@ -452,7 +453,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* Mobile: Cart icon */}
               {user && (
-                <div className="md:hidden">
+                <div className="lg:hidden">
                   {iconBtn(() => navigate('/cart'), <ShoppingCart className="h-4 w-4" />, cartCount, 'Cart')}
                 </div>
               )}
@@ -461,7 +462,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {!user && (
                 <button
                   onClick={() => setShowAuth(true)}
-                  className="md:hidden flex items-center gap-1.5 bg-[#FFC000] hover:bg-[#e6ac00] active:scale-95 text-slate-900 px-3 py-2 rounded-xl text-xs font-black transition-all shadow-md shadow-[#FFC000]/20"
+                  className="lg:hidden flex items-center gap-1.5 bg-[#FFC000] hover:bg-[#e6ac00] active:scale-95 text-slate-900 px-3 py-2 rounded-xl text-xs font-black transition-all shadow-md shadow-[#FFC000]/20"
                 >
                   <UserIcon className="h-3.5 w-3.5" />
                   Sign In
@@ -471,7 +472,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Mobile hamburger */}
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="md:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+                className="lg:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all"
               >
                 {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
@@ -487,7 +488,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="md:hidden overflow-y-auto max-h-[calc(100vh-64px)] bg-slate-900 border-t border-white/10"
+              className="lg:hidden overflow-y-auto max-h-[calc(100vh-64px)] bg-slate-900 border-t border-white/10"
             >
               <div className="px-4 py-6 space-y-1">
                 {user && (
@@ -507,6 +508,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   { icon: PlusCircle, label: 'Sell Notes', path: '/sell' },
                   ...(user ? [
                     { icon: UserIcon, label: 'Dashboard', path: '/profile', state: { tab: 'overview' } },
+                    { icon: ChartNoAxesColumn, label: 'My Results', path: '/results' },
                     { icon: ShoppingBag, label: 'My Orders', path: '/orders' },
                     { icon: Settings, label: 'Settings', path: '/profile', state: { tab: 'settings' } },
                     ...(!telegramLinked ? [{ icon: Send, label: 'Connect Telegram', onClick: onTelegramClick, color: '#229ED9' }] : []),
@@ -523,7 +525,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         if (onClick) {
                           onClick();
                         } else {
-                          const needsAuth = ['/sell', '/profile', '/orders', '/cart', '/messages'].includes(path);
+                          const needsAuth = ['/sell', '/profile', '/results', '/orders', '/cart', '/messages'].includes(path);
                           if (needsAuth && !user) {
                             setShowAuth(true);
                           } else {

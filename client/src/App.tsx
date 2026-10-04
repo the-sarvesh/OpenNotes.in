@@ -32,6 +32,7 @@ import type { Note, View } from "./types/index.ts";
 const BrowseView = React.lazy(() => import("./views/BrowseView").then((module) => ({ default: module.BrowseView })));
 const SellView = React.lazy(() => import("./views/SellView").then((module) => ({ default: module.SellView })));
 const ResourcesView = React.lazy(() => import("./views/ResourcesView").then((module) => ({ default: module.ResourcesView })));
+const ResultsView = React.lazy(() => import("./views/ResultsView").then((module) => ({ default: module.ResultsView })));
 const ReportIssueView = React.lazy(() => import("./views/ReportIssueView").then((module) => ({ default: module.ReportIssueView })));
 const ProfileView = React.lazy(() => import("./components/ProfileView").then((module) => ({ default: module.ProfileView })));
 const OrdersView = React.lazy(() => import("./components/OrdersView").then((module) => ({ default: module.OrdersView })));
@@ -636,6 +637,7 @@ const App: React.FC = () => {
             } />
             <Route path="/sell" element={<SellView onGoToBrowse={() => navigate("/browse")} />} />
             <Route path="/resources" element={<ResourcesView />} />
+            <Route path="/results" element={<ResultsView />} />
             <Route path="/report-issue" element={<ReportIssueView />} />
             <Route path="/profile" element={
               <ProfileView 
